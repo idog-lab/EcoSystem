@@ -1,7 +1,7 @@
 export default function Card({ title, subtitle, action, icon: Icon, className = '', children }) {
   return (
     <div
-      className={`bg-white/90 backdrop-blur-sm border border-white shadow-lg shadow-purple-950/5 rounded-3xl ring-1 ring-slate-200/70 ${className}`}
+      className={`min-w-0 bg-white/90 backdrop-blur-sm border border-white shadow-lg shadow-purple-950/5 rounded-3xl ring-1 ring-slate-200/70 ${className}`}
     >
       {(title || action) && (
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-slate-100">

@@ -89,6 +89,22 @@ body {
   }
 }
 
+/* Diamond Mine's "Run solve simulation" loading state (see
+   MineBoardEditor.jsx) - swings a pickaxe icon toward a small rock while
+   the Monte Carlo solve runs, which at 100 runs on a large board can take
+   a few hundred ms (long enough to need feedback, not long enough to need
+   a progress bar). transform-origin is set inline near the pickaxe's own
+   handle-end so it reads as swinging from the grip, not spinning in place. */
+@keyframes pickaxe-swing {
+  0%,
+  100% {
+    transform: rotate(-45deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+}
+
 /* PlayStage (src/components/PlayStage.jsx) is meant to be played on a phone
    held sideways, where width is plentiful but height is the scarce
    resource - unlike the rest of the app (a desktop design tool), it can't
@@ -106,5 +122,465 @@ body {
   }
   .play-hide-compact {
     display: none;
+  }
+}
+
+/* Play board effects (PlayEffects.jsx): an item thrown from the generator or
+   jumping out of a merge, and the payout that rises from a collected reward.
+   The thrown copy travels --fx-dx / --fx-dy and ends at the size the real
+   item is drawn at (--fx-scale), where the real item then takes over. */
+@keyframes play-fx-fly {
+  0% {
+    transform: translate(0, 0) scale(0.35);
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate(calc(var(--fx-dx) * 0.62), calc(var(--fx-dy) * 0.62 - 34px)) scale(calc(var(--fx-scale, 1) * 1.25));
+  }
+  100% {
+    transform: translate(var(--fx-dx), var(--fx-dy)) scale(var(--fx-scale, 1));
+    opacity: 1;
+  }
+}
+.play-fx-fly {
+  animation-name: play-fx-fly;
+  animation-timing-function: cubic-bezier(0.3, 0.7, 0.4, 1);
+  animation-fill-mode: both;
+  filter: drop-shadow(0 6px 6px rgba(60, 30, 0, 0.25));
+}
+@keyframes play-fx-payout {
+  0% {
+    transform: translate(-50%, 0) scale(0.6);
+    opacity: 0;
+  }
+  12% {
+    transform: translate(-50%, -14px) scale(1.12);
+    opacity: 1;
+  }
+  22% {
+    transform: translate(-50%, -18px) scale(1);
+  }
+  75% {
+    transform: translate(-50%, -46px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -70px) scale(0.96);
+    opacity: 0;
+  }
+}
+.play-fx-payout {
+  animation-name: play-fx-payout;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* Entering endless mode (PlayEffects.jsx): one starburst over the board and
+   the "Endless Mode" nameplate, once. Not played for viewers who asked for
+   reduced motion - the banner alone tells them. */
+@keyframes play-fx-endless-burst {
+  0% {
+    transform: scale(0.15) rotate(-40deg);
+    opacity: 0;
+  }
+  22% {
+    transform: scale(1.1) rotate(0deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1) rotate(14deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5) rotate(30deg);
+    opacity: 0;
+  }
+}
+.play-fx-endless-burst {
+  animation-name: play-fx-endless-burst;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes play-fx-endless-plate {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  25% {
+    transform: translate(-50%, -50%) scale(1.12);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  80% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -90%) scale(0.95);
+    opacity: 0;
+  }
+}
+.play-fx-endless-plate {
+  animation-name: play-fx-endless-plate;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* ---- Play board motion (PlayEffects.jsx, PlayTile.jsx, Celebrations.jsx) ----
+   A tapped merge or move: the item's copy slides in a straight line. */
+@keyframes play-fx-slide {
+  0% {
+    transform: translate(0, 0) scale(var(--fx-scale, 1));
+  }
+  100% {
+    transform: translate(var(--fx-dx), var(--fx-dy)) scale(var(--fx-scale, 1));
+  }
+}
+.play-fx-slide {
+  animation-name: play-fx-slide;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.6);
+  animation-fill-mode: both;
+  filter: drop-shadow(0 4px 4px rgba(60, 30, 0, 0.22));
+}
+/* A lucky generator item flies in a gold glow. */
+.play-fx-lucky {
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.95)) drop-shadow(0 0 14px rgba(245, 158, 11, 0.7));
+}
+
+/* The real item's own short animations. --s is the size the item is drawn
+   at (art.scale), so every keyframe is a multiple of it. */
+@keyframes play-pop-merge {
+  0% {
+    transform: scale(calc(var(--s, 1) * 0.55));
+  }
+  45% {
+    transform: scale(calc(var(--s, 1) * 1.22));
+  }
+  70% {
+    transform: scale(calc(var(--s, 1) * 0.94));
+  }
+  100% {
+    transform: scale(var(--s, 1));
+  }
+}
+@keyframes play-pop-land {
+  0% {
+    transform: scale(calc(var(--s, 1) * 1.14), calc(var(--s, 1) * 0.84));
+  }
+  55% {
+    transform: scale(calc(var(--s, 1) * 0.95), calc(var(--s, 1) * 1.07));
+  }
+  100% {
+    transform: scale(var(--s, 1));
+  }
+}
+@keyframes play-pop-reveal {
+  0% {
+    transform: scale(calc(var(--s, 1) * 0.2)) rotate(-18deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(calc(var(--s, 1) * 1.15)) rotate(4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(var(--s, 1)) rotate(0deg);
+  }
+}
+.play-pop-merge {
+  animation: play-pop-merge 380ms cubic-bezier(0.3, 1.3, 0.5, 1) both;
+}
+.play-pop-land {
+  animation: play-pop-land 300ms ease-out both;
+}
+.play-pop-reveal {
+  animation: play-pop-reveal 380ms cubic-bezier(0.3, 1.3, 0.5, 1) both;
+}
+/* A selected item bobs; an item under the pointer lifts. These use the
+   separate translate / scale properties, so they add to the item's own
+   transform instead of replacing it. */
+@keyframes play-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7%;
+  }
+}
+.play-item {
+  transition:
+    translate 140ms ease-out,
+    scale 140ms ease-out;
+}
+.play-item-selected {
+  animation: play-bob 900ms ease-in-out infinite;
+}
+[data-movable='true']:hover .play-item:not(.play-item-selected) {
+  translate: 0 -4%;
+}
+[data-movable='true']:active .play-item {
+  scale: 0.93;
+}
+/* A cell the selected item can merge into glows, brighter and dimmer. It
+   must not change size or place: it is the thing the player is about to tap. */
+@keyframes play-target {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.16) saturate(1.15);
+  }
+}
+.play-target-merge {
+  animation: play-target 800ms ease-in-out infinite;
+}
+
+/* The board itself: a pushed-in board slides down by the rows it added
+   (--push, as a share of the grid's height); a swapped-in board fades in. */
+@keyframes play-board-push {
+  0% {
+    transform: translateY(calc(var(--push, 0.3) * -100%));
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes play-board-swap {
+  0% {
+    opacity: 0.15;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.play-board-push {
+  animation: play-board-push 320ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.play-board-swap {
+  animation: play-board-swap 320ms ease-out both;
+}
+
+/* Bursts (Celebrations.jsx). */
+@keyframes fx-ring {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(var(--ring-scale, 2));
+    opacity: 0;
+  }
+}
+.fx-ring {
+  animation-name: fx-ring;
+  animation-timing-function: cubic-bezier(0.1, 0.7, 0.3, 1);
+  animation-fill-mode: both;
+  opacity: 0;
+}
+@keyframes fx-flash {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.fx-flash {
+  animation: fx-flash 360ms ease-out both;
+}
+@keyframes fx-sparkle {
+  0% {
+    transform: translate(0, 0) scale(0.2) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.3), calc(var(--dy) * 0.3)) scale(1.15) rotate(calc(var(--rot) * 0.3));
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.25) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+.fx-sparkle {
+  animation-name: fx-sparkle;
+  animation-timing-function: cubic-bezier(0.1, 0.6, 0.3, 1);
+  animation-fill-mode: both;
+}
+@keyframes fx-confetti {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  40% {
+    transform: translate(calc(var(--dx) * 0.7), var(--up)) rotate(calc(var(--rot) * 0.4));
+    opacity: 1;
+    animation-timing-function: ease-in;
+  }
+  100% {
+    transform: translate(var(--dx), var(--down)) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+.fx-confetti {
+  animation-name: fx-confetti;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes fx-label {
+  0% {
+    transform: translate(-50%, 20%) scale(0.4);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -10%) scale(1.15);
+    opacity: 1;
+  }
+  30% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  75% {
+    transform: translate(-50%, -20%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -70%) scale(0.95);
+    opacity: 0;
+  }
+}
+.fx-label {
+  animation-name: fx-label;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes fx-rain {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--drift), var(--fall)) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+.fx-rain {
+  animation-name: fx-rain;
+  animation-timing-function: cubic-bezier(0.3, 0.1, 0.7, 0.9);
+  animation-fill-mode: both;
+}
+/* The grand prize (rank 12). */
+@keyframes fx-rays {
+  0% {
+    transform: scale(0.2) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1) rotate(20deg);
+    opacity: 1;
+  }
+  85% {
+    transform: scale(1.05) rotate(150deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.2) rotate(180deg);
+    opacity: 0;
+  }
+}
+.fx-rays {
+  animation-name: fx-rays;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes fx-grand-item {
+  0% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+  14% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  22% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  85% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+}
+.fx-grand-item {
+  animation-name: fx-grand-item;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes fx-grand-text {
+  0%,
+  10% {
+    transform: translate(-50%, 30%) scale(0.6);
+    opacity: 0;
+  }
+  22% {
+    transform: translate(-50%, 0) scale(1.08);
+    opacity: 1;
+  }
+  30% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  85% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -20%) scale(0.97);
+    opacity: 0;
+  }
+}
+.fx-grand-text {
+  animation-name: fx-grand-text;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-item,
+  .play-item-selected,
+  .play-target-merge,
+  .play-pop-merge,
+  .play-pop-land,
+  .play-pop-reveal,
+  .play-board-push,
+  .play-board-swap {
+    animation: none;
+    transition: none;
   }
 }

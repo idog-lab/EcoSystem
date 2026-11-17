@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import InfoHint from './InfoHint'
 
 // A plain controlled <input value={n} onChange={...}> fights the user the
 // moment they clear it to type a replacement: an empty string parses to
@@ -41,7 +42,7 @@ export default function NumberField({ label, hint, value, onChange, onBlur, clas
         className="border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium bg-white/70 focus:outline-none focus:ring-4 focus:ring-purple-200/60 focus:border-purple-400 transition-shadow"
         {...props}
       />
-      {hint && <span className="text-xs text-slate-400">{hint}</span>}
+      <InfoHint>{hint}</InfoHint>
     </label>
   )
 }
