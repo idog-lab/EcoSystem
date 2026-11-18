@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { RotateCcw, Lock, Zap, Trophy, Package, ArrowDownToLine, PartyPopper, HelpCircle, Maximize, Minimize, Smartphone, TriangleAlert, X } from 'lucide-react'
+import { RotateCcw, Lock, Zap, Trophy, Package, ArrowDownToLine, PartyPopper, Maximize, Minimize, Smartphone, TriangleAlert, X } from 'lucide-react'
 import Button from '../../../../components/ui/Button'
 import RanksBar from './RanksBar'
-import PlayTutorialCoach from './PlayTutorialCoach'
 import { MAX_RANK, RC_MAX_RANK } from '../../lib/core/ranks'
 import { gridWidthRem } from '../../../../lib/gridWidth'
 import { usePhoneScreen, canGoFullscreen, toggleFullscreen, useIsFullscreen } from '../../lib/play/usePhoneScreen'
-import { hasSeenPlayTutorial, markPlayTutorialSeen, computeTutorialSpec, boardHasLockedCell } from '../../lib/play/playTutorial'
 import {
   createPlaySession,
   canSpendGenerator,
@@ -78,16 +76,11 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
   const fx = usePlayEffects(session)
   const [selected, setSelected] = useState(null)
   const [chosenTierCost, setChosenTierCost] = useState(1)
-  // 'generate' | 'merge' | 'blocked' | null - see playTutorial.js. Starts
-  // null and only turns on after mount (not in useState's initializer) so a
-  // returning player's very first render never flashes the overlay before
-  // the "already seen it" check has a chance to run.
-  const [tutorialStep, setTutorialStep] = useState(null)
+  // (There is no first-time walkthrough here any more - economist: "we can
+  // remove the tutorial from there also". It darkened the whole screen and
+  // took every tap but one for anyone opening a link for the first time, which
+  // is exactly who a shared link is sent to.)
   const prevHighestUnlockedCost = useRef(1)
-
-  useEffect(() => {
-    if (!hasSeenPlayTutorial()) setTutorialStep('generate')
-  }, [])
 
   // The held-back Recompletion hand-over (see rcOptions above).
   const pendingRc = rcEntryPending(session)
@@ -175,11 +168,6 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
     }
   }, [sideways])
 
-  function finishTutorial() {
-    setTutorialStep(null)
-    markPlayTutorialSeen()
-  }
-
   function reset() {
     setSession(createPlaySession(boards, 0, rcOptions))
     setSelected(null)
@@ -195,20 +183,13 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
   function handleSpend() {
     spendGenerator(session, activeTier)
     setSession({ ...session })
-    if (tutorialStep === 'generate') setTutorialStep('merge')
   }
 
   function applyAction(kind, from, to) {
     if (kind === 'move') {
       moveItem(session, from, to)
     } else if (kind === 'merge') {
-      const before = session.events.length
       mergeItems(session, from, to)
-      const mergeEvent = session.events.slice(before).find((e) => e.type === 'merge')
-      if (mergeEvent && tutorialStep === 'merge') {
-        if (boardHasLockedCell(session.state)) setTutorialStep('blocked')
-        else finishTutorial()
-      }
     } else {
       return
     }
@@ -296,15 +277,6 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
   const inEndless = session.phase === 'endless'
   const theme = themeOf(session)
   const finished = !hasRc && maxRankReached >= MAX_RANK
-
-  const tutorialSpec = tutorialStep ? computeTutorialSpec(tutorialStep, session.state) : null
-  // A step can end up with nothing left to point at (e.g. the board's only
-  // locked cell got cleared by the very merge that advanced into 'blocked')
-  // - finish from an effect, never mid-render, so this never fights React's
-  // own render/commit cycle.
-  useEffect(() => {
-    if (tutorialStep && !tutorialSpec) finishTutorial()
-  }, [tutorialStep, tutorialSpec])
 
   const cols = session.state.cols
   const rows = session.state.rows
@@ -624,7 +596,6 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
           </div>
         </div>
       )}
-      {tutorialSpec && <PlayTutorialCoach key={tutorialStep} selectors={tutorialSpec.selectors} text={tutorialSpec.text} final={tutorialSpec.final} onSkip={finishTutorial} onDone={finishTutorial} />}
       {fx.layer}
     </>
   )
@@ -642,9 +613,6 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
           <div className="min-w-0 flex-1">
             <RanksBar compact maxRankReached={maxRankReached} rewardRanks={board.rewardRanks} goalRank={inRc || inEndless ? RC_MAX_RANK : MAX_RANK} />
           </div>
-          <button type="button" className={roundButton} onClick={() => setTutorialStep('generate')} aria-label="How to play" title="How to play">
-            <HelpCircle size={17} />
-          </button>
           <button type="button" className={roundButton} onClick={reset} aria-label="Restart" title="Restart">
             <RotateCcw size={16} />
           </button>
@@ -726,9 +694,6 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
           <p className="text-xs text-slate-400 play-hide-compact">Merge matching items, spend the generator, and climb the chain</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="secondary" size="sm" icon={HelpCircle} onClick={() => setTutorialStep('generate')}>
-            How to play
-          </Button>
           <Button variant="secondary" size="sm" icon={RotateCcw} onClick={reset}>
             Restart
           </Button>

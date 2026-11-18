@@ -15,7 +15,6 @@ import { placeItems } from '../../src/features/merge/lib/core/placement.js'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/Merge/'
 export const SAVE_KEY = 'merge-mania-board-simulator'
-export const TUTORIAL_SEEN_KEY = 'merge-mania-play-tutorial-seen'
 
 export function createChecker() {
   const results = []
@@ -60,21 +59,20 @@ export function ladderBoard(name, top, extra = {}) {
   return Object.assign(b, extra)
 }
 
-export async function launch({ save = null, tutorialSeen = true, clipboard = false, reducedMotion = null } = {}) {
+export async function launch({ save = null, clipboard = false, reducedMotion = null } = {}) {
   const browser = await chromium.launch()
   const context = await browser.newContext({ viewport: { width: 1700, height: 1000 }, acceptDownloads: true, ...(reducedMotion ? { reducedMotion } : {}) })
   if (clipboard) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(BASE).origin })
   await context.addInitScript(
-    ([key, value, tutorialKey, seen]) => {
+    ([key, value]) => {
       // Seed only once per profile, so a later in-test Save/Clear isn't
       // overwritten by this script on reload.
       if (!sessionStorage.getItem('__e2e_seeded')) {
         if (value != null) localStorage.setItem(key, value)
-        if (seen) localStorage.setItem(tutorialKey, '1')
         sessionStorage.setItem('__e2e_seeded', '1')
       }
     },
-    [SAVE_KEY, save ? JSON.stringify(save) : null, TUTORIAL_SEEN_KEY, tutorialSeen],
+    [SAVE_KEY, save ? JSON.stringify(save) : null],
   )
   const page = await context.newPage()
   const errors = []

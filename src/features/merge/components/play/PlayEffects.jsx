@@ -40,7 +40,7 @@ import { Burst, ConfettiRain, GrandPrize } from './Celebrations'
 // its own short `popping` animation (PlayTile.jsx).
 //
 // Positions are read from the DOM: a cell is `[data-cell="row-col"]`, the
-// generator is `[data-fx="generator"]` (or Play Stage's tutorial hook), the
+// generator is `[data-fx="generator"]` (or Play Stage's own hook, `data-tutorial="generate-button"` - the name is from a walkthrough that is gone), the
 // board is `[data-fx="board"]`. Cells named by an event are corrected for
 // any board that pushed in later in the same action; an action that swaps
 // the whole board (Recompletion starting) has no cell left to point at, so

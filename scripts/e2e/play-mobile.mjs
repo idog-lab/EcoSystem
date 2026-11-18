@@ -10,7 +10,7 @@ import { chromium } from 'playwright'
 import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/rewards/dropGroups.js'
 import { RC_MAX_RANK } from '../../src/features/merge/lib/core/ranks.js'
 import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
-import { BASE, TUTORIAL_SEEN_KEY, createChecker, generatedBoard, ladderBoard } from './helpers.mjs'
+import { BASE, createChecker, generatedBoard, ladderBoard } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 const SHOT = process.env.E2E_SCREENSHOT_DIR ?? null
@@ -45,15 +45,11 @@ function stage() {
 
 const url = `${BASE}?play&stage=${encodeStage(stage())}`
 
-async function open({ width, height, tutorialSeen = true, link = url }) {
+// Every phone here is a FIRST VISIT: a fresh browser with nothing stored -
+// what the people a link is sent to have.
+async function open({ width, height, link = url }) {
   const browser = await chromium.launch()
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 })
-  await context.addInitScript(
-    ([key, seen]) => {
-      if (seen) localStorage.setItem(key, '1')
-    },
-    [TUTORIAL_SEEN_KEY, tutorialSeen],
-  )
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => {
@@ -177,18 +173,36 @@ console.log('--- 2. Held upright it still plays, and suggests turning the phone 
   await browser.close()
 }
 
-console.log('--- 3. The first-time walkthrough fits a sideways phone ---')
+console.log('--- 3. A first visit: no walkthrough, the game is simply there ---')
 {
-  const { browser, page, errors } = await open({ width: 667, height: 375, tutorialSeen: false })
-  const tip = page.getByTestId('tutorial-card')
-  await tip.waitFor({ state: 'visible', timeout: 4000 })
-  const box = await tip.boundingBox()
-  ok(`the first step's card is fully on screen (${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)})`, box.x >= 0 && box.y >= 0 && box.x + box.width <= 667 && box.y + box.height <= 375)
-  await page.locator('[data-tutorial="generate-button"]').tap()
-  await page.waitForTimeout(500)
-  ok('...and tapping the generator through it moves the walkthrough on', errors.length === 0 && (await page.locator('[data-cell][data-movable="true"]').count()) >= 1)
-  if (SHOT) await page.screenshot({ path: `${SHOT}/play-tutorial-667x375.png` })
-  await browser.close()
+  // (There was a first-time walkthrough: it darkened the screen and took every
+  // tap but one - for exactly the people a link is sent to, and never for the
+  // economist, whose phone had been through it. Removed by request.)
+  for (const [width, height] of [[667, 375], [390, 844]]) {
+    const { browser, context, page, errors } = await open({ width, height })
+    const blocked = await page.evaluate(() => {
+      // Is anything lying over the board or the generator?
+      const hit = (el) => {
+        const r = el.getBoundingClientRect()
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        return !(top === el || el.contains(top))
+      }
+      const cell = document.querySelector('[data-cell]')
+      const gen = document.querySelector('[data-tutorial="generate-button"]')
+      gen.scrollIntoView({ block: 'center' })
+      return { cell: hit(cell), gen: hit(gen), dialog: document.querySelectorAll('[role="dialog"]').length }
+    })
+    ok(`${width}x${height}: nothing covers the board or the generator on a first visit, and there is no "How to play"`, !blocked.gen && blocked.dialog === 0 && (await page.getByTestId('tutorial-card').count()) === 0 && (await page.getByText('How to play').count()) === 0 && (await page.getByText('Skip tutorial').count()) === 0)
+    const gen = page.locator('[data-tutorial="generate-button"]')
+    await gen.tap()
+    await page.waitForTimeout(450)
+    await gen.tap()
+    await page.waitForTimeout(450)
+    const ones = await page.locator('[data-cell][title="rank 1"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-cell')))
+    await fingerDrag(context, page, `[data-cell="${ones[0]}"]`, `[data-cell="${ones[1]}"]`)
+    ok(`${width}x${height}: the very first things a new player does work - two taps on the generator, then a finger drags one item onto the other`, ones.length === 2 && (await page.locator('[data-cell][title="rank 2"]').count()) === 1 && errors.length === 0)
+    await browser.close()
+  }
 }
 
 console.log('--- 4. Recompletion and endless mode on a sideways phone ---')
@@ -275,7 +289,6 @@ console.log('--- 5. A desktop window is unchanged ---')
 {
   const browser = await chromium.launch()
   const context = await browser.newContext({ viewport: { width: 1500, height: 950 } })
-  await context.addInitScript(([key]) => localStorage.setItem(key, '1'), [TUTORIAL_SEEN_KEY])
   const page = await context.newPage()
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForTimeout(300)

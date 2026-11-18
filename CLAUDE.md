@@ -47,7 +47,7 @@ src/
     lib/export/      eventSheets (Ops workbook), Google Sheets export, boardSyntax (placeholder)
     lib/share/       stage and plan links (gzip + base64url)
     lib/state/       persistence (localStorage), useBoardListState
-    lib/play/        artwork lookup, tile surfaces, tutorial, celebrations, phone layout hook
+    lib/play/        artwork lookup, tile surfaces, celebrations, phone layout hook
     components/build/    the Build event flow (7 steps) and its review
     components/editor/   advanced board editor, board list, simulation report, CC management
     components/rewards/  advanced Rewards and Twister tools
@@ -284,7 +284,11 @@ answered.
   the Play Tester when the link carries Recompletion. The merge that makes
   rank 12 plays out on the normal board first (`deferRcEntry`, held
   `RC_HANDOVER_MS` 1.5 s), then the Recompletion board slides down from the
-  top (`RC_BOARD_MS` 1.1 s) - so the merge's drops are seen.
+  top (`RC_BOARD_MS` 1.1 s) - so the merge's drops are seen. **No first-time
+  walkthrough** (economist: removed - it dimmed the screen and took every tap
+  but one for exactly the people a link is sent to; the generator keeps its
+  `data-tutorial="generate-button"` hook, which tests and effects use).
+  Test a link as a FIRST VISIT (a fresh browser), never only as a returning one.
 - Stage links are **format 2** (`stageShare.js`): each list carries what its
   boards share once and leaves out editor-only fields (~37% shorter). Older
   links still open; a format-2 link opens only on a site deployed with it.
@@ -295,8 +299,8 @@ answered.
 ## Persistence
 
 `localStorage` key `merge-mania-board-simulator`, `{ segments: [...] }`, written
-by Save only. Separate entries: build drafts, the step-5 effort curve, the
-play tutorial flag. Backups export/import every segment; older shapes migrate
+by Save only. Separate entries: build drafts, the step-5 effort curve.
+Backups export/import every segment; older shapes migrate
 through `segmentsFromPersisted` (a pre-segment save lands on Segment 1, an
 older second Recompletion list is kept for explicit recovery).
 
