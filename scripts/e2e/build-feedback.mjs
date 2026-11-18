@@ -8,7 +8,7 @@
 //   - the per-segment result table is in plain words;
 //   - the Twister page says how to use it.
 // See helpers.mjs for how to run.
-import { createBoard } from '../../src/features/merge/lib/board.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { SAVE_KEY, createChecker, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
@@ -120,7 +120,7 @@ await page.waitForTimeout(300)
 ok('choosing a fix writes the values and clears the warning', (await page.locator('[data-definition="puzzles"]').innerText()).includes('5 / 15 / 30 / 65') && (await page.locator('[data-ladder-problem="puzzles"]').count()) === 0)
 ok('rank values can still be typed by hand', (await page.locator('[data-edit-ranks="puzzles"]').count()) === 1)
 ok('coins are set by the build, with nothing to type', (await page.locator('[data-definition="coins"]').getAttribute('data-coin-mode')) === 'auto' && (await page.getByTestId('coin-values').innerText()).includes('appear here after the build'))
-ok('the rewards step states the two rules: every merge drops a container, and tile rewards start semi-blocked', (await page.getByTestId('drop-rules').locator('xpath=..').innerText()).includes('every merge drops a container') && (await page.getByTestId('tile-reward-rule').innerText()).includes('semi-blocked when its tile opens'))
+ok('the rewards step states the two rules: every merge drops a container, and tile rewards start semi-blocked', /every merge drops/.test(await page.getByTestId('drop-rules').locator('xpath=..').innerText()) && /container can hold several rewards/.test(await page.getByTestId('drop-rules').locator('xpath=..').innerText()) && (await page.getByTestId('tile-reward-rule').innerText()).includes('semi-blocked when its tile opens'))
 ok('merge-drop start rank and the leftover rule are in the flow', (await page.locator('[data-field="min-drop-rank"]').isVisible()) && (await page.locator('[data-field="leftover-policy"]').isVisible()))
 
 await page.locator('[data-milestone-rank="5"]').click()
@@ -148,15 +148,17 @@ ok('no solver jargon in the per-segment results', !/infeasible|coarse|eligible t
 const given = num(await coverage.locator('[data-coverage-segment="0"] td').nth(2).innerText())
 const taken = num(await coverage.locator('[data-coverage-segment="0"] td').nth(3).innerText())
 const placed = num(await coverage.locator('[data-coverage-segment="0"] td').nth(4).innerText())
-ok(`the three numbers add up for the base segment (${given} - ${taken} ≈ ${placed})`, given === 750 && Math.abs(given - taken - placed) <= 4)
+// (Drops start at rank 9 here - about 15 merges - so merge energy comes in a few whole prizes and the passes of a build
+// settle to within a few DR, not always within four. The DR box shows that difference.)
+ok(`the three numbers add up for the base segment (${given} - ${taken} ≈ ${placed})`, given === 750 && Math.abs(given - taken - placed) <= 8)
 await shot(page, 'f2-coverage')
 
-ok('the review states which reward ranks each board may hold', /Board 1 rank 1, Board 2 rank 1\/2\/3/.test(await page.locator('section', { has: page.getByTestId('built-boards') }).first().innerText()))
+ok('the review states which reward ranks each board may hold', /Board 1 none, Board 2 rank 1 and 2/.test(await page.locator('section', { has: page.getByTestId('built-boards') }).first().innerText()))
 {
   const chips = async (board) => page.locator(`[data-built-board="${board}"] [data-cell="queue"] span[title^="Reward item"]`).evaluateAll((els) => els.map((e) => e.title))
   const b1 = await chips(0)
   const b2 = await chips(1)
-  ok(`Board 1 holds no small reward (${b1.length}); the last board holds reward items up to rank 3 (${b2.length})`, b1.length === 0 && b2.some((t) => / R3$/.test(t)) && b2.every((t) => / R[123]$/.test(t)))
+  ok(`Board 1 holds no small reward (${b1.length}); Board 2 holds reward items of rank 1 and 2, all one reward (${b2.join(', ')})`, b1.length === 0 && b2.length > 0 && b2.every((t) => / R[12]$/.test(t)) && new Set(b2.map((t) => t.replace(/ R\d$/, ''))).size === 1)
 }
 {
   const queue = await page.locator('[data-built-board="0"] [data-cell="queue"] span').evaluateAll((els) => els.map((e) => e.innerText.trim()))
@@ -220,8 +222,10 @@ const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key))
 const coinsOf = (seg, list = 'boards') => saved.segments[seg][list][0].rewardChainConfig.coins.map((r) => r.prizeAmount)
 ok('saved: every segment has its own coin values', [0, 1, 2].every((i) => coinsOf(i).every((v) => v > 0)) && coinsOf(2)[3] !== coinsOf(0)[3])
 ok('saved: Recompletion has no coin target here, so its coin ranks are left for a later build', coinsOf(0, 'recompletionBoards').every((v) => v === 0))
-ok('saved: the other reward definitions are still one shared set', JSON.stringify(saved.segments[2].boards[0].rewardChainConfig.puzzles) === JSON.stringify(saved.segments[0].boards[0].rewardChainConfig.puzzles) && saved.segments[2].boards[0].rewardChainConfig.puzzles[3].prizeAmount === 65)
-ok('saved: the puzzle item syntax follows the fixed value', saved.segments[0].boards[0].rewardChainConfig.puzzles[3].syntax === '[dynamic(dr-puzzle:65)]')
+const puzzle4 = (seg) => saved.segments[seg].boards[0].rewardChainConfig.puzzles[3]
+// (The build may change a reward's rank values to reach its amount: what was typed is kept beside the value in force.)
+ok(`saved: the other reward definitions are still one shared set (puzzle rank 4: ${puzzle4(0).prizeAmount}, typed ${puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount})`, JSON.stringify(saved.segments[2].boards[0].rewardChainConfig.puzzles) === JSON.stringify(saved.segments[0].boards[0].rewardChainConfig.puzzles) && (puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount) === 65)
+ok('saved: the puzzle item syntax follows the value in force, and the typed one is kept', puzzle4(0).syntax === `[dynamic(dr-puzzle:${puzzle4(0).prizeAmount})]` && (puzzle4(0).typed?.syntax ?? puzzle4(0).syntax) === '[dynamic(dr-puzzle:65)]')
 ok('saved: the milestone reward is on every segment', saved.segments.slice(0, 3).every((s) => s.boards[0].rewardRanks.includes(5) && s.boards[0].rewardSyntax[5] === 'coins:50'))
 ok('saved: both phases are built for every segment', [0, 1, 2].every((i) => saved.segments[i].boards.every((b) => b.blockedQueue.length > 0) && saved.segments[i].recompletionBoards.every((b) => b.blockedQueue.length > 0)))
 
@@ -307,6 +311,21 @@ await browser.close()
   await step(page, 'build').click()
   await page.waitForTimeout(200)
   await buildOnly()
+  // By default the build may change rank values: it makes merge energy's smaller, so 20 is one whole prize, and says so.
+  {
+    const note = (await page.getByTestId('rank-values-note').innerText()).replace(/\s+/g, ' ')
+    ok(`20 asked when rank 4 pays 75: the build keeps the rules and makes the rank values smaller ("${note.slice(0, 150)}")`, note.includes('Merge Energy: 5 / 15 / 35 / 75 became 1 / 4 / 9 / 20') && (await page.locator('[data-cause="coarse-ladder"]').count()) === 0 && /Ready/.test(await rowText()))
+    await step(page, 'rewards').click()
+    await page.waitForTimeout(200)
+    ok('step 4 still shows the values as typed, and says what the build changed them to', (await page.locator('[data-definition="energy"]').innerText()).includes('5 / 15 / 35 / 75') && (await page.locator('[data-field="rank-values-by-build"]').isChecked()))
+    // Keep my own values: then the same amount is reported, with quick fixes.
+    await page.locator('[data-field="rank-values-by-build"]').uncheck()
+    await page.waitForTimeout(200)
+    await step(page, 'build').click()
+    await page.waitForTimeout(200)
+    await buildOnly()
+    ok('with that switched off the values stay as typed: no rank value is changed', (await page.getByTestId('rank-values-note').count()) === 0)
+  }
   const cause = page.locator('[data-cause="coarse-ladder"]')
   ok('a target smaller than one prize is shown with quick fixes, and does not block the build', (await cause.count()) === 1 && (await cause.locator('[data-quick-fix]').count()) === 2 && /Can be improved/.test(await rowText()))
   ok('the table points to the quick fixes', (await rowText()).includes('Quick fixes available'))

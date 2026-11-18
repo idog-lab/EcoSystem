@@ -3,11 +3,11 @@
 // energy entering the usable balance and funding generation - in the Play
 // Tester - then a shared ?play link carrying an RC variant, played through
 // the gated normal-to-RC transition in Play Stage. See helpers.mjs.
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { encodeReward } from '../../src/features/merge/lib/rewardChain.js'
-import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/dropGroups.js'
-import { RC_MAX_RANK } from '../../src/features/merge/lib/ranks.js'
-import { encodeStage } from '../../src/features/merge/lib/stageShare.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
+import { encodeReward } from '../../src/features/merge/lib/rewards/rewardChain.js'
+import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/rewards/dropGroups.js'
+import { RC_MAX_RANK } from '../../src/features/merge/lib/core/ranks.js'
+import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
 import { BASE, createChecker, ladderBoard, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
@@ -174,7 +174,9 @@ async function climb(page, top, start = 1) {
   ok('no small-reward balances appear in the normal round (the main list has no drop groups)', (await page.getByText('Charms', { exact: true }).count()) === 0)
   await page.locator('[data-cell="1-9"]').click()
   await page.locator('[data-cell="1-10"]').click()
-  await page.waitForTimeout(400)
+  // The merge plays out on the normal board first; Recompletion comes in about 1.5 s later.
+  await page.locator('[data-testid="rc-active"]').waitFor({ timeout: 5000 }).catch(() => {})
+  await page.waitForTimeout(1300)
   ok('reaching rank 12 starts the Recompletion round', await page.locator('[data-testid="rc-active"]').isVisible())
   ok('...shown as the Recompletion round (one Recompletion mode, no variants)', /Recompletion round —/.test(await page.locator('[data-testid="rc-active"]').innerText()))
   ok('...on the RC variant\'s own board (13 columns)', (await page.locator('[data-cell="1-12"]').count()) === 1)

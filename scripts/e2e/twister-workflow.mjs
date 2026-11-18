@@ -5,8 +5,8 @@
 // the on-screen export. See helpers.mjs for how to run.
 import fs from 'node:fs'
 import { BASE, createChecker, generatedBoard, launch, openMerge, tab, SAVE_KEY } from './helpers.mjs'
-import { decodePlan } from '../../src/features/merge/lib/planShare.js'
-import { boardHasTwisterUnderTiles } from '../../src/features/merge/lib/twisterEconomy.js'
+import { decodePlan } from '../../src/features/merge/lib/share/planShare.js'
+import { boardHasTwisterUnderTiles } from '../../src/features/merge/lib/rewards/twisterEconomy.js'
 
 const { ok, finish } = createChecker()
 const SHOT = process.env.E2E_SCREENSHOT_DIR ?? null

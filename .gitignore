@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The economist's own source files: asset packs (scripts/art reads them)
+# and reference spreadsheets. Kept locally, not in git.
+art-source/
+reference/

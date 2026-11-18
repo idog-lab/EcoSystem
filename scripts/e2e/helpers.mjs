@@ -10,8 +10,8 @@
 // Each run uses its own throwaway browser profile, so nothing here ever
 // touches the economist's own saved data.
 import { chromium } from 'playwright'
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { placeItems } from '../../src/features/merge/lib/placement.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
+import { placeItems } from '../../src/features/merge/lib/core/placement.js'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/Merge/'
 export const SAVE_KEY = 'merge-mania-board-simulator'

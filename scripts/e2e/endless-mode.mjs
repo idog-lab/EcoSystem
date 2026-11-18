@@ -3,10 +3,9 @@
 // the Play Tester - and what happens next is checked: the endless theme, the
 // one-shot entry effect, the changed drops, and that nothing is taken away.
 // See helpers.mjs.  Run: npx vite-node scripts/e2e/endless-mode.mjs
-import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/dropGroups.js'
-import { RC_MAX_RANK } from '../../src/features/merge/lib/ranks.js'
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { encodeStage } from '../../src/features/merge/lib/stageShare.js'
+import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/rewards/dropGroups.js'
+import { RC_MAX_RANK } from '../../src/features/merge/lib/core/ranks.js'
+import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
 import { BASE, createChecker, ladderBoard, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()

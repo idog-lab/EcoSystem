@@ -3,8 +3,8 @@
 // checked by eye. Writes a screenshot of the board.
 //   OUT=<file.png> npx vite-node scripts/e2e/art-gallery.mjs
 // See helpers.mjs for how the browser is launched (dev server must be running).
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { encodeReward } from '../../src/features/merge/lib/rewardChain.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
+import { encodeReward } from '../../src/features/merge/lib/rewards/rewardChain.js'
 import { launch, openMerge, tab } from './helpers.mjs'
 
 const b = createBoard('Gallery', { rows: 6, cols: 8 })

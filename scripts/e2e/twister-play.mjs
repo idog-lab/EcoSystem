@@ -4,10 +4,10 @@
 // tile and never becomes energy - in the Play Tester - then a shared ?play
 // link carrying the segment's cost through the RC transition (Play Stage).
 // Also checks the supplied artwork on real board tiles. See helpers.mjs.
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/dropGroups.js'
-import { RC_MAX_RANK } from '../../src/features/merge/lib/ranks.js'
-import { encodeStage } from '../../src/features/merge/lib/stageShare.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
+import { createDropGroup, createDropGroupsConfig } from '../../src/features/merge/lib/rewards/dropGroups.js'
+import { RC_MAX_RANK } from '../../src/features/merge/lib/core/ranks.js'
+import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
 import { BASE, createChecker, ladderBoard, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()

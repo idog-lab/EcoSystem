@@ -2,7 +2,7 @@
 // demand. It is typed once, in the Normal phase, and the Recompletion
 // subsidy and board budgets follow. See helpers.mjs.
 // Run: npx vite-node scripts/e2e/rc-demand.mjs
-import { createBoard } from '../../src/features/merge/lib/board.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { createChecker, launch, openMerge, tab, SAVE_KEY } from './helpers.mjs'
 
 const { ok, finish } = createChecker()

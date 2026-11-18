@@ -1,8 +1,8 @@
 // Browser end-to-end: how play MOVES and how it is celebrated (PlayEffects.jsx).
 // Slides, pops, bursts, lucky drops, the grand prize, a board pushing in, and
 // reduced motion. See helpers.mjs.  Run: npx vite-node scripts/e2e/play-motion.mjs
-import { createBoard } from '../../src/features/merge/lib/board.js'
-import { encodeStage } from '../../src/features/merge/lib/stageShare.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
+import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
 import { BASE, createChecker, ladderBoard, launch } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
@@ -129,11 +129,11 @@ const walk = async (page, from, to, pause = 0) => {
   await page.locator('[data-cell="1-0"]').click()
   await walk(page, 0, 9, 30)
   await page.waitForTimeout(400)
-  const swap = appears(page, '[data-board-fx="swap"]')
+  const swap = appears(page, '[data-board-fx="swap"]', 4000)
   const grandRc = appears(page, '[data-fx-grand="12"]')
   await page.locator('[data-cell="1-9"]').click()
   await page.locator('[data-cell="1-10"]').click()
-  ok('with Recompletion: the new board fades in', await swap)
+  ok('with Recompletion: the merge plays out first, then the new board slides in', await swap)
   ok('...and the grand prize says Recompletion begins', (await grandRc) && /Recompletion begins — chase rank 14/.test(await page.locator('[data-fx-grand="12"]').innerText()))
   ok('grand prize: zero page errors', errors.length === 0)
   await browser.close()

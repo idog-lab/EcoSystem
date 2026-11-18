@@ -6,7 +6,7 @@
 // Plus phase switching, segment scope, invalid input, an infeasible build,
 // save/reload and legacy configurations. See helpers.mjs for how to run.
 import fs from 'node:fs'
-import { createBoard } from '../../src/features/merge/lib/board.js'
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { BASE, SAVE_KEY, createChecker, generatedBoard, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()

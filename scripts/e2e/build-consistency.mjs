@@ -6,9 +6,9 @@
 //   - A draft survives a reload, separately from the applied design, and is
 //     never applied by being restored.
 // See helpers.mjs for how to run.
-import { RC_MAX_RANK } from '../../src/features/merge/lib/ranks.js'
-import { createDropGroupsConfig } from '../../src/features/merge/lib/dropGroups.js'
-import { applyTwisterDropRule } from '../../src/features/merge/lib/twisterEconomy.js'
+import { RC_MAX_RANK } from '../../src/features/merge/lib/core/ranks.js'
+import { createDropGroupsConfig } from '../../src/features/merge/lib/rewards/dropGroups.js'
+import { applyTwisterDropRule } from '../../src/features/merge/lib/rewards/twisterEconomy.js'
 import { createChecker, generatedBoard, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()

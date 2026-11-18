@@ -1,37 +1,37 @@
 import { useState, useRef, useEffect } from 'react'
-import { setEffortTargetForBuild } from './features/merge/lib/eventBuild'
+import { setEffortTargetForBuild } from './features/merge/lib/build/eventBuild'
 import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer } from 'lucide-react'
-import BoardList from './features/merge/components/BoardList'
-import BoardEditor from './features/merge/components/BoardEditor'
-import PlayTester from './features/merge/components/PlayTester'
-import CCManagement from './features/merge/components/CCManagement'
-import SyntaxPage from './features/merge/components/SyntaxPage'
-import RewardsPage from './features/merge/components/RewardsPage'
-import TwisterPage from './features/merge/components/TwisterPage'
-import BuildEventPage from './features/merge/components/BuildEventPage'
-import LegacyRecompletionRecovery from './features/merge/components/LegacyRecompletionRecovery'
-import PlayStage from './features/merge/components/PlayStage'
+import BoardList from './features/merge/components/editor/BoardList'
+import BoardEditor from './features/merge/components/editor/BoardEditor'
+import PlayTester from './features/merge/components/play/PlayTester'
+import CCManagement from './features/merge/components/editor/CCManagement'
+import SyntaxPage from './features/merge/components/export/SyntaxPage'
+import RewardsPage from './features/merge/components/rewards/RewardsPage'
+import TwisterPage from './features/merge/components/rewards/TwisterPage'
+import BuildEventPage from './features/merge/components/build/BuildEventPage'
+import LegacyRecompletionRecovery from './features/merge/components/build/LegacyRecompletionRecovery'
+import PlayStage from './features/merge/components/play/PlayStage'
 import HeroPage from './components/HeroPage'
 import DiamondMineApp from './features/diamondMine/components/DiamondMineApp'
 import ChefApp from './features/chef/components/ChefApp'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
-import { RC_MIN_RANK_UNDER_TILES, createBoard, invalidateLayout } from './features/merge/lib/board'
-import { rcSubsidyForMainSubsidy, spreadSubsidy, fillLastBoard } from './features/merge/lib/subsidyBudget'
-import { useBoardListState } from './features/merge/lib/useBoardListState'
-import { loadState, saveState, clearState } from './features/merge/lib/persistence'
-import { DEFAULT_TARGET_EV } from './features/merge/lib/luckyDrop'
-import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from './features/merge/lib/generatorTier'
-import { encodeStage, decodeStage, MAX_SAFE_STAGE_CHARS } from './features/merge/lib/stageShare'
-import { encodePlan, decodePlan, MAX_SAFE_PLAN_CHARS } from './features/merge/lib/planShare'
+import { RC_MIN_RANK_UNDER_TILES, RC_FIRST_BOARD_SUBSIDY_CAP_DR, createBoard, invalidateLayout } from './features/merge/lib/core/board'
+import { rcSubsidyForMainSubsidy, spreadSubsidy, fillLastBoard } from './features/merge/lib/core/subsidyBudget'
+import { useBoardListState } from './features/merge/lib/state/useBoardListState'
+import { loadState, saveState, clearState } from './features/merge/lib/state/persistence'
+import { DEFAULT_TARGET_EV } from './features/merge/lib/core/luckyDrop'
+import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from './features/merge/lib/core/generatorTier'
+import { encodeStage, decodeStage, MAX_SAFE_STAGE_CHARS } from './features/merge/lib/share/stageShare'
+import { encodePlan, decodePlan, MAX_SAFE_PLAN_CHARS } from './features/merge/lib/share/planShare'
 import { createDefaultStage } from './features/merge/data/defaultStage'
-import { MIN_RANK, MAX_RANK, RC_MAX_RANK } from './features/merge/lib/ranks'
-import { createRewardChainConfig, ensureRewardChainConfig, mergeSharedRewardChain, roundRewardAmount } from './features/merge/lib/rewardChain'
-import { effectiveRewardTargets } from './features/merge/lib/rewardEconomy'
-import { createTwisterPlan, normalizeTwisterPlan, stripTwisterFromTiles } from './features/merge/lib/twisterEconomy'
-import { buildInputsKey, segmentBuildInputs, eventDesignIssues, designConsistency, serializeDrafts, deserializeDrafts, DRAFT_STORAGE_KEY } from './features/merge/lib/eventBuild'
-import { createDropGroupsConfig, DEFAULT_MIN_DROP_RANK } from './features/merge/lib/dropGroups'
-import { createSmallRewardsBankConfig, createSmallRewardWeightsConfig } from './features/merge/lib/smallRewardsBank'
+import { MIN_RANK, MAX_RANK, RC_MAX_RANK } from './features/merge/lib/core/ranks'
+import { createRewardChainConfig, ensureRewardChainConfig, mergeSharedRewardChain, roundRewardAmount } from './features/merge/lib/rewards/rewardChain'
+import { effectiveRewardTargets } from './features/merge/lib/rewards/rewardEconomy'
+import { createTwisterPlan, normalizeTwisterPlan, stripTwisterFromTiles } from './features/merge/lib/rewards/twisterEconomy'
+import { buildInputsKey, segmentBuildInputs, eventDesignIssues, designConsistency, serializeDrafts, deserializeDrafts, DRAFT_STORAGE_KEY, boardIsBuilt, draftSegmentIsApplied } from './features/merge/lib/build/eventBuild'
+import { createDropGroupsConfig, DEFAULT_MIN_DROP_RANK } from './features/merge/lib/rewards/dropGroups'
+import { createSmallRewardsBankConfig, createSmallRewardWeightsConfig } from './features/merge/lib/rewards/smallRewardsBank'
 
 // "Share stage" always targets this, never window.location.href - see
 // handleShare's comment for why.
@@ -100,7 +100,11 @@ const SYNCED_REWARD_FIELDS = [
   'minDropRank',
   'multiDropRank',
   'tripleDropRank',
+  'soloDropRank',
+  'rankValuesByBuild',
+  'tileRewardType',
   'twisterByBuild',
+  'twisterSteady',
   'rewardLeftoverPolicy',
   // Twister: the rank ladder rides in rewardChainConfig and the drops in
   // dropGroups/dropGroupsConfig above, so both are shared already. The
@@ -211,6 +215,23 @@ function syncSegmentListLayout(sourceBoards, targetSegments, listKey) {
 function emptyTargetPctInputs() {
   return Object.fromEntries(Array.from({ length: MAX_RANK - MIN_RANK + 1 }, (_, i) => [i + MIN_RANK, '']))
 }
+// The typed curve is kept across a reload, in its own storage entry (like the
+// build drafts - it is not part of the project save). A build keeps the
+// effort distribution asked for (eventBuild.js: setEffortTargetForBuild), and
+// it used to live in memory only: after a reload nothing was protected until
+// it was typed again, with nothing on screen to say so.
+const EFFORT_TARGET_STORAGE_KEY = 'merge-mania-effort-target'
+function storedTargetPctInputs(which) {
+  const blank = emptyTargetPctInputs()
+  try {
+    const saved = JSON.parse(localStorage.getItem(EFFORT_TARGET_STORAGE_KEY) ?? 'null')?.[which]
+    if (!saved || typeof saved !== 'object') return blank
+    for (const rank of Object.keys(blank)) if (typeof saved[rank] === 'string') blank[rank] = saved[rank]
+    return blank
+  } catch {
+    return blank
+  }
+}
 
 // Older saved boards may predate a field added since - backfill defaults so
 // a stale save doesn't crash on a field that's now assumed to exist.
@@ -286,8 +307,12 @@ function normalizeBoards(rawBoards) {
     minDropRank: first?.minDropRank ?? DEFAULT_MIN_DROP_RANK,
     multiDropRank: first?.multiDropRank ?? null,
     tripleDropRank: first?.tripleDropRank ?? null,
+    soloDropRank: first?.soloDropRank ?? null,
+    rankValuesByBuild: first?.rankValuesByBuild ?? null,
+    tileRewardType: first?.tileRewardType ?? null,
     // Decided for the whole project in migrateTwisterByBuild (below).
     twisterByBuild: first?.twisterByBuild ?? null,
+    twisterSteady: first?.twisterSteady ?? null,
     rewardLeftoverPolicy: first?.rewardLeftoverPolicy ?? 'forfeit',
     twisterSpinCost: first?.twisterSpinCost ?? null,
     twisterSpinObjective: first?.twisterSpinObjective ?? null,
@@ -591,8 +616,9 @@ function useSegment(initial) {
       presets: initial.recompletionPresets,
       targetSubsidy: initial.recompletionTargetSubsidy,
     },
-    // Nothing below rank 3 under a Recompletion board's blocked tiles.
-    { minRankFloor: RC_MIN_RANK_UNDER_TILES },
+    // Nothing below rank 3 under a Recompletion board's blocked tiles, and
+    // every board knows it is a Recompletion board (board.js: isRecompletionBoard).
+    { minRankFloor: RC_MIN_RANK_UNDER_TILES, phase: 'rc' },
   )
   const [legacyRecompletionB, setLegacyRecompletionB] = useState(initial.legacyRecompletionB ?? null)
   const [recompletionRecovery, setRecompletionRecovery] = useState(initial.recompletionRecovery ?? null)
@@ -663,16 +689,13 @@ function PlayApp() {
     <div className="min-h-screen">
       <div className="app-backdrop" aria-hidden="true" />
       <main className="max-w-[1760px] mx-auto px-3 py-4 sm:px-6 sm:py-10 play-compact-py">
-        {linkBroken && (
-          <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 max-w-4xl mx-auto">
-            <TriangleAlert size={16} className="shrink-0 mt-0.5" />
-            <span className="text-sm">
-              This share link looks broken or got cut off along the way, so we're showing the demo stage instead —
-              ask whoever sent it to re-share the link.
-            </span>
-          </div>
-        )}
-        <PlayStage boards={boards} rcBoards={rcBoards} />
+        {/* The stage shows the notice itself: on a phone held sideways it
+            fills the screen, and a banner out here would sit behind it. */}
+        <PlayStage
+          boards={boards}
+          rcBoards={rcBoards}
+          notice={linkBroken ? "This share link looks broken or got cut off along the way, so we're showing the demo stage instead — ask whoever sent it to re-share the link." : null}
+        />
       </main>
     </div>
   )
@@ -1161,12 +1184,19 @@ function EditorApp({ onHome }) {
   // See emptyTargetPctInputs' own comment above - lifted out of
   // BoardEditor.jsx's local state so it survives switching the active
   // board or segment, not just Suggest/Apply.
-  const [mainTargetPctInputs, setMainTargetPctInputs] = useState(emptyTargetPctInputs)
+  const [mainTargetPctInputs, setMainTargetPctInputs] = useState(() => storedTargetPctInputs('main'))
   // The build keeps the effort distribution typed in the Effort distribution step (eventBuild.js).
   useEffect(() => {
     setEffortTargetForBuild('main', mainTargetPctInputs)
   }, [mainTargetPctInputs])
-  const [recompletionTargetPctInputs, setRecompletionTargetPctInputs] = useState(emptyTargetPctInputs)
+  const [recompletionTargetPctInputs, setRecompletionTargetPctInputs] = useState(() => storedTargetPctInputs('rc'))
+  useEffect(() => {
+    try {
+      localStorage.setItem(EFFORT_TARGET_STORAGE_KEY, JSON.stringify({ main: mainTargetPctInputs, rc: recompletionTargetPctInputs }))
+    } catch {
+      // Storage full or blocked: the curve just lasts for this visit.
+    }
+  }, [mainTargetPctInputs, recompletionTargetPctInputs])
 
   // Plain data about every segment, for the helpers that reason about the
   // whole event (what a build is built from; which applied designs are out of
@@ -1181,6 +1211,20 @@ function EditorApp({ onHome }) {
     twisterPlan: seg.twisterPlan,
   }))
   const designIssues = eventDesignIssues(segmentData)
+  // Phases with a build waiting in Build event that is not applied: the
+  // Syntax tab exports the applied design only, and says so when a newer
+  // build exists (the economist once saw four containers there while the
+  // build on screen had thirty).
+  const pendingBuilds = [
+    ['main', 'Normal'],
+    ['rc', 'Recompletion'],
+  ]
+    .filter(([phase]) => {
+      const draft = buildDrafts[phase]
+      const built = (draft?.segments ?? []).filter((seg) => seg.status !== 'skipped')
+      return built.length > 0 && !built.every((seg) => segments[seg.index] && draftSegmentIsApplied(phase === 'main' ? segments[seg.index].main.boards : segments[seg.index].recompletion.boards, draft))
+    })
+    .map(([, label]) => label)
 
   function handleSave() {
     saveState(buildSaveShape(segments))
@@ -1210,9 +1254,22 @@ function EditorApp({ onHome }) {
     // The link carries the main chain AND the RC variant currently selected
     // for testing (the same A/B choice the simulator and Play Tester use), so
     // a shared stage plays through the gated transition into that variant.
+    // A board with tiles and nothing under them cannot be played: its tiles
+    // never open. (Editing a layout clears that board's contents until it is
+    // built again - the economist once shared such a stage and found
+    // Recompletion "completely broken".) An unbuilt normal board stops the
+    // share; an unbuilt Recompletion list is left out of the link, and said.
+    const unbuiltMain = main.boards.map((b, i) => (boardIsBuilt(b) ? null : i + 1)).filter(Boolean)
+    if (unbuiltMain.length > 0) {
+      setShareLink(null)
+      setShareWarning(`No link was made: Board ${unbuiltMain.join(', ')} has tiles but nothing under them, so it cannot be played. Build the event (Build event, steps 6 and 7) and share again.`)
+      return
+    }
+    const unbuiltRc = activeRcBoards.map((b, i) => (boardIsBuilt(b) ? null : i + 1)).filter(Boolean)
+    const rcForLink = unbuiltRc.length > 0 ? null : activeRcBoards
     let encoded
     try {
-      encoded = encodeStage(main.boards, { rcBoards: activeRcBoards })
+      encoded = encodeStage(main.boards, rcForLink ? { rcBoards: rcForLink } : {})
     } catch (error) {
       setShareWarning(`The stage link could not be made: ${error?.message ?? error}`)
       return
@@ -1226,7 +1283,9 @@ function EditorApp({ onHome }) {
     setShareCopied(true)
     setTimeout(() => setShareCopied(false), 2000)
     setShareWarning(
-      fullUrl.length > MAX_SAFE_STAGE_CHARS
+      unbuiltRc.length > 0
+        ? `The link plays the normal event only: Recompletion Board ${unbuiltRc.join(', ')} has tiles but nothing under them (its layout was changed after the last build), so Recompletion was left out. Build and apply Recompletion, then share again to include it.`
+        : fullUrl.length > MAX_SAFE_STAGE_CHARS
         ? `Heads up: this link is long (${main.boards.length} boards plus the Recompletion boards) - some chat apps, email clients, or corporate networks may fail to open it for your recipient. If it doesn't open, try trimming boards.`
         : null,
     )
@@ -1409,6 +1468,8 @@ function EditorApp({ onHome }) {
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
     resetBuildWorkflow()
+    setMainTargetPctInputs(emptyTargetPctInputs())
+    setRecompletionTargetPctInputs(emptyTargetPctInputs())
     setSavedAt(null)
     setImportError(null)
     setShareWarning(null)
@@ -1669,6 +1730,7 @@ function EditorApp({ onHome }) {
           <>
             <BoardList
               maxRankUnderTiles={13}
+              firstBoardCap={RC_FIRST_BOARD_SUBSIDY_CAP_DR}
               boards={recompletion.boards}
               activeId={recompletion.activeBoard?.id}
               onSelect={recompletion.setActiveId}
@@ -1900,6 +1962,8 @@ function EditorApp({ onHome }) {
                 exportOverride={exportOverride}
                 onExportOverride={setExportOverride}
                 onRebuild={() => goRebuild(designIssues[0]?.phase)}
+                pendingBuilds={pendingBuilds}
+                onOpenBuild={() => setMode('build')}
                 allSegments={segments.map((seg) => ({
                   name: seg.name,
                   boards: seg.main.boards,
