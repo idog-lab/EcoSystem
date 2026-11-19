@@ -51,6 +51,15 @@ export function isTilePlaceableRewardType(type) {
   return REWARD_TYPES.includes(type)
 }
 export const REWARD_MAX_RANK = 4
+// WHAT IS LEFT WHEN A PHASE ENDS IS COLLECTED (economist: "we need to make
+// sure the simulator after getting to rank 12, merges all the small rewards
+// and collect them. to understand how much really the user got"). A simulated
+// player merges every reward item it can as it plays; whatever is still
+// unmerged when the phase's top rank is reached is tapped and paid at its own
+// rank's value ('collect'). It used to be assumed lost ('forfeit', still
+// selectable in step 4) - so every amount the simulator reported was short
+// by the last few items a real player taps before stopping.
+export const DEFAULT_LEFTOVER_POLICY = 'collect'
 export const REWARD_BASE = 1000
 
 // The economist's real Ops reference ("Small Rewards" sheet) keys each
@@ -297,8 +306,77 @@ export function coinLadderIsAuto(rewardChainConfig) {
   return ladder.every((r) => r?.auto === true || (!((r?.prizeAmount ?? 0) > 0) && (r?.syntax ?? '').trim() === ''))
 }
 
+// (In round amounts - niceCoinValues, below.)
 export function coinValuesForScale(scale) {
-  return COIN_VALUE_SHAPE.map((v) => Math.round(v * scale * 1000) / 1000)
+  return niceCoinValues(COIN_VALUE_SHAPE[REWARD_MAX_RANK - 1] * scale)
+}
+
+// ROUND AMOUNTS (economist: "i want the model to give the values of the ranks
+// but with nice rounding for the amounts"). The values the model gives a
+// reward's four ranks are always:
+//   - round: a whole number under 10, a multiple of 5 up to 200, of 10 up to
+//     1,000, of 50 beyond (`niceNearest` / `niceFloor`); coin allowance worth
+//     in hundredths (thousandths when the top one is under 0.2);
+//   - worth MERGING: each rank at least double the one below and rank 4 more
+//     than the items it is made of, so tapping an item early never pays more
+//     than merging it on (validateRewardLadder). The reference values the
+//     tool was seeded with did not (puzzles 5/15/15/40, charms 5/10/30/40) -
+//     a player who tapped got half as much again as the build had sized for.
+// The proportions are the ladder typed, when that one already rewards
+// merging, else 1 : 3 : 7 : 15 (the merge energy reference, 5/15/35/75).
+// (A rank-4 value moves in these steps, so a reward's average lands within
+// half a step of what it should be: about 3% for a top value of 75, 6% for
+// one of 40. That is what round amounts cost.)
+const NICE_STEPS = [
+  [10, 1],
+  [200, 5],
+  [1000, 10],
+  [5000, 50],
+  [Infinity, 100],
+]
+export const niceStepAt = (v) => NICE_STEPS.find(([limit]) => v < limit)[1]
+// The largest round amount that is not above `v` (0 when v is under 1).
+export function niceFloor(v) {
+  if (!(v >= 1)) return 0
+  const step = niceStepAt(v)
+  return Math.floor(v / step + 1e-9) * step
+}
+// The round amount nearest to `v` (at least 1).
+export function niceNearest(v) {
+  const low = Math.max(1, niceFloor(v))
+  const high = low + niceStepAt(low)
+  return v - low < high - v ? low : high
+}
+export const REWARD_VALUE_SHAPE = [1 / 15, 3 / 15, 7 / 15]
+// The smallest rank-4 value a whole-number ladder that rewards merging can have (1/2/4/10).
+export const REWARD_MIN_TOP = 10
+function ladderShape(values) {
+  const top = values?.[REWARD_MAX_RANK - 1] ?? 0
+  if (!(top > 0) || validateRewardLadder(values.map((prizeAmount) => ({ prizeAmount }))).length > 0) return REWARD_VALUE_SHAPE
+  return [values[0] / top, values[1] / top, values[2] / top]
+}
+// Four round, merge-rewarding values with rank 4 as near `top` as a round
+// amount gets. `like`: a ladder whose proportions to follow (see above).
+export function niceRewardValues(top, like = null) {
+  const shape = like ? ladderShape(like) : REWARD_VALUE_SHAPE
+  const v4 = Math.max(REWARD_MIN_TOP, niceNearest(top))
+  let v3 = niceFloor(Math.min(shape[2] * v4, (v4 - 1) / 2))
+  let v2 = niceFloor(Math.min(shape[1] * v4, v3 / 2))
+  const v1 = Math.max(1, niceFloor(Math.min(shape[0] * v4, v2 / 2)))
+  v2 = Math.max(v2, 2 * v1)
+  v3 = Math.max(v3, 2 * v2)
+  return [v1, v2, v3, Math.max(v4, 2 * v3 + 1)]
+}
+// The same for a coin ladder (an allowance worth, so in hundredths).
+export function niceCoinValues(top) {
+  const step = top >= 0.2 ? 0.01 : 0.001
+  const n4 = Math.max(9, Math.round(top / step))
+  let n3 = Math.floor(Math.min((COIN_VALUE_SHAPE[2] / COIN_VALUE_SHAPE[3]) * n4, (n4 - 1) / 2) + 1e-9)
+  let n2 = Math.floor(Math.min((COIN_VALUE_SHAPE[1] / COIN_VALUE_SHAPE[3]) * n4, n3 / 2) + 1e-9)
+  const n1 = Math.max(1, Math.floor(Math.min((COIN_VALUE_SHAPE[0] / COIN_VALUE_SHAPE[3]) * n4, n2 / 2) + 1e-9))
+  n2 = Math.max(n2, 2 * n1)
+  n3 = Math.max(n3, 2 * n2)
+  return [n1, n2, n3, Math.max(n4, 2 * n3 + 1)].map((n) => Math.round(n * step * 1000) / 1000)
 }
 
 // The config with the coin ranks set to generated `values` (syntax written to
@@ -388,18 +466,31 @@ export function withManualCoinLadder(rewardChainConfig) {
 // other segment. The one exception is a coin ladder set by the build: each
 // segment keeps its OWN generated coin values. This returns what a segment
 // should hold given the base segment's config and its own current one.
+// So are the puzzle, merge energy and charm values the build gives: each
+// segment keeps its own (economist, asked: "Per segment"), for as long as the
+// values TYPED for that reward are the same as the base segment's. A reward
+// whose typed definition changed goes back to the base segment's.
 export function mergeSharedRewardChain(source, target) {
-  if (!source || !coinLadderIsAuto(source)) return source
-  const own = target?.[COIN_TYPE]
-  const keepOwn = Array.isArray(own) && coinLadderIsAuto(target)
-  const ladder = source[COIN_TYPE].map((entry, i) => {
-    const kept = keepOwn ? own[i] : null
-    const next = { ...entry, prizeAmount: kept?.prizeAmount ?? 0, syntax: kept?.syntax ?? '' }
-    if (kept?.auto) next.auto = true
-    else delete next.auto
-    return next
-  })
-  return { ...source, [COIN_TYPE]: ladder }
+  if (!source) return source
+  let out = source
+  if (coinLadderIsAuto(source)) {
+    const own = target?.[COIN_TYPE]
+    const keepOwn = Array.isArray(own) && coinLadderIsAuto(target)
+    const ladder = source[COIN_TYPE].map((entry, i) => {
+      const kept = keepOwn ? own[i] : null
+      const next = { ...entry, prizeAmount: kept?.prizeAmount ?? 0, syntax: kept?.syntax ?? '' }
+      if (kept?.auto) next.auto = true
+      else delete next.auto
+      return next
+    })
+    out = { ...out, [COIN_TYPE]: ladder }
+  }
+  const definition = (config, type) => JSON.stringify((config?.[type] ?? []).map((r) => [r?.typed?.prizeAmount ?? r?.prizeAmount ?? 0, r?.typed?.syntax ?? r?.syntax ?? '', r?.asset ?? '']))
+  for (const type of BUILD_VALUED_TYPES) {
+    if (!Array.isArray(target?.[type]) || !rewardLadderIsBuildValued(target, type)) continue
+    if (definition(source, type) === definition(target, type)) out = { ...out, [type]: target[type] }
+  }
+  return out
 }
 
 // The definitions as an INPUT to a build: generated coin values are an output
@@ -433,13 +524,21 @@ export function rewardChainAsBuildInput(rewardChainConfig) {
 //     ladder is what the definitions editor shows and edits, and it is what
 //     counts as a build input. The re-valued numbers are a RESULT, like the
 //     coin values and the Twister values the build sets.
-//   - One set for every segment (sized on the base segment), unlike coins.
-//   - Puzzles, merge energy and charms are whole numbers.
+//   - EACH SEGMENT ITS OWN (economist, asked: "Per segment"), like coins: a
+//     segment that merges more gets smaller values, so every segment lands on
+//     its own amounts. (It used to be one set, sized on the base segment; the
+//     other segments then landed 20% to 45% over.)
+//   - Puzzles, merge energy and charms are whole numbers, and the values the
+//     build gives are ROUND and reward merging (niceRewardValues).
 export const BUILD_VALUED_TYPES = REWARD_TYPES.filter((t) => t !== COIN_TYPE)
 // The build changes a reward's values by at most this much either way; a
 // reward further off than that is reported instead. This app's own numbers.
-export const REWARD_VALUE_FACTOR_MIN = 0.2
-export const REWARD_VALUE_FACTOR_MAX = 5
+// (0.1x to 10x. It was 0.2x to 5x while a change of values was the exception;
+// now that the model gives every segment its values - and collected leftovers
+// make small amounts payable - a small amount regularly needs less than a
+// fifth of the typed top value.)
+export const REWARD_VALUE_FACTOR_MIN = 0.1
+export const REWARD_VALUE_FACTOR_MAX = 10
 
 export function rewardLadderIsBuildValued(rewardChainConfig, type) {
   return (rewardChainConfig?.[type] ?? []).some((r) => r?.typed != null)
@@ -473,6 +572,8 @@ export function withTypedRewardValues(rewardChainConfig) {
 // stays at none; a rank with one never drops under 1 or under the rank below).
 export function scaledRewardValues(values, factor) {
   const f = Number.isFinite(factor) && factor > 0 ? factor : 1
+  // A whole ladder: the model's round, merge-rewarding values at that size.
+  if (values.length >= REWARD_MAX_RANK && values.slice(0, REWARD_MAX_RANK).every((v) => v > 0)) return niceRewardValues(values[REWARD_MAX_RANK - 1] * f, values)
   const out = []
   for (let i = 0; i < values.length; i++) {
     const v = values[i] ?? 0
@@ -556,6 +657,30 @@ export function rewardChainForNextPhase(previous, next) {
 
 export function rewardPrizeAmount(rewardChainConfig, type, rank) {
   return rewardChainConfig?.[type]?.[rank - 1]?.prizeAmount ?? 0
+}
+
+// What ONE source unit of a reward (a rank-1 item's worth of it) pays at
+// best: a rank-r item is 2^(r-1) units, so its prize / 2^(r-1), at the rank
+// where that is highest. For rank values that reward merging this is rank 4;
+// for values that do not, it is the rank a player does better to tap the item
+// at (see `bestCollectRank`).
+export function bestUnitValue(rewardChainConfig, type) {
+  let best = 0
+  for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) best = Math.max(best, rewardPrizeAmount(rewardChainConfig, type, rank) / 2 ** (rank - 1))
+  return best
+}
+
+// Whether tapping an item of `rank` to collect it pays at least as much as
+// merging it on: no higher rank pays more per source unit. Always true at
+// rank 4 (it collects by itself). With rank values that reward merging it is
+// false at every rank below 4.
+export function tapPaysAtLeastAsMuch(rewardChainConfig, type, rank) {
+  if (rank >= REWARD_MAX_RANK) return true
+  const perUnit = (r) => rewardPrizeAmount(rewardChainConfig, type, r) / 2 ** (r - 1)
+  const here = perUnit(rank)
+  if (!(here > 0)) return false
+  for (let r = rank + 1; r <= REWARD_MAX_RANK; r++) if (perUnit(r) > here + 1e-12) return false
+  return true
 }
 
 // "Reward ladders must reward merging." A rank-N item is built from 2^(N-1)

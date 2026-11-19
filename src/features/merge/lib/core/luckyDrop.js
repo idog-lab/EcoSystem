@@ -84,8 +84,8 @@ export function computeProbs(targetEv) {
 // unpredictability on every tap, not a converging sequence. Deliberately
 // separate from createEvScheduler below (used by the automatic simulator,
 // which wants reproducible aggregate EV math, not player-facing randomness).
-export function rollBonus(probs) {
-  const roll = Math.random()
+export function rollBonus(probs, rng = Math.random) {
+  const roll = rng()
   if (roll < probs[0]) return 0
   if (roll < probs[0] + probs[1]) return 1
   return 2

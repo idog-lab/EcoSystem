@@ -353,7 +353,7 @@ console.log('--- 9. The checkpoint is an observation ---')
   const rc = mkChain({ boards: 2, values: [150, 2000], perMille: 300 })
   const rcRun = simulatePlaythrough(chain, { ...base(), dropRng: mulberry32(5), rcBoards: rc, checkpoint: { phase: 'rc', fraction: 0.5 } })
   check('an RC checkpoint is observed in the RC phase', rcRun.rcEntered && rcRun.checkpoint?.phase === 'rc' && rcRun.checkpoint.progress >= 0.5)
-  check('RC income is counted from the start of the RC round', rcRun.checkpoint.collectedInPhase.twister <= rcRun.checkpoint.collected.twister && rcRun.checkpoint.collectedInPhase.twister >= 0 && rcRun.checkpoint.collected.twister - rcRun.checkpoint.collectedInPhase.twister === rcRun.collectedMainPhase.twister)
+  check('RC income is counted from the start of the RC round', rcRun.checkpoint.collectedInPhase.twister <= rcRun.checkpoint.collected.twister && rcRun.checkpoint.collectedInPhase.twister >= 0 && rcRun.checkpoint.collected.twister - rcRun.checkpoint.collectedInPhase.twister === rcRun.collectedMainPhase.twister - rcRun.carriedIntoRc.twister)
   check('RC progress is measured against rank 14 from the fresh RC board', rcRun.progress.rc === 1 && rcRun.secondGrandPrizeAwarded)
 }
 
@@ -491,7 +491,8 @@ console.log('--- 13. Sharing and exports ---')
   check('no drop definition is duplicated into the cost sheet', rows.every((r) => !String(r[2]).toLowerCase().includes('weight')))
 
   const chainSheet = buildV2RewardChainSheet(chain, rcA).rows.map((r) => r.cells)
-  check('the shared Twister ladder is exported with the reward definitions, per list', chainSheet.filter((r) => r[1] === 'Twister DR').length === 8 && chainSheet.some((r) => r[0] === 'Main' && r[3] === 'dr-twister-r4' && r[6] === 30))
+  // (Two lists that hold the same definitions are listed once, as "Main + RC"; a list that differs is listed on its own.)
+  check('the shared Twister ladder is exported with the reward definitions', chainSheet.filter((r) => r[1] === 'Twister DR').length === 4 * new Set(chainSheet.map((r) => r[0])).size && chainSheet.some((r) => /Main/.test(r[0]) && r[3] === 'dr-twister-r4' && r[6] === 30))
   const dropSheet = buildV2DropGroupsSheet(chain, rcA)
   const twCol = dropSheet.columns.indexOf('Twister DR rank')
   check('the shared Twister drop is exported with the drop groups', twCol === 8 && dropSheet.rows.some((r) => r.cells[0] === 'Main' && r.cells[twCol] === 2 && r.cells[3] === 200))

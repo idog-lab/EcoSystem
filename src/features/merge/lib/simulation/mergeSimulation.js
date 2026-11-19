@@ -1,7 +1,7 @@
 import { MAX_RANK, RC_MAX_RANK, valueOf } from '../core/ranks'
 import { currentTier, unlockedTiers, buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../core/generatorTier'
-import { DEFAULT_TARGET_EV, computeProbs, createEvScheduler } from '../core/luckyDrop'
-import { isMainItem, decodeReward, encodeReward, REWARD_MAX_RANK, rewardPrizeAmount, rewardChainForNextPhase, emptyRewardTally, TWISTER_TYPE } from '../rewards/rewardChain'
+import { DEFAULT_TARGET_EV, computeProbs, createEvScheduler, rollBonus } from '../core/luckyDrop'
+import { isMainItem, decodeReward, encodeReward, REWARD_MAX_RANK, rewardPrizeAmount, rewardChainForNextPhase, emptyRewardTally, TWISTER_TYPE, tapPaysAtLeastAsMuch, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { rollDrop, createDropScheduler, MIN_DROP_RANK } from '../rewards/dropGroups'
 
 // 4-directional only — up/down/left/right, no diagonals.
@@ -336,6 +336,68 @@ function scanForMerge(state, requireBothFree) {
   return null
 }
 
+// WHERE A MERGE HAPPENS. A merge opens the locked tiles next to the cell it
+// happens in (the receiver's), and a free item can be moved to any empty open
+// cell first - so a player who wants the tiles open merges NEXT TO them. The
+// careful simulated player does: when both items are free, the merge happens
+// at whichever of the two already has a locked tile beside it, else the
+// receiver is first moved to an empty cell that has one. (A semi-blocked
+// receiver stays where it is.) Without this the simulator merged wherever its
+// scan found the pair, and with tiles opening only at the receiver a design
+// with no merge drops and reward items under its tiles handed out a third of
+// its subsidy. Returns the merge to perform and, when an item has to be moved
+// first, `relocate: { from, to }` - nothing is changed here, so the robot on
+// the play engine can make the same two moves (playRobot.mjs).
+const hasLockedNeighbour = (state, [r, c]) => DELTAS.some(([dr, dc]) => inBounds(state, r + dr, c + dc) && state.locked[r + dr][c + dc])
+export function mergeWhereItOpens(state, merge) {
+  const { mover, receiver } = merge
+  if (state.stuck[receiver[0]][receiver[1]] || state.stuck[mover[0]][mover[1]]) return { merge, relocate: null }
+  if (state.blockedQueueIndex >= state.blockedQueue.length) return { merge, relocate: null } // nothing left under the tiles
+  if (hasLockedNeighbour(state, receiver)) return { merge, relocate: null }
+  if (hasLockedNeighbour(state, mover)) return { merge: { ...merge, mover: receiver, receiver: mover }, relocate: null }
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      if (state.itemAt[r][c] != null || state.locked[r][c] || !hasLockedNeighbour(state, [r, c])) continue
+      return { merge: { ...merge, receiver: [r, c] }, relocate: { from: receiver, to: [r, c] } }
+    }
+  }
+  return { merge, relocate: null }
+}
+
+// The merge the careful simulated player makes next, and where (null: none).
+export function nextCarefulMerge(state) {
+  const found = findLegalMerge(state)
+  return found ? mergeWhereItOpens(state, found) : null
+}
+
+// A PLAYER WHO MERGES WITHOUT LOOKING (`options.mergeRng`). The simulated
+// player merges carefully: when a free item could go either into a
+// semi-blocked item of its rank or into another free one, it opens the
+// semi-blocked one. A real player does not always - and an item left
+// semi-blocked when rank 12 is made is subsidy that was never used, paid for
+// in DR instead. For each kind of item on the board this player has the same
+// two choices (free into free, free into semi-blocked) and picks any of them
+// at random. Found with the robot on the play engine: in a segment that lives
+// mostly on its subsidy such a player spent 30-40% more DR and collected
+// about 10% more rewards than the careful one.
+function pickCarelessMerge(state, rng) {
+  const byValue = new Map()
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const v = state.itemAt[r][c]
+      if (v == null || state.locked[r][c]) continue
+      if (!byValue.has(v)) byValue.set(v, { free: [], stuck: [] })
+      byValue.get(v)[state.stuck[r][c] ? 'stuck' : 'free'].push([r, c])
+    }
+  }
+  const options = []
+  for (const [rank, { free, stuck }] of byValue) {
+    if (free.length >= 2) options.push({ mover: free[0], receiver: free[1], rank })
+    if (free.length >= 1 && stuck.length >= 1) options.push({ mover: free[0], receiver: stuck[0], rank })
+  }
+  return options.length > 0 ? options[Math.floor(rng() * options.length)] : null
+}
+
 // Every legal merge available right now (not just the first one found) -
 // used only by onboardingGoal.js's feasibility search (see pickMergeByStrategy
 // below), which needs to consider more than one candidate; findLegalMerge's
@@ -484,7 +546,7 @@ export function performMerge(
   recordRank,
   log,
   {
-    revealAroundMover = true,
+    revealAroundMover = false,
     onCollect,
     dropGroupsConfig,
     dropGroupsById,
@@ -577,14 +639,14 @@ export function performMerge(
       }
     }
   }
-  // A merge "occurs" at both cells it touches — either can reveal a
-  // neighboring locked tile. revealAroundMover exists for the interactive
-  // play tester specifically, which always passes false: the mover's
-  // original cell isn't where the player is watching the merge happen (the
-  // receiver is), so a tile revealing there — even when the mover was
-  // directly adjacent to the receiver — doesn't read as connected to the
-  // merge. The automatic simulator always uses the default (true) and is
-  // unaffected either way.
+  // A merge opens the locked tiles next to where it HAPPENS - the receiver's
+  // cell. The mover's old cell is not where the player watches the merge, so
+  // a tile opening there does not read as part of it (economist report: a
+  // one-cell merge opened a tile two rows away). The play screens have always
+  // worked this way; the automatic simulator used to open around both cells
+  // (`revealAroundMover: true`), which made it a slightly luckier game than
+  // the one a player plays - see simulatePlaythrough's note. The option stays
+  // for the old numbers.
   if (revealAroundMover) revealNeighbors(state, merge.mover, recordRank, log)
   revealNeighbors(state, merge.receiver, recordRank, log)
 }
@@ -626,13 +688,107 @@ export function findLowestRewardCell(state) {
   return best
 }
 
+// HOW A PLAYER TAKES THE SMALL REWARDS (`collectPolicy`). A reward item can
+// be merged on towards rank 4 or tapped to collect it as it is, and which of
+// the two a player does changes what they end up with - a lot, when the rank
+// values do not reward merging (found by playing a shared stage with a robot
+// after the economist's "he ended up with crazy rewards": with puzzles at
+// 5/15/15/40 a rank-2 item pays 7.5 a unit and a rank 4 only 5, so tapping at
+// rank 2 pays half as much again as merging to rank 4).
+//   'merge'  the player the build sizes for: merges every reward item on and
+//            lets rank 4 collect by itself (taps one only to free a cell).
+//   'best'   taps an item as soon as no higher rank pays more per unit - the
+//            most a player can make of the same drops. With rank values that
+//            reward merging this is the same player as 'merge'. An item that
+//            is needed to open a semi-blocked reward of the same kind is kept.
+//   'all'    taps every reward item the moment it can. Nothing is ever merged
+//            into a semi-blocked reward item, so a board that holds one never
+//            clears and the boards after it never arrive.
+// This is the cell such a player taps next, or null.
+export function findTapCollectCell(state, rewardChainConfig, policy) {
+  if (policy !== 'best' && policy !== 'all') return null
+  // The highest semi-blocked rank of each reward on the board (it is opened
+  // by a free item of its own rank, built from the smaller ones).
+  const waiting = {}
+  if (policy === 'best') {
+    for (let r = 0; r < state.rows; r++) {
+      for (let c = 0; c < state.cols; c++) {
+        if (!state.stuck[r][c] || state.passive?.[r]?.[c]) continue
+        const info = decodeReward(state.itemAt[r][c])
+        if (info) waiting[info.type] = Math.max(waiting[info.type] ?? 0, info.rank)
+      }
+    }
+  }
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      if (state.stuck[r][c]) continue
+      const info = decodeReward(state.itemAt[r][c])
+      if (!info) continue
+      if (policy === 'all') return [r, c]
+      if ((waiting[info.type] ?? 0) >= info.rank) continue
+      if (tapPaysAtLeastAsMuch(rewardChainConfig, info.type, info.rank)) return [r, c]
+    }
+  }
+  return null
+}
+
 // Applies the leftover policy at a phase end, shared by both engines so the
 // automatic simulator and a real play session can never disagree about what
 // a phase boundary does to unmerged reward items: every reward item on the
 // board and in `inventory` is removed, and either hand-collected at its own
 // rank ('collect') or reported through onForfeit(type, rank) and paid
 // nothing ('forfeit').
-export function settlePhaseLeftovers(state, inventory, policy, onCollect, onForfeit) {
+//
+// MERGED FIRST (`mergeFirst(type, rank)`: does this player merge two items of
+// that rank rather than tap them?). Economist: "after getting to rank 12,
+// merges all the small rewards and collect them. to understand how much
+// really the user got". Tapping every leftover as it lies undercounts: the
+// last merges of a run drop items nobody has merged yet (a rank 3 and two
+// rank 2s tapped pay 25 + 10 + 10; merged they are one rank 4 paying 60).
+// Measured against the robot on the play engine, which merges before it
+// taps: the simulator showed 7% less merge energy, the same in every run.
+// The items of the board and the inventory are pooled per reward: a free
+// item opens a semi-blocked one of its rank, two free ones merge, the result
+// goes on up the chain, and what cannot be merged any further is tapped. A
+// semi-blocked item nothing could open is still never paid.
+export function settlePhaseLeftovers(state, inventory, policy, onCollect, onForfeit, { mergeFirst = null } = {}) {
+  if (policy === 'collect' && mergeFirst) {
+    const free = {}
+    const stuck = {}
+    const add = (into, type, rank) => {
+      into[type] ??= Array(REWARD_MAX_RANK + 2).fill(0)
+      into[type][rank] += 1
+    }
+    for (const item of leftoverRewardItems(state)) {
+      const [r, c] = item.cell
+      add(state.stuck[r][c] ? stuck : free, item.type, item.rank)
+      state.itemAt[r][c] = null
+      state.stuck[r][c] = false
+    }
+    for (let i = inventory.length - 1; i >= 0; i--) {
+      const info = decodeReward(inventory[i])
+      if (!info) continue
+      inventory.splice(i, 1)
+      add(free, info.type, info.rank)
+    }
+    for (const type of new Set([...Object.keys(free), ...Object.keys(stuck)])) {
+      const f = (free[type] ??= Array(REWARD_MAX_RANK + 2).fill(0))
+      const s = stuck[type] ?? Array(REWARD_MAX_RANK + 2).fill(0)
+      for (let rank = 1; rank < REWARD_MAX_RANK; rank++) {
+        if (!mergeFirst(type, rank)) continue
+        const opened = Math.min(f[rank], s[rank])
+        const pairs = Math.floor((f[rank] - opened) / 2)
+        f[rank] -= opened + pairs * 2
+        s[rank] -= opened
+        f[rank + 1] += opened + pairs
+      }
+      for (let rank = REWARD_MAX_RANK; rank >= 1; rank--) {
+        for (let k = 0; k < f[rank]; k++) creditCollect(state, type, rank, onCollect)
+        for (let k = 0; k < s[rank]; k++) onForfeit?.(type, rank)
+      }
+    }
+    return
+  }
   for (const item of leftoverRewardItems(state)) {
     // Still semi-blocked when the phase ends: never freed, so never paid.
     if (state.stuck[item.cell[0]][item.cell[1]]) {
@@ -959,19 +1115,17 @@ export function advanceBoards(state, boards, nextBoardIndex, inventory, onPush) 
 // this (see pickMergeByStrategy) - every other caller leaves it unset and
 // gets the exact original findLegalMerge fast path, unchanged.
 //
-// options.revealAroundMover: defaults to true, matching this function's
-// own long-standing behavior - every existing caller is unaffected. Exists
-// so a caller can ask "what would REAL play (Play Tester/PlayStage, both of
-// which hardcode performMerge's revealAroundMover to false - see
-// playSession.js's mergeItems) actually deliver," rather than only the
-// idealized "reveal from both cells a merge touched" figure this function
-// has always reported. Found live: replaying the automatic simulator's own
-// exact merge sequence through playSession.js's real engine (same board,
-// same moves) diverged hugely - not from player choice, but purely from
-// this one flag - confirmed by a clean side-by-side run at
-// revealAroundMover:false matching playSession.js's own numbers exactly
-// once the strategy and moves were held identical. See the "Play Tester"
-// section in CLAUDE.md for the full writeup and what to do with this.
+// options.revealAroundMover: FALSE by default - the simulator opens tiles the
+// way the play screens do (only next to the cell a merge happens in). It was
+// true for a long time: the simulator then also opened the tiles next to the
+// cell the moved item came from, which no player's merge does. On averages
+// the two were close, which is why it was left alone - but once every merge
+// of a rank dropped the same items (steady containers) the rest of the
+// simulator agreed with a robot on the play engine to the last item, and
+// this showed: in a segment with a lot of subsidy the simulator opened two
+// more coin items under the tiles than real play did, 9% more coins, in
+// every run. With false it is the robot's number exactly (300 players each,
+// four segments). Pass true only to reproduce the old figures.
 // Main-chain-only subsidy accounting for one phase's own slice of boards
 // (main or RC - see simulatePlaythrough's RC transition). Reward-encoded
 // queue/semi entries (V2 mixed queues) are deliberately excluded from both
@@ -991,7 +1145,9 @@ function snapshotPhaseStats(boardsList, fromIndex, reachedIndex, deliveredSoFar)
 }
 
 export function simulatePlaythrough(boards, options = {}) {
-  const { startIndex = 0, drBudget = Infinity, maxSteps = 20000, trace = false, mergeStrategy = null, revealAroundMover = true } = options
+  const { startIndex = 0, drBudget = Infinity, maxSteps = 20000, trace = false, mergeStrategy = null, revealAroundMover = false } = options
+  // How this player takes the small rewards - see findTapCollectCell.
+  const collectPolicy = options.collectPolicy ?? 'merge'
   // Defaults to the starting board's own configured EV (see board.js) so
   // this automatically reflects whatever the economist sets in the "Lucky
   // drops" editor card - options.targetEv still overrides it explicitly,
@@ -1009,7 +1165,16 @@ export function simulatePlaythrough(boards, options = {}) {
 
   const state = buildInitialState(boards[startIndex])
   let probs = computeProbs(targetEv)
-  let nextBonus = createEvScheduler(probs)
+  // LUCK. By default lucky drops follow a fixed schedule that lands exactly on
+  // the EV (createEvScheduler): every simulated player then has the same luck,
+  // which keeps an AVERAGE free of noise - what a build is sized on. A real
+  // player rolls each tap, though, and two of them do not spend the same DR.
+  // `options.luckRng` (a random source) makes this player roll like a real
+  // one, so a batch of them shows how far one player can be from the average
+  // (step 7's validation, and its "players within 15%").
+  const luckRng = options.luckRng ?? null
+  const schedulerFor = (p) => (luckRng ? () => rollBonus(p, luckRng) : createEvScheduler(p))
+  let nextBonus = schedulerFor(probs)
   const inventory = []
 
   const events = trace ? [] : null
@@ -1112,10 +1277,11 @@ export function simulatePlaythrough(boards, options = {}) {
   //   prize before the phase ends.
   // An explicit, economist-chosen policy (board.rewardLeftoverPolicy, one
   // shared value per list) - not a game rule this engine can know.
-  let leftoverPolicy = options.leftoverPolicy ?? startBoard?.rewardLeftoverPolicy ?? 'forfeit'
+  let leftoverPolicy = options.leftoverPolicy ?? startBoard?.rewardLeftoverPolicy ?? DEFAULT_LEFTOVER_POLICY
   const leftoverForfeited = emptyRewardTally()
   let leftoverItemCount = 0
   let spaceCollects = 0
+  let tapCollects = 0
   // "7 merges of rank 7, 5 of rank 8" - real merge-event counts per
   // resulting main-chain rank, over the whole run. The economist-facing
   // "merges per rank" report (rewardTargeting.js/RewardsPage.jsx) reads
@@ -1143,10 +1309,27 @@ export function simulatePlaythrough(boards, options = {}) {
   // board or waiting in the inventory. Reward items never carry across a
   // phase boundary either way.
   const settleLeftovers = () =>
-    settlePhaseLeftovers(state, inventory, leftoverPolicy, onCollect, (type, rank) => {
-      leftoverForfeited[type] += rewardChainConfig ? rewardPrizeAmount(rewardChainConfig, type, rank) : 0
-      leftoverItemCount += 1
-    })
+    settlePhaseLeftovers(
+      state,
+      inventory,
+      leftoverPolicy,
+      onCollect,
+      (type, rank) => {
+        leftoverForfeited[type] += rewardChainConfig ? rewardPrizeAmount(rewardChainConfig, type, rank) : 0
+        leftoverItemCount += 1
+      },
+      {
+        // The player who merges everything merges the leftovers too; the one
+        // who taps when that pays as much taps those; the one who taps
+        // everything merges nothing.
+        mergeFirst:
+          (options.collectPolicy ?? 'merge') === 'all'
+            ? null
+            : (options.collectPolicy ?? 'merge') === 'best'
+              ? (type, rank) => !tapPaysAtLeastAsMuch(rewardChainConfig, type, rank)
+              : () => true,
+      },
+    )
 
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
@@ -1190,6 +1373,15 @@ export function simulatePlaythrough(boards, options = {}) {
   let collectedAtRcEntry = null
   let collectedBySourceAtRcEntry = null
   let mergeCountsAtRcEntry = null
+  // WHAT THE NORMAL EVENT REALLY PAID. Everything on the board comes along
+  // into Recompletion, so nothing is settled when rank 12 is reached - but the
+  // free reward items the player holds at that moment are theirs, earned in
+  // the normal event: tapped there and then they would pay their own rank's
+  // value. With leftovers collected (the default) that value is counted to
+  // the normal event, and Recompletion is counted what it adds on top - the
+  // two always sum to what the whole run collected.
+  let carriedAtRcEntry = null
+  let carriedBySourceAtRcEntry = null
 
   // Progression checkpoint (options.checkpoint = { phase: 'main' | 'rc',
   // fraction: 0-1 }): an OBSERVATION of the run at the moment that phase's
@@ -1254,6 +1446,21 @@ export function simulatePlaythrough(boards, options = {}) {
         subsidyDeliveredAtTransition = subsidyDelivered
         collectedAtRcEntry = { ...collected }
         collectedBySourceAtRcEntry = { tile: { ...collectedBySource.tile }, drop: { ...collectedBySource.drop } }
+        carriedAtRcEntry = emptyRewardTally()
+        carriedBySourceAtRcEntry = { tile: emptyRewardTally(), drop: emptyRewardTally() }
+        if (leftoverPolicy === 'collect') {
+          for (const item of leftoverRewardItems(state, inventory)) {
+            // Still semi-blocked: never freed, so not the player's to tap.
+            if (item.cell && state.stuck[item.cell[0]][item.cell[1]]) continue
+            const value = rewardChainConfig ? rewardPrizeAmount(rewardChainConfig, item.type, item.rank) : 0
+            const tile = state.rewardPool?.tile?.[item.type] ?? 0
+            const drop = state.rewardPool?.drop?.[item.type] ?? 0
+            const tileShare = tile + drop > 0 ? tile / (tile + drop) : 0
+            carriedAtRcEntry[item.type] = (carriedAtRcEntry[item.type] ?? 0) + value
+            carriedBySourceAtRcEntry.tile[item.type] += value * tileShare
+            carriedBySourceAtRcEntry.drop[item.type] += value * (1 - tileShare)
+          }
+        }
         mergeCountsAtRcEntry = { ...mergeCountsByRank }
         phase = 'rc'
         enterRecompletion(state, rcBoards[0], inventory)
@@ -1267,7 +1474,7 @@ export function simulatePlaythrough(boards, options = {}) {
         const rcBoard0 = rcBoards[0]
         targetEv = options.rcTargetEv ?? rcBoard0.targetEv ?? DEFAULT_TARGET_EV
         probs = computeProbs(targetEv)
-        nextBonus = createEvScheduler(probs)
+        nextBonus = schedulerFor(probs)
         tier2UnlockRank = options.rcTier2UnlockRank ?? rcBoard0.tier2UnlockRank ?? DEFAULT_TIER2_UNLOCK_RANK
         tier4UnlockRank = options.rcTier4UnlockRank ?? rcBoard0.tier4UnlockRank ?? DEFAULT_TIER4_UNLOCK_RANK
         tiers = buildGeneratorTiers(tier2UnlockRank, tier4UnlockRank)
@@ -1295,7 +1502,29 @@ export function simulatePlaythrough(boards, options = {}) {
       break
     }
 
-    const merge = mergeStrategy ? pickMergeByStrategy(state, mergeStrategy) : findLegalMerge(state)
+    // A player who taps reward items does it before anything else.
+    if (collectPolicy !== 'merge') {
+      const tapCell = findTapCollectCell(state, rewardChainConfig, collectPolicy)
+      if (tapCell) {
+        collectReward(state, tapCell, onCollect)
+        tapCollects += 1
+        log?.({ type: 'tap-collect', cell: tapCell })
+        continue
+      }
+    }
+
+    let merge = mergeStrategy ? pickMergeByStrategy(state, mergeStrategy) : options.mergeRng ? pickCarelessMerge(state, options.mergeRng) : null
+    if (!mergeStrategy && !options.mergeRng) {
+      // The careful player: the merge, and where it opens tiles.
+      const careful = nextCarefulMerge(state)
+      if (careful?.relocate) {
+        const { from, to } = careful.relocate
+        state.itemAt[to[0]][to[1]] = state.itemAt[from[0]][from[1]]
+        state.itemAt[from[0]][from[1]] = null
+        log?.({ type: 'moved', from, to })
+      }
+      merge = careful?.merge ?? null
+    }
     if (merge) {
       performMerge(state, merge, recordRank, log, performMergeOptions)
       nextBoardIndex = advanceBoards(state, activeBoards, nextBoardIndex, inventory, (waveBoard, rows, overflow) =>
@@ -1430,6 +1659,9 @@ export function simulatePlaythrough(boards, options = {}) {
     // How many reward items the automatic player hand-collected below rank
     // 4 purely to free a board cell.
     spaceCollects,
+    // ...and how many a tapping player (collectPolicy) took by hand.
+    tapCollects,
+    collectPolicy,
     mergeCountsByRank,
     // Merge-dropped reward items over the whole run: count, and raw value at
     // each item's own rank (see the tally in `log`).
@@ -1467,17 +1699,28 @@ export function simulatePlaythrough(boards, options = {}) {
     // sizes its odds against how many eligible merges a phase produces).
     mergeCountsMainPhase: mergeCountsAtRcEntry ?? mergeCountsByRank,
     mergeCountsRcPhase: mergeCountsAtRcEntry ? subtractCollected(mergeCountsByRank, mergeCountsAtRcEntry) : null,
-    collectedMainPhase: collectedAtRcEntry ?? collected,
-    collectedRcPhase: collectedAtRcEntry ? subtractCollected(collected, collectedAtRcEntry) : null,
-    collectedBySourceMainPhase: collectedBySourceAtRcEntry ?? collectedBySource,
+    collectedMainPhase: collectedAtRcEntry ? addCollected(collectedAtRcEntry, carriedAtRcEntry) : collected,
+    collectedRcPhase: collectedAtRcEntry ? subtractCollected(collected, addCollected(collectedAtRcEntry, carriedAtRcEntry)) : null,
+    // What the player held, unmerged and free, when Recompletion began (its
+    // tap value; all zeros unless leftovers are collected).
+    carriedIntoRc: carriedAtRcEntry,
+    collectedBySourceMainPhase: collectedBySourceAtRcEntry
+      ? { tile: addCollected(collectedBySourceAtRcEntry.tile, carriedBySourceAtRcEntry.tile), drop: addCollected(collectedBySourceAtRcEntry.drop, carriedBySourceAtRcEntry.drop) }
+      : collectedBySource,
     collectedBySourceRcPhase: collectedBySourceAtRcEntry
       ? {
-          tile: subtractCollected(collectedBySource.tile, collectedBySourceAtRcEntry.tile),
-          drop: subtractCollected(collectedBySource.drop, collectedBySourceAtRcEntry.drop),
+          tile: subtractCollected(collectedBySource.tile, addCollected(collectedBySourceAtRcEntry.tile, carriedBySourceAtRcEntry.tile)),
+          drop: subtractCollected(collectedBySource.drop, addCollected(collectedBySourceAtRcEntry.drop, carriedBySourceAtRcEntry.drop)),
         }
       : null,
   }
   return trace ? { ...result, events } : result
+}
+
+function addCollected(a, b) {
+  const out = {}
+  for (const key of Object.keys(a)) out[key] = (a[key] ?? 0) + (b?.[key] ?? 0)
+  return out
 }
 
 function subtractCollected(a, b) {

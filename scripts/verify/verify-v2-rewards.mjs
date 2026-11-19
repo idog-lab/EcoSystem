@@ -297,8 +297,9 @@ console.log('--- 11. The deterministic prediction is a real run: scheduled drops
   board.tiles = Array.from({ length: 6 }, () => Array(6).fill('open'))
   board.semiPlacements = []
   board.blockedQueue = []
-  const a = estimateExpectedCollectibleRewards([board], { rewardChainConfig, dropGroupsConfig, dropGroupsById: groupsById, drBudget: 1e7 })
-  const b = estimateExpectedCollectibleRewards([board], { rewardChainConfig, dropGroupsConfig, dropGroupsById: groupsById, drBudget: 1e7 })
+  // (Leftovers lost, so every energy counted came from a finished rank-4 item.)
+  const a = estimateExpectedCollectibleRewards([board], { rewardChainConfig, dropGroupsConfig, dropGroupsById: groupsById, drBudget: 1e7, leftoverPolicy: 'forfeit' })
+  const b = estimateExpectedCollectibleRewards([board], { rewardChainConfig, dropGroupsConfig, dropGroupsById: groupsById, drBudget: 1e7, leftoverPolicy: 'forfeit' })
   check('prediction collects real energy from dropped items that merged to rank 4', a.collected.energy > 0 && a.collected.energy % rewardChainConfig.energy[3].prizeAmount === 0)
   check('prediction is deterministic (same inputs, same run)', JSON.stringify(a.result.collected) === JSON.stringify(b.result.collected) && a.result.drSpent === b.result.drSpent)
   check('collected energy is cumulative payout - spending it never draws it down', a.result.energySpent > 0 && Math.abs(a.result.energySpent + a.result.energyBalance - a.result.collected.energy) < 1e-9)
@@ -396,16 +397,19 @@ console.log('--- 14. Ops export: V2 sheets build without error and append to the
   rcBoard.blockedQueue = [3, 3, 3]
   const workbook = buildWorkbook([board], [rcBoard])
   const sheetNames = workbook.worksheets.map((ws) => ws.name)
-  check('workbook keeps the eleven Ops sheets, unreordered, with one Recompletion list', sheetNames.slice(0, 11).join('|') === [
+  // (The Blocked Queue holds the normal list and Recompletion one after the
+  // other now - economist: "they happen one after another in the same event" -
+  // so there is no "Recompletion Blocked Queue" tab; verify-containers.mjs, section 6.)
+  check('workbook keeps the ten Ops sheets, unreordered, with one Recompletion list', sheetNames.slice(0, 10).join('|') === [
     'Event Data', 'Multipliers', 'Board Layouts', 'Recompletion Board Layouts', 'Generator Weights',
-    'Blocked Queue', 'Recompletion Blocked Queue', 'Item Ladder', 'Small Rewards', 'Small Rewards Bank', 'Small Reward Weights',
+    'Blocked Queue', 'Item Ladder', 'Small Rewards', 'Small Rewards Bank', 'Small Reward Weights',
   ].join('|'))
-  check("Recompletion's own containers follow, as two more tabs", sheetNames[11] === 'RC Small Rewards Bank' && sheetNames[12] === 'RC Small Reward Weights')
-  check('...then endless mode\'s containers', sheetNames[13] === 'Endless Small Rewards Bank' && sheetNames[14] === 'Endless Small Reward Weights')
-  check('workbook appends the V2 sheets at the end', sheetNames[15] === 'V2 Reward Chain' && sheetNames[16] === 'V2 Drop Groups' && sheetNames.at(-1) === 'V2 Endless')
+  check('there are no Recompletion container tabs: one bank and one weights table for the whole event', !sheetNames.some((n) => /^RC Small/.test(n)))
+  check('endless mode\'s containers follow', sheetNames[10] === 'Endless Small Rewards Bank' && sheetNames[11] === 'Endless Small Reward Weights')
+  check('workbook appends the V2 sheets at the end', sheetNames[12] === 'V2 Reward Chain' && sheetNames[13] === 'V2 Drop Groups' && sheetNames.at(-1) === 'V2 Endless')
   check('no "Recompletion B" tab exists any more', sheetNames.every((n) => !/ B$/.test(n)))
-  const rcQueueSheet = workbook.worksheets.find((ws) => ws.name === 'Recompletion Blocked Queue')
-  check('Recompletion Blocked Queue reflects the Recompletion list\'s own data', rcQueueSheet.rowCount - 1 === 3) // header + 3 entries
+  const queueSheet = workbook.worksheets.find((ws) => ws.name === 'Blocked Queue')
+  check('the Blocked Queue carries the Recompletion list\'s own entries after the normal ones', queueSheet.rowCount - 1 === board.blockedQueue.length + 3 && !sheetNames.includes('Recompletion Blocked Queue'))
   check('a legacy third list passed by an old caller is ignored, not exported', buildWorkbook([board], [rcBoard], [createBoard('old-b')]).worksheets.length === workbook.worksheets.length)
 }
 
@@ -697,9 +701,11 @@ console.log('--- 21. generateSmallRewardsConfiguration: from definitions alone -
   check('100% tiles: with nothing dropping to open them, no reward item goes under a tile, and it is said', tileItems(tilesOnly) === 0 && tilesOnly.findings.some((f) => /could never be opened/.test(f)))
 
   // A target the ladder cannot pay exactly is reported with its closest feasible payout.
-  const odd = await generateSmallRewardsConfiguration({ phase: 'main', boards: mkChain(), targets: { coins: 0, puzzles: 0, energy: 100, charms: 0 }, split: { sharedTilePct: 50 } })
+  // (With leftovers lost - the older rule, still selectable. Collected, as they are by default, every amount is payable.)
+  const lost = (boards) => boards.map((b) => ({ ...b, rewardLeftoverPolicy: 'forfeit' }))
+  const odd = await generateSmallRewardsConfiguration({ phase: 'main', boards: lost(mkChain()), targets: { coins: 0, puzzles: 0, energy: 100, charms: 0 }, split: { sharedTilePct: 50 } })
   check('an unpayable target reports the closest feasible payout (75) instead of pretending', row(odd, 'energy').feasiblePayout === 75 && row(odd, 'energy').exactlyPayable === false && odd.findings.some((f) => f.includes('closest feasible')))
-  const tooSmall = await generateSmallRewardsConfiguration({ phase: 'main', boards: mkChain(), targets: { coins: 0, puzzles: 0, energy: 20, charms: 0 }, split: { sharedTilePct: 50 } })
+  const tooSmall = await generateSmallRewardsConfiguration({ phase: 'main', boards: lost(mkChain()), targets: { coins: 0, puzzles: 0, energy: 20, charms: 0 }, split: { sharedTilePct: 50 } })
   check('a target under half the smallest prize step explains it is too small for the ladder', row(tooSmall, 'energy').feasiblePayout === 0 && tooSmall.findings.some((f) => f.includes('too small')))
   // ... and the leftover policy changes what is payable: hand-collected leftovers make 20 reachable (15 + 5).
   const collectBoards = mkChain().map((b) => ({ ...b, rewardLeftoverPolicy: 'collect' }))
@@ -715,7 +721,8 @@ console.log('--- 21. generateSmallRewardsConfiguration: from definitions alone -
   const derivedTargets = { coins: 0, puzzles: 90, energy: Math.round(4.4 * prizeE), charms: 90 }
   const derived = await generateSmallRewardsConfiguration({ phase: 'main', boards: mkChain(), targets: derivedTargets, split: { sharedTilePct: 40 }, dropsFixed: true, sharedDrops: baseDrops })
   check('a derived segment leaves the shared drop configuration untouched', JSON.stringify(derived.dropGroupsConfig) === JSON.stringify(baseDrops.dropGroupsConfig) && derived.generatedGroups.length === 0)
-  check(`...and reaches its larger target through more tile items (tile items ${tileItems(res)} -> ${tileItems(derived)}; energy ${Math.round(row(derived, 'energy').predicted)} of ${derivedTargets.energy})`, tileItems(derived) > tileItems(res) && Math.abs(row(derived, 'energy').predicted - derivedTargets.energy) <= derivedTargets.energy * 0.2)
+  // (With leftovers collected the same items pay a little more, so "more tile items than the base" is no longer a given: what matters is that it gets there with its own.)
+  check(`...and reaches its larger target with its own tile items (${tileItems(derived)} of them; energy ${Math.round(row(derived, 'energy').predicted)} of ${derivedTargets.energy})`, tileItems(derived) > 0 && Math.abs(row(derived, 'energy').predicted - derivedTargets.energy) <= derivedTargets.energy * 0.2)
 
   // RC phase: solved on the full main+RC run, RC payouts only.
   const mainBoards = res.boards.map((b) => ({ ...b, dropGroups: res.dropGroups, dropGroupsConfig: res.dropGroupsConfig }))
@@ -745,16 +752,17 @@ console.log('--- 22. Exports: V2 sheets reach the combined workbook/Sheets with 
   const economy = buildV2EconomySheet(segs[0].boards, segs[0].recompletionBoards)
   check('V2 Economy covers both lists with List labels', economy.rows.length === 2 && economy.rows.map((r) => r.cells[0]).join(',') === 'Main,RC')
   const mainRow = economy.rows[0].cells
-  check('V2 Economy row carries blockedValue/ccPercent/minDropRank/leftover policy/reward items', mainRow[2] === 50 && mainRow[3] === 10 && mainRow[4] === 6 && mainRow[5] === 'forfeit' && mainRow[6] === 'dr-r3')
+  check('V2 Economy row carries blockedValue/ccPercent/minDropRank/leftover policy/reward items', mainRow[2] === 50 && mainRow[3] === 10 && mainRow[4] === 6 && mainRow[5] === 'collect' && mainRow[6] === 'dr-r3')
 
   const combined = buildAllSegmentsWorkbook(segs)
   const tabNames = combined.worksheets.map((ws) => ws.name)
-  check('combined workbook has per-segment V2 tabs', ['S1 V2 Reward Chain', 'S1 V2 Drop Groups', 'S1 V2 Economy', 'S2 V2 Economy'].every((n) => tabNames.includes(n)))
+  // (The drop table is one table for every segment, so it is one tab: "V2 Drop Groups", not one per segment.)
+  check('combined workbook has per-segment V2 tabs, and the one drop table once', ['S1 V2 Reward Chain', 'S1 V2 Economy', 'S2 V2 Economy', 'V2 Drop Groups'].every((n) => tabNames.includes(n)) && !tabNames.some((n) => /^S\d+ V2 Drop Groups$/.test(n)))
   check('all combined tab names fit Excel 31-char cap', tabNames.every((n) => n.length <= 31))
 
   const valueSheets = buildAllSegmentsSheetsAsValueRows(segs)
   const valueTitles = valueSheets.map((s) => s.title)
-  check('combined Google Sheets rows mirror the same V2 tabs (parity)', ['S1 V2 Reward Chain', 'S1 V2 Drop Groups', 'S1 V2 Economy', 'S2 V2 Reward Chain'].every((n) => valueTitles.includes(n)))
+  check('combined Google Sheets rows mirror the same V2 tabs (parity)', ['S1 V2 Reward Chain', 'V2 Drop Groups', 'S1 V2 Economy', 'S2 V2 Reward Chain'].every((n) => valueTitles.includes(n)) && JSON.stringify(valueTitles) === JSON.stringify(tabNames))
   const econValues = valueSheets.find((s) => s.title === 'S2 V2 Economy').rows
   check('Sheets V2 Economy values match the workbook builder', econValues[1][3] === 20 && econValues[1][4] === 7)
 
@@ -1024,8 +1032,8 @@ console.log('--- 29. Coins are an allowance worth, not a coin count ---')
   // The economy math is unit-agnostic: an allowance-worth ladder solves like any other.
   const cfg = createRewardChainConfig()
   ;[0.05, 0.12, 0.27, 0.6].forEach((worth, i) => (cfg.coins[i].prizeAmount = worth))
-  check('a 1.2-allowance target is two rank-4 collects (16 source units)', closestUnitsForTarget(1.2, cfg, 'coins').units === 16 && Math.abs(closestUnitsForTarget(1.2, cfg, 'coins').payout - 1.2) < 1e-9)
-  check('a target the ladder cannot pay exactly reports the closest allowance', closestUnitsForTarget(1, cfg, 'coins').exact === false && Math.abs(closestUnitsForTarget(1, cfg, 'coins').payout - 1.2) < 1e-9)
+  check('a 1.2-allowance target is two rank-4 collects (16 source units)', closestUnitsForTarget(1.2, cfg, 'coins', 'forfeit').units === 16 && Math.abs(closestUnitsForTarget(1.2, cfg, 'coins', 'forfeit').payout - 1.2) < 1e-9)
+  check('a target the ladder cannot pay exactly reports the closest allowance', closestUnitsForTarget(1, cfg, 'coins', 'forfeit').exact === false && Math.abs(closestUnitsForTarget(1, cfg, 'coins', 'forfeit').payout - 1.2) < 1e-9)
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

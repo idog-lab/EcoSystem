@@ -759,7 +759,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
   const missing = targeted.filter((t) => !(rewardPrizeAmount(config, t, REWARD_MAX_RANK) > 0) && !(t === COIN_TYPE && coinAuto))
   const coinRows = segments.map((seg, i) => ({ index: i, name: seg.name || `Segment ${i + 1}`, values: (listOfSeg(seg).boards[0]?.rewardChainConfig?.[COIN_TYPE] ?? []).map((r) => r?.prizeAmount ?? 0) })).filter((r) => r.values.some((v) => v > 0))
   const minDropRank = board0?.minDropRank ?? MIN_DROP_RANK
-  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'forfeit'
+  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'collect'
   const topRank = phase === 'main' ? MAX_RANK : RC_MAX_RANK
   const rewardRanks = board0?.rewardRanks ?? []
   const rewardSyntax = board0?.rewardSyntax ?? {}
@@ -857,6 +857,14 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
 
   return (
     <div className="flex flex-col gap-4">
+      {phase === 'rc' && (
+        <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-900" data-testid="rc-one-table">
+          <span className="font-semibold">Recompletion plays the normal event&apos;s merge drops and rank values.</span> The game has one drop table and one set of rank values
+          for the whole event, so a merge drops the same in Recompletion and an item pays the same. The drop rules, the rank values and the Twister item are therefore set in
+          the <span className="font-semibold">Normal</span> phase; anything typed for them here is not used. What you set here is what a Recompletion player should collect -
+          the build shows next to it what they really get, and can only nudge that with the reward under Recompletion&apos;s own tiles and the two merges that make rank 13 and 14.
+        </div>
+      )}
       <Panel
         title="4. Small rewards"
         subtitle={`What a base-segment player should collect during the ${phaseLabel.toLowerCase()} phase, and where it should come from.`}
@@ -1000,8 +1008,8 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             <label className="flex flex-col gap-1">
               <FieldLabel hint="(shared)">Unmerged reward items left at the end</FieldLabel>
               <select value={leftoverPolicy} onChange={(e) => baseList.syncRewardConfig({ rewardLeftoverPolicy: e.target.value })} className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm bg-white/80" aria-label="Leftover reward items" data-field="leftover-policy">
+                <option value="collect">are tapped and collected at their own rank&apos;s value</option>
                 <option value="forfeit">pay nothing (only rank {REWARD_MAX_RANK} pays)</option>
-                <option value="collect">are collected at their own rank&apos;s value</option>
               </select>
             </label>
           </div>
@@ -1015,6 +1023,24 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             reward's rank values instead of adding items (see "Reward definitions" below).{' '}
             Dropped items land free, ready to merge or collect. The build makes the containers and gives each a weight (you see them in step 6), and never moves this rank. The second setting decides which totals can be paid: when leftovers pay nothing, a reward is only ever paid in whole rank-{REWARD_MAX_RANK} amounts.
           </p>
+          <label className="mt-2 flex items-start gap-2 rounded-2xl border border-purple-100 bg-purple-50/50 px-3 py-2 text-sm text-slate-700" data-testid="steady-drops">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-purple-600"
+              checked={board0?.steadyDrops !== false}
+              onChange={(e) => baseList.syncRewardConfig({ steadyDrops: e.target.checked })}
+              data-field="steady-drops"
+            />
+            <span>
+              <span className="font-semibold">Every merge of a rank drops the same items.</span>{' '}
+              <span className="text-slate-500">
+                Nothing about which reward a merge drops is left to chance, so every player ends close to the amounts you ask for - not only the average player. Measured on a
+                test event (one build, 200 players): with it, 100 of 100 players land within 15% of every amount at once; with containers picked at random, 28 of 100 did. The
+                item counts stay your rules (one item at rank {minDropRank}, two items, three items). Switch it off for the more varied containers of before. It needs the build to
+                give the rank values (below); this tool&apos;s own design. Step 7 shows the number for your own event.
+              </span>
+            </span>
+          </label>
           <p className="mt-1.5 text-xs text-slate-500" data-testid="tile-reward-rule">
             Only a reward item <span className="font-semibold text-slate-700">under a tile</span> is{' '}
             <span className="font-semibold text-slate-700">semi-blocked when its tile opens</span>, like any other item under a tile: the player frees it by merging a
@@ -1095,9 +1121,10 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             <span>
               <span className="font-semibold">The build may change a reward&apos;s rank values to reach its amount.</span>{' '}
               <span className="text-slate-500">
-                The drop rules stay as you set them (one item at rank {minDropRank}, two items, three items). When those rules cannot pay an amount at the values typed here, the
-                build changes that reward&apos;s four rank values by one factor and tells you. Your typed values stay here as the definition. Switch this off to keep your values
-                whatever happens - then the shortfall is reported instead.
+                The drop rules stay as you set them (one item at rank {minDropRank}, two items, three items). The build gives every segment its own four rank values for each reward,
+                so each segment&apos;s average lands on its own amount: round amounts (5 / 15 / 35 / 75, not 8 / 23 / 23 / 61), and each rank worth more than the items it is made of, so
+                tapping an item early never pays more than merging it. Step 6 shows them. Your typed values stay here as the definition. Switch this off to keep your values whatever
+                happens - then every segment plays the values typed here and what that pays is reported.
               </span>
             </span>
           </label>
@@ -1419,7 +1446,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
                   <span className="text-slate-500">
                     Twister DR is only paid when a Twister item is finished (rank 4). A segment with a lot of subsidy merges little, finishes one item, and gets every twist in
                     one jump - at 50% of the phase in one segment, at 100% in another. With this on, the build makes the Twister items bigger (rank 3 at most, never a finished
-                    item) until every segment&apos;s typical player finishes at least {TWISTER_MIN_COLLECTS}, so twists arrive in steps and the last one lands near the end in every
+                    item) until every segment&apos;s typical player finishes at least {TWISTER_MIN_COLLECTS} and no segment has all its twists early, so twists arrive in steps and the last one lands near the end in every
                     segment. Switch it off to keep the Twister items at rank 1-2 whatever happens. ({TWISTER_MIN_COLLECTS} is this tool&apos;s own number.)
                   </span>
                 </span>

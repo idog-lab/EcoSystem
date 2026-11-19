@@ -2,9 +2,9 @@ import ExcelJS from 'exceljs'
 import { buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../core/generatorTier'
 import { computeProbs, DEFAULT_TARGET_EV } from '../core/luckyDrop'
 import { MIN_RANK, MAX_RANK, RC_MAX_RANK } from '../core/ranks'
-import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_TYPE_LABELS, REWARD_MAX_RANK, smallRewardKey, decodeReward, twisterSyntaxFor } from '../rewards/rewardChain'
+import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_TYPE_LABELS, REWARD_MAX_RANK, smallRewardKey, decodeReward, twisterSyntaxFor, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { targetSpinsForSegment } from '../rewards/twisterEconomy'
-import { containersOfBoards, modelContainers } from '../rewards/containers'
+import { containersOfBoards, containersOfEvent, modelContainers } from '../rewards/containers'
 import { endlessOfDesign, ENDLESS_DROP_RANK_SHIFT, ENDLESS_DROP_VALUE_MULTIPLIER, ENDLESS_COIN_ENERGY_SHARE } from '../rewards/endlessMode'
 
 // Board 1's own configured tier unlock ranks (economist-editable now, see
@@ -111,7 +111,13 @@ export function buildMultipliersSheet(boards) {
   return { columns: MULTIPLIERS_COLUMNS, rows }
 }
 
-const GENERATOR_WEIGHTS_COLUMNS = ['Rank', 'Multiplier', ...Array.from({ length: MAX_RANK }, (_, i) => `T${i + 1} weight`)]
+// One column per rank of the whole event - 14 since Recompletion's ranks 13
+// and 14 are part of it (economist: "the generator weight should add the new
+// rank 13 and 14"). The generator never makes an item above T5, so T13 and
+// T14 are always 0; they are there so the table is as wide as the ladder.
+// (The economist's own sheet shows rows to rank 16 and five more columns
+// after T12; asked, the answer was: "we need now only the until rank 14".)
+const GENERATOR_WEIGHTS_COLUMNS = ['Rank', 'Multiplier', ...Array.from({ length: RC_MAX_RANK }, (_, i) => `T${i + 1} weight`)]
 
 // One row per (rank, generator tier) combo where that tier is actually
 // unlocked - the source template sequences its rows by RANK ascending
@@ -137,7 +143,20 @@ const GENERATOR_WEIGHTS_COLUMNS = ['Rank', 'Multiplier', ...Array.from({ length:
 // useBoardListState.js's syncTargetEv), but every board in a list now
 // shares the identical value by construction, so reading board 0's copy is
 // exactly as correct as reading any other board's.
-export function buildGeneratorWeightsSheet(boards) {
+// RANKS 13 AND 14 are the two Recompletion adds. They can only be held in
+// Recompletion, so their rows are written with the Recompletion list's own
+// lucky-drop EV and multiplier unlock ranks (the normal list's when there is
+// no Recompletion list) - the same three weights in the same three columns
+// as every other row of that multiplier.
+export function buildGeneratorWeightsSheet(boards, recompletionBoards = []) {
+  const rows = []
+  const rcList = Array.isArray(recompletionBoards) && recompletionBoards.length > 0 ? recompletionBoards : boards
+  generatorWeightRows(boards, MIN_RANK, MAX_RANK, rows)
+  generatorWeightRows(rcList, MAX_RANK + 1, RC_MAX_RANK, rows)
+  return { columns: GENERATOR_WEIGHTS_COLUMNS, rows }
+}
+
+function generatorWeightRows(boards, fromRank, toRank, rows) {
   const targetEv = boards[0]?.targetEv ?? DEFAULT_TARGET_EV
   const tiers = generatorTiersFor(boards)
   const [pNormal, pPlus1, pPlus2] = computeProbs(targetEv)
@@ -148,12 +167,11 @@ export function buildGeneratorWeightsSheet(boards) {
   // on a parser that rounds or reads them as ints.
   const asWeight = (p) => Math.round(p * 1000)
 
-  const rows = []
-  for (let rank = MIN_RANK; rank <= MAX_RANK; rank++) {
+  for (let rank = fromRank; rank <= toRank; rank++) {
     for (const tier of tiers) {
       const startRank = tier.unlocksAt ?? MIN_RANK
       if (rank < startRank) continue
-      const weights = Array(MAX_RANK).fill(0)
+      const weights = Array(RC_MAX_RANK).fill(0)
       weights[tier.normalRank - 1] = asWeight(pNormal)
       // Below this tier's own lucky-drop threshold the row carries ONLY its
       // normal weight - no +1/+2 columns at all. In practice this only ever
@@ -167,7 +185,6 @@ export function buildGeneratorWeightsSheet(boards) {
       rows.push({ cells: [rank, tier.cost, ...weights] })
     }
   }
-  return { columns: GENERATOR_WEIGHTS_COLUMNS, rows }
 }
 
 const BLOCKED_QUEUE_COLUMNS = ['Entry Number', 'Pool Number', 'Item', 'Stock', 'Weight']
@@ -192,18 +209,18 @@ const BLOCKED_QUEUE_COLUMNS = ['Entry Number', 'Pool Number', 'Item', 'Stock', '
 //
 // Combines every board's blockedQueue, in play order, into one continuous
 // table (Entry Number keeps counting up across board boundaries) - not
-// semiPlacements, which are fixed grid positions rather than a queue. Takes
-// whichever board list the caller passes - `boards` (the main list) is the
-// original "Blocked Queue" sheet, `recompletionBoards` is its own separate
-// "Recompletion Blocked Queue" sheet (SyntaxPage.jsx), same
-// one-function-two-lists precedent buildBoardLayoutsSheet already
-// established for Board Layouts / Recompletion Layouts. Each list's Entry
-// Number sequence starts fresh at 1 - they're two independent pool tables,
-// not one continuous sequence spanning both lists.
-export function buildBlockedQueueSheet(boards) {
+// semiPlacements, which are fixed grid positions rather than a queue.
+//
+// ONE QUEUE FOR THE WHOLE EVENT (economist: "now we need to merge the normal
+// and the RC one after another, because they happen one after another in the
+// same event"). With `recompletionBoards` the Recompletion boards' entries
+// follow the normal ones in the same table and the Entry Number carries on -
+// there is no separate "Recompletion Blocked Queue" sheet any more. (They
+// used to be two tables, each starting at 1.)
+export function buildBlockedQueueSheet(boards, recompletionBoards = []) {
   const rows = []
   let n = 0
-  for (const board of boards) {
+  for (const board of [...(boards ?? []), ...(recompletionBoards ?? [])]) {
     for (const rank of board.blockedQueue) {
       n += 1
       // A mixed queue's reward entry (V2) exports its real Ops key
@@ -240,13 +257,23 @@ const ITEM_LADDER_COLUMNS = ['Tier', 'Asset ID', 'Milestone Reward Syntax']
 // reward ladder spans the whole rank chain (1-12), not a single physical
 // board - `rewardRanks`/`rewardSyntax` technically live on every board
 // object, but only board 1's is treated as the source of truth here.
-export function buildItemLadderSheet(boards) {
-  const board = boards[0]
+//
+// ONE LADDER FOR THE WHOLE EVENT (economist: "in the item ladder we need to
+// hold the ladders also together"). With `recompletionBoards` the ladder runs
+// to rank 14: tiers 1 to 12 are the normal list's, and tiers 13 and 14 - the
+// two ranks Recompletion adds - are the Recompletion list's own milestone
+// rewards. There is no separate Recompletion ladder any more. Called with one
+// list only, it is that list's ladder to rank 12, as before.
+export function buildItemLadderSheet(boards, recompletionBoards = null) {
+  const board = boards?.[0]
+  const rc = recompletionBoards?.[0] ?? null
   const rows = []
-  for (let tier = MIN_RANK; tier <= MAX_RANK; tier++) {
-    const syntax = board?.rewardRanks?.includes(tier) ? (board.rewardSyntax?.[tier] ?? '') : ''
+  const row = (source, tier) => {
+    const syntax = source?.rewardRanks?.includes(tier) ? (source.rewardSyntax?.[tier] ?? '') : ''
     rows.push({ cells: [tier, `item-t${tier}`, syntax] })
   }
+  for (let tier = MIN_RANK; tier <= MAX_RANK; tier++) row(board, tier)
+  if (recompletionBoards) for (let tier = MAX_RANK + 1; tier <= RC_MAX_RANK; tier++) row(rc ?? board, tier)
   return { columns: ITEM_LADDER_COLUMNS, rows }
 }
 
@@ -284,11 +311,17 @@ const V2_LISTS = (boards, recompletionBoards) =>
 // be checked rather than assumed.
 const V2_REWARD_CHAIN_COLUMNS = ['List', 'Resource', 'Rank', 'Key (unverified)', 'Item syntax', 'Asset ID', 'Prize amount']
 
+// NOTHING IS WRITTEN TWICE (economist: "in alot of pages we got many duplicants
+// of think we dont need"). Recompletion plays the normal event's rank values,
+// so the two lists hold the same definitions: they are listed ONCE, as
+// "Main + RC". Only when a list really differs (a Recompletion design from
+// before that rule, not built again yet) is it listed on its own.
 export function buildV2RewardChainSheet(boards, recompletionBoards = [], recompletionBoards2 = []) {
-  const rows = []
+  const blocks = []
   for (const [listName, list] of V2_LISTS(boards, recompletionBoards, recompletionBoards2)) {
     const config = list[0]?.rewardChainConfig
     if (!config) continue
+    const cells = []
     // Twister DR's ladder is listed with the other definitions (it is a
     // shared reward definition); its rows are drop-only items and its key is
     // never written in a queue or layout cell.
@@ -296,48 +329,57 @@ export function buildV2RewardChainSheet(boards, recompletionBoards = [], recompl
       for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) {
         const entry = config[type]?.[rank - 1]
         if (!entry) continue
-        rows.push({ cells: [listName, REWARD_TYPE_LABELS[type], rank, smallRewardKey(type, rank), entry.syntax, entry.asset ?? '', entry.prizeAmount] })
+        cells.push([REWARD_TYPE_LABELS[type], rank, smallRewardKey(type, rank), entry.syntax, entry.asset ?? '', entry.prizeAmount])
       }
     }
+    const same = blocks.find((b) => JSON.stringify(b.cells) === JSON.stringify(cells))
+    if (same) same.names.push(listName)
+    else blocks.push({ names: [listName], cells })
   }
+  const rows = blocks.flatMap((b) => b.cells.map((c) => ({ cells: [b.names.join(' + '), ...c] })))
   return { columns: V2_REWARD_CHAIN_COLUMNS, rows }
 }
 
 const V2_DROP_GROUPS_COLUMNS = ['List', 'Resulting rank', 'Group', 'Weight', 'Coins rank', 'Puzzles rank', 'Energy rank', 'Charms rank', 'Twister DR rank', 'Rank locked']
 
+// The event has ONE drop table: a merge drops the same in the normal event and
+// in Recompletion. So each resulting rank is listed once - "Main + RC" where
+// the two lists agree (every rank the normal event makes), "RC" for the two
+// ranks only Recompletion makes (13 and 14). The normal list's own rows for
+// 13 and 14 are never played and are left out; a "(no drop)" line is written
+// only where a merge can really drop nothing. (It used to list every rank
+// twice, once per list, with a zero "(no drop)" line at each.)
 export function buildV2DropGroupsSheet(boards, recompletionBoards = [], recompletionBoards2 = []) {
-  const rows = []
-  for (const [listName, list] of V2_LISTS(boards, recompletionBoards, recompletionBoards2)) {
-    const board = list[0]
-    const groups = board?.dropGroups ?? []
-    const tables = board?.dropGroupsConfig ?? []
-    const groupsById = new Map(groups.map((g) => [g.id, g]))
-    // Ranks below the list's own drop gate never roll, so they are left out
-    // rather than exported as if they were live tables.
-    const firstRank = board?.minDropRank ?? 1
-    for (let rank = firstRank; rank <= RC_MAX_RANK; rank++) {
-      const table = tables[rank - 1]
-      if (!table) continue
-      const locked = table.locked ? 'yes' : ''
-      rows.push({ cells: [listName, rank, '(no drop)', table.noDropWeight, '', '', '', '', '', locked] })
-      for (const entry of table.entries) {
-        const group = groupsById.get(entry.groupId)
-        rows.push({
-          cells: [
-            listName,
-            rank,
-            group?.name ?? entry.groupId,
-            entry.weight,
-            group?.items?.coins ?? '',
-            group?.items?.puzzles ?? '',
-            group?.items?.energy ?? '',
-            group?.items?.charms ?? '',
-            group?.items?.[TWISTER_TYPE] ?? '',
-            locked,
-          ],
-        })
-      }
+  const lists = V2_LISTS(boards, recompletionBoards, recompletionBoards2).map(([name, list]) => ({ name, board: list[0] }))
+  // One rank of one list, as cells without the list name (null: the list does not play that rank).
+  const rankRows = ({ name, board }, rank) => {
+    // Ranks below the list's own drop gate never roll, and the normal event
+    // never makes rank 13 or 14 (only Recompletion does).
+    if (rank < (board?.minDropRank ?? 1) || (name === 'Main' && rank > MAX_RANK)) return null
+    const table = board?.dropGroupsConfig?.[rank - 1]
+    if (!table) return null
+    const groupsById = new Map((board.dropGroups ?? []).map((g) => [g.id, g]))
+    const locked = table.locked ? 'yes' : ''
+    const out = []
+    if ((table.noDropWeight ?? 0) > 0) out.push([rank, '(no drop)', table.noDropWeight, '', '', '', '', '', locked])
+    for (const entry of table.entries) {
+      if (!(entry.weight > 0)) continue
+      const group = groupsById.get(entry.groupId)
+      out.push([rank, group?.name ?? entry.groupId, entry.weight, group?.items?.coins ?? '', group?.items?.puzzles ?? '', group?.items?.energy ?? '', group?.items?.charms ?? '', group?.items?.[TWISTER_TYPE] ?? '', locked])
     }
+    return out.length > 0 ? out : null
+  }
+  const rows = []
+  for (let rank = 1; rank <= RC_MAX_RANK; rank++) {
+    const blocks = []
+    for (const list of lists) {
+      const cells = rankRows(list, rank)
+      if (!cells) continue
+      const same = blocks.find((b) => JSON.stringify(b.cells) === JSON.stringify(cells))
+      if (same) same.names.push(list.name)
+      else blocks.push({ names: [list.name], cells })
+    }
+    for (const b of blocks) for (const c of b.cells) rows.push({ cells: [b.names.join(' + '), ...c] })
   }
   return { columns: V2_DROP_GROUPS_COLUMNS, rows }
 }
@@ -368,7 +410,7 @@ export function buildV2EconomySheet(boards, recompletionBoards = [], recompletio
       const queueItems = (b.rewardQueueItems ?? []).map((it) => smallRewardKey(it.type, it.rank)).join('+')
       const semiItems = (b.rewardSemiItems ?? []).map((it) => `${it.row + 1}:${it.col + 1}=${smallRewardKey(it.type, it.rank)}`).join(' ')
       rows.push({
-        cells: [listName, b.name, b.blockedValue, Math.round((b.ccPercent ?? 0) * 100), b.minDropRank ?? '', b.rewardLeftoverPolicy ?? 'forfeit', queueItems, semiItems, b.effectiveBlockedValue ?? ''],
+        cells: [listName, b.name, b.blockedValue, Math.round((b.ccPercent ?? 0) * 100), b.minDropRank ?? '', b.rewardLeftoverPolicy ?? DEFAULT_LEFTOVER_POLICY, queueItems, semiItems, b.effectiveBlockedValue ?? ''],
       })
     }
   }
@@ -477,7 +519,7 @@ export function buildCombinedV2TwisterSheet(segments, { twisterPlan = null } = {
 // factory's own comment).
 const SMALL_REWARDS_COLUMNS = ['Key', 'Syntax', 'Asset']
 
-export function buildSmallRewardsSheet(boards) {
+export function buildSmallRewardsSheet(boards, recompletionBoards = []) {
   const config = boards?.[0]?.rewardChainConfig
   const rows = []
   if (!config) return { columns: SMALL_REWARDS_COLUMNS, rows }
@@ -496,7 +538,9 @@ export function buildSmallRewardsSheet(boards) {
   // have. Its syntax is the one typed, else the amount in the other rewards'
   // pattern (rewardChain.js: twisterSyntaxFor - an unverified name); its asset
   // is whatever was typed.
-  const dropsTwister = (boards?.[0]?.dropGroups ?? []).some((g) => g?.items?.twister != null)
+  // (The event's containers run to merge tier 14, and tiers 13 and 14 are
+  // the Recompletion list's - so its Twister items count too.)
+  const dropsTwister = [...(boards?.[0]?.dropGroups ?? []), ...(recompletionBoards?.[0]?.dropGroups ?? [])].some((g) => g?.items?.twister != null)
   if (dropsTwister && Array.isArray(config.twister)) {
     for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) {
       const entry = config.twister[rank - 1] ?? {}
@@ -519,16 +563,25 @@ const SMALL_REWARDS_BANK_COLUMNS = ['Key', 'Syntax']
 // hand-typed table from the Rewards tab that nothing played; the economist
 // opened the sheet, saw that table - ten containers, one with a weight - and
 // reasonably took it for what the model had made.)
-export function buildSmallRewardsBankSheet(boards, { phase = 'main' } = {}) {
-  const model = containersOfBoards(boards, phase)
+//
+// THE EVENT'S OWN TWO SHEETS RUN TO MERGE TIER 14 (economist: "the small
+// rewards should hold a drop for the rank13 and 14 merge"): with
+// `recompletionBoards` given (an array, even an empty one) the normal sheets
+// carry tiers 13 and 14 as well - containers.js: containersOfEvent. Tiers 13
+// and 14 are what Recompletion drops there; the "RC" sheets still hold all of
+// Recompletion's own weights (its tiers 6 to 12 differ from the normal ones).
+export function buildSmallRewardsBankSheet(boards, { phase = 'main', recompletionBoards = null } = {}) {
+  const model = phase === 'main' && recompletionBoards ? containersOfEvent(boards, recompletionBoards) : containersOfBoards(boards, phase)
   return { columns: SMALL_REWARDS_BANK_COLUMNS, rows: model.containers.map((c) => ({ cells: [c.key, c.syntax] })), source: model.containers.length > 0 ? 'model' : 'none' }
 }
 
-export function buildSmallRewardWeightsSheet(boards, { phase = 'main' } = {}) {
-  const model = containersOfBoards(boards, phase)
+export function buildSmallRewardWeightsSheet(boards, { phase = 'main', recompletionBoards = null } = {}) {
+  const event = phase === 'main' && !!recompletionBoards
+  const model = event ? containersOfEvent(boards, recompletionBoards) : containersOfBoards(boards, phase)
+  const weightOf = (row, c) => (event ? row.weightsByKey[c.key] : row.weights[c.id]) ?? 0
   return {
     columns: ['Merge Tier', ...model.containers.map((c) => c.key), 'NoDrop'],
-    rows: model.rows.map((row) => ({ cells: [row.tier, ...model.containers.map((c) => row.weights[c.id] ?? 0), row.noDrop] })),
+    rows: model.rows.map((row) => ({ cells: [row.tier, ...model.containers.map((c) => weightOf(row, c)), row.noDrop] })),
     source: model.containers.length > 0 ? 'model' : 'none',
   }
 }
@@ -806,12 +859,11 @@ function addBoardLayoutsSheet(workbook, name, { maxCols, sections }) {
 // in the economist's reference spreadsheet's own tab ORDER (Event Data,
 // Multipliers, both Board Layouts, Generator Weights, Blocked Queue, Item
 // Ladder, then the three Small Rewards sheets) - tab sequence is part of the
-// format, the same way row order within Generator Weights is. Blocked
-// Queue/Recompletion Blocked Queue and Board Layouts/Recompletion Board
-// Layouts are each the same builder run against two different board lists.
-// "Recompletion Blocked Queue" is the one tab the reference doesn't have -
-// it was an explicit earlier ask and is kept, sitting right after the main
-// Blocked Queue where its sibling pairing is obvious. It's a
+// format, the same way row order within Generator Weights is. Board
+// Layouts/Recompletion Board Layouts are the same builder run against the two
+// board lists. The Blocked Queue and the Item Ladder hold both lists in one
+// sheet each (the "Recompletion Blocked Queue" tab of earlier versions is
+// gone - economist: "they happen one after another in the same event"). It's a
 // separate "download everything" action from the per-sheet "Copy as TSV"
 // button (SyntaxPage.jsx), not tied to whichever sheet happens to be
 // selected in the UI. Deliberately excludes "Normal" and "CC"
@@ -845,23 +897,23 @@ export function buildWorkbook(boards, recompletionBoards, recompletionBoards2 = 
   addFlatSheet(workbook, 'Multipliers', buildMultipliersSheet(boards), [14, 14, 20])
   addBoardLayoutsSheet(workbook, 'Board Layouts', buildBoardLayoutsSheet(boards))
   addBoardLayoutsSheet(workbook, 'Recompletion Board Layouts', buildBoardLayoutsSheet(recompletionBoards))
-  addGeneratorWeightsSheet(workbook, 'Generator Weights', buildGeneratorWeightsSheet(boards))
-  addFlatSheet(workbook, 'Blocked Queue', buildBlockedQueueSheet(boards), [15, 13, 14, 10, 10], queueOpts)
-  addFlatSheet(workbook, 'Recompletion Blocked Queue', buildBlockedQueueSheet(recompletionBoards), [15, 13, 14, 10, 10], queueOpts)
-  addFlatSheet(workbook, 'Item Ladder', buildItemLadderSheet(boards), [8, 50, 120])
-  addFlatSheet(workbook, 'Small Rewards', buildSmallRewardsSheet(boards), [15, 14, 18])
-  addFlatSheet(workbook, 'Small Rewards Bank', buildSmallRewardsBankSheet(boards), [12, 40])
-  addFlatSheet(workbook, 'Small Reward Weights', buildSmallRewardWeightsSheet(boards), Array(12).fill(10), {
+  // One event: the normal list and Recompletion follow each other, so the
+  // generator weights run to rank 14, the blocked queue and the item ladder
+  // hold both lists one after the other (no separate Recompletion sheet for
+  // them any more), and the small-reward weights run to merge tier 14.
+  const rcList = recompletionBoards ?? []
+  addGeneratorWeightsSheet(workbook, 'Generator Weights', buildGeneratorWeightsSheet(boards, rcList))
+  addFlatSheet(workbook, 'Blocked Queue', buildBlockedQueueSheet(boards, rcList), [15, 13, 14, 10, 10], queueOpts)
+  addFlatSheet(workbook, 'Item Ladder', buildItemLadderSheet(boards, rcList), [8, 50, 120])
+  addFlatSheet(workbook, 'Small Rewards', buildSmallRewardsSheet(boards, rcList), [15, 14, 18])
+  addFlatSheet(workbook, 'Small Rewards Bank', buildSmallRewardsBankSheet(boards, { recompletionBoards: rcList }), [12, 40])
+  addFlatSheet(workbook, 'Small Reward Weights', buildSmallRewardWeightsSheet(boards, { recompletionBoards: rcList }), Array(12).fill(10), {
     header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
   })
-  // Recompletion has its own containers and weights (its list has its own
-  // drops). Not in the Ops reference, which has no Recompletion tabs for
-  // these - the same kind of addition as "Recompletion Blocked Queue".
-  // ("RC": "Recompletion Small Reward Weights" is over Excel's 31 characters.)
-  addFlatSheet(workbook, 'RC Small Rewards Bank', buildSmallRewardsBankSheet(recompletionBoards, { phase: 'rc' }), [12, 40])
-  addFlatSheet(workbook, 'RC Small Reward Weights', buildSmallRewardWeightsSheet(recompletionBoards, { phase: 'rc' }), Array(12).fill(10), {
-    header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
-  })
+  // (There is no "RC Small Rewards Bank" / "RC Small Reward Weights" any
+  // more: the game has ONE bank and one weights table for the normal event
+  // and Recompletion - economist: "as for now its the same for both normal
+  // and RC" - and the build makes Recompletion play exactly that table.)
   // Endless mode's containers and weights (see buildEndlessBankSheet).
   addFlatSheet(workbook, 'Endless Small Rewards Bank', buildEndlessBankSheet(boards, recompletionBoards), [12, 40])
   addFlatSheet(workbook, 'Endless Small Reward Weights', buildEndlessWeightsSheet(boards, recompletionBoards), Array(12).fill(10), {
@@ -902,15 +954,12 @@ export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix
     { title: n('Multipliers'), rows: flat(buildMultipliersSheet(boards)) },
     { title: n('Board Layouts'), rows: boardLayoutsSheetToRows(buildBoardLayoutsSheet(boards)) },
     { title: n('Recompletion Board Layouts'), rows: boardLayoutsSheetToRows(buildBoardLayoutsSheet(recompletionBoards)) },
-    { title: n('Generator Weights'), rows: flat(buildGeneratorWeightsSheet(boards)) },
-    { title: n('Blocked Queue'), rows: flat(buildBlockedQueueSheet(boards)) },
-    { title: n('Recompletion Blocked Queue'), rows: flat(buildBlockedQueueSheet(recompletionBoards)) },
-    { title: n('Item Ladder'), rows: flat(buildItemLadderSheet(boards)) },
-    { title: n('Small Rewards'), rows: flat(buildSmallRewardsSheet(boards)) },
-    { title: n('Small Rewards Bank'), rows: flat(buildSmallRewardsBankSheet(boards)) },
-    { title: n('Small Reward Weights'), rows: flat(buildSmallRewardWeightsSheet(boards)) },
-    { title: n('RC Small Rewards Bank'), rows: flat(buildSmallRewardsBankSheet(recompletionBoards, { phase: 'rc' })) },
-    { title: n('RC Small Reward Weights'), rows: flat(buildSmallRewardWeightsSheet(recompletionBoards, { phase: 'rc' })) },
+    { title: n('Generator Weights'), rows: flat(buildGeneratorWeightsSheet(boards, recompletionBoards ?? [])) },
+    { title: n('Blocked Queue'), rows: flat(buildBlockedQueueSheet(boards, recompletionBoards ?? [])) },
+    { title: n('Item Ladder'), rows: flat(buildItemLadderSheet(boards, recompletionBoards ?? [])) },
+    { title: n('Small Rewards'), rows: flat(buildSmallRewardsSheet(boards, recompletionBoards ?? [])) },
+    { title: n('Small Rewards Bank'), rows: flat(buildSmallRewardsBankSheet(boards, { recompletionBoards: recompletionBoards ?? [] })) },
+    { title: n('Small Reward Weights'), rows: flat(buildSmallRewardWeightsSheet(boards, { recompletionBoards: recompletionBoards ?? [] })) },
     { title: n('Endless Small Rewards Bank'), rows: flat(buildEndlessBankSheet(boards, recompletionBoards)) },
     { title: n('Endless Small Reward Weights'), rows: flat(buildEndlessWeightsSheet(boards, recompletionBoards)) },
     // V2 - appended at the end, same "not presented as verified" caveat as
@@ -937,47 +986,57 @@ export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix
 // tier2UnlockRank/tier4UnlockRank are editable per segment, which feeds both
 // Multipliers and Generator Weights), so a single canonical segment's row
 // would silently drop every other segment's own values. Everything else
-// (Board Layouts, Blocked Queue, their RC counterparts, Item Ladder, RC Item
-// Ladder) stays genuinely per-segment, one sheet each, grouped together by
+// (Board Layouts, RC Board Layouts, Blocked Queue, Item Ladder) stays
+// genuinely per-segment, one sheet each, grouped together by
 // segment rather than by sheet type. Small Rewards / Small Rewards Bank /
 // Small Reward Weights are untouched, fixed templates with no per-segment
 // variation at all (see their own builders above) - one shared tab each.
 //
 // Tab order: Segments (index), Event Data, Multipliers, then for each
-// segment in turn - Board Layouts, Blocked Queue, RC Board Layouts, RC
-// Blocked Queue, Item Ladder, RC Item Ladder - then Generator Weights, Small
-// Rewards, Small Rewards Bank, Small Reward Weights. "RC" (not
-// "Recompletion") in these six per-segment tab names, by explicit request.
-//
-// RC Item Ladder is new - there was never a Recompletion variant of Item
-// Ladder before this, since the per-segment workbook only ever needed one
-// (Board 1's own rewardRanks/rewardSyntax). buildItemLadderSheet was already
-// generic over whichever board list it's handed (reads board 0's
-// rewardRanks/rewardSyntax off whatever `boards` it's given), so this is
-// just a second call against `seg.recompletionBoards` - no new sheet
-// function was needed.
+// segment in turn - Board Layouts, Blocked Queue, RC Board Layouts, Item
+// Ladder - then Generator Weights, Small Rewards, Small Rewards Bank, Small
+// Reward Weights. "RC" (not "Recompletion") in the per-segment tab names, by
+// explicit request. A segment's Blocked Queue and Item Ladder hold the normal
+// list and Recompletion together, one after the other (there used to be an
+// "RC Blocked Queue" and an "RC Item Ladder" tab per segment).
 
-// Combined Event Data: every segment's own rows, each tagged with its short
-// "S{n}" label (the same one the Segments index tab and every per-segment
-// tab name use) rather than a per-segment free-text name, to keep cells
-// compact and consistent with the rest of this workbook.
+// WHAT EVERY SEGMENT SHARES IS WRITTEN ONCE. These three pages used to hold a
+// full copy per segment - eight identical Event Data blocks, eight identical
+// sets of generator weights (216 rows for 27) - although the lucky drops, the
+// multipliers and the event's settings are the same for every segment by
+// rule (economist: "in alot of pages we got many duplicants of think we dont
+// need"). Now a row that is the same in every segment is written once, with
+// "All" in the Segment column; only a row that really differs between
+// segments is written per segment ("S1", "S2", ... in its place).
+// (When the segments do not even have the same rows - different multiplier
+// unlock ranks give different sets - each segment keeps its own block.)
+export const ALL_SEGMENTS_LABEL = 'All'
+function combineSegments(segments, build) {
+  const blocks = segments.map(build)
+  const sameShape = blocks.every((b) => b.length === blocks[0].length)
+  if (!sameShape) return blocks.flatMap((b, i) => b.map((row) => ({ ...row, cells: [`S${i + 1}`, ...row.cells] })))
+  const rows = []
+  for (let k = 0; k < (blocks[0]?.length ?? 0); k++) {
+    const first = JSON.stringify(blocks[0][k].cells)
+    if (blocks.every((b) => JSON.stringify(b[k].cells) === first)) rows.push({ ...blocks[0][k], cells: [ALL_SEGMENTS_LABEL, ...blocks[0][k].cells] })
+    else blocks.forEach((b, i) => rows.push({ ...b[k], cells: [`S${i + 1}`, ...b[k].cells] }))
+  }
+  return rows
+}
+
+// Combined Event Data: tagged with "All", or with a segment's short "S{n}"
+// label (the same one the Segments index tab and every per-segment tab name
+// use) where a value is that segment's own.
 export function buildCombinedEventDataSheet(segments) {
-  const rows = segments.flatMap((seg, i) =>
-    buildEventDataSheet(seg.boards).rows.map((row) => ({ cells: [`S${i + 1}`, ...row.cells], highlight: row.highlight })),
-  )
-  return { columns: ['Segment', ...EVENT_DATA_COLUMNS], rows, proseColumns: [3] }
+  return { columns: ['Segment', ...EVENT_DATA_COLUMNS], rows: combineSegments(segments, (seg) => buildEventDataSheet(seg.boards).rows), proseColumns: [3] }
 }
 
 export function buildCombinedMultipliersSheet(segments) {
-  const rows = segments.flatMap((seg, i) => buildMultipliersSheet(seg.boards).rows.map((row) => ({ cells: [`S${i + 1}`, ...row.cells] })))
-  return { columns: ['Segment', ...MULTIPLIERS_COLUMNS], rows }
+  return { columns: ['Segment', ...MULTIPLIERS_COLUMNS], rows: combineSegments(segments, (seg) => buildMultipliersSheet(seg.boards).rows) }
 }
 
 export function buildCombinedGeneratorWeightsSheet(segments) {
-  const rows = segments.flatMap((seg, i) =>
-    buildGeneratorWeightsSheet(seg.boards).rows.map((row) => ({ cells: [`S${i + 1}`, ...row.cells] })),
-  )
-  return { columns: ['Segment', ...GENERATOR_WEIGHTS_COLUMNS], rows }
+  return { columns: ['Segment', ...GENERATOR_WEIGHTS_COLUMNS], rows: combineSegments(segments, (seg) => buildGeneratorWeightsSheet(seg.boards, seg.recompletionBoards ?? []).rows) }
 }
 
 // `segments` is [{ name, boards, recompletionBoards }, ...] (see App.jsx's
@@ -1005,18 +1064,19 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
   segments.forEach((seg, i) => {
     const n = (name) => `S${i + 1} ${name}`
     addBoardLayoutsSheet(workbook, n('Board Layouts'), buildBoardLayoutsSheet(seg.boards))
-    addFlatSheet(workbook, n('Blocked Queue'), buildBlockedQueueSheet(seg.boards), [15, 13, 14, 10, 10], queueOpts)
+    // The blocked queue and the item ladder hold the normal list and
+    // Recompletion one after the other (see buildWorkbook): no "RC Blocked
+    // Queue" or "RC Item Ladder" tab any more.
+    addFlatSheet(workbook, n('Blocked Queue'), buildBlockedQueueSheet(seg.boards, seg.recompletionBoards ?? []), [15, 13, 14, 10, 10], queueOpts)
     addBoardLayoutsSheet(workbook, n('RC Board Layouts'), buildBoardLayoutsSheet(seg.recompletionBoards))
-    addFlatSheet(workbook, n('RC Blocked Queue'), buildBlockedQueueSheet(seg.recompletionBoards), [15, 13, 14, 10, 10], queueOpts)
-    // "Recompletion B" - the second RC board-layout variant (see
-    // buildWorkbook's own comment on recompletionBoards2).
-    addFlatSheet(workbook, n('Item Ladder'), buildItemLadderSheet(seg.boards), [8, 50, 120])
-    addFlatSheet(workbook, n('RC Item Ladder'), buildItemLadderSheet(seg.recompletionBoards), [8, 50, 120])
+    addFlatSheet(workbook, n('Item Ladder'), buildItemLadderSheet(seg.boards, seg.recompletionBoards ?? []), [8, 50, 120])
+    // Every segment has its OWN rank values (coins, and puzzles, merge energy
+    // and charms the build gives), so its Small Rewards sheet is its own.
+    addFlatSheet(workbook, n('Small Rewards'), buildSmallRewardsSheet(seg.boards, seg.recompletionBoards ?? []), [15, 14, 18])
     // V2 - same per-segment tabs the "this segment" workbook carries
     // (parity), same clearly-labeled-unverified caveat. Longest name here,
     // "S8 V2 Reward Chain", is 18 chars - well under Excel's 31-char cap.
     addFlatSheet(workbook, n('V2 Reward Chain'), buildV2RewardChainSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2), [8, 14, 6, 16, 34, 26, 14])
-    addFlatSheet(workbook, n('V2 Drop Groups'), buildV2DropGroupsSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2), [8, 14, 36, 10, 12, 13, 12, 12, 15, 12])
     addFlatSheet(workbook, n('V2 Economy'), buildV2EconomySheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2), [8, 14, 16, 8, 13, 14, 36, 36])
   })
 
@@ -1025,6 +1085,9 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
   // setting that differs by segment), plus the shared widget rule and the
   // design metadata - see buildCombinedV2TwisterSheet.
   addFlatSheet(workbook, 'V2 Twister', buildCombinedV2TwisterSheet(segments, twisterOptions), [32, 10, 8, 46, 12, 46])
+  // The drop table is one table for every segment, so it is one tab here
+  // (it used to be repeated as "S{n} V2 Drop Groups" for each of them).
+  addFlatSheet(workbook, 'V2 Drop Groups', buildV2DropGroupsSheet(segments[0]?.boards ?? [], segments[0]?.recompletionBoards ?? []), [12, 14, 36, 10, 12, 13, 12, 12, 15, 12])
   // Small Rewards/Bank/Weights stay ONE shared tab each (not per-segment),
   // matching their long-standing "no per-segment variation" treatment here -
   // now that they're economist-editable per segment (rather than a single
@@ -1032,14 +1095,11 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
   // source for the combined export, the same "Board 1's own" precedent
   // Multipliers/TutorialDrAmount already use elsewhere for a single
   // event-level value.
-  addFlatSheet(workbook, 'Small Rewards', buildSmallRewardsSheet(segments[0]?.boards), [15, 14, 18])
-  addFlatSheet(workbook, 'Small Rewards Bank', buildSmallRewardsBankSheet(segments[0]?.boards), [12, 40])
-  addFlatSheet(workbook, 'Small Reward Weights', buildSmallRewardWeightsSheet(segments[0]?.boards), Array(12).fill(10), {
-    header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
-  })
-  // Recompletion's own containers and weights (shared by every segment too).
-  addFlatSheet(workbook, 'RC Small Rewards Bank', buildSmallRewardsBankSheet(segments[0]?.recompletionBoards, { phase: 'rc' }), [12, 40])
-  addFlatSheet(workbook, 'RC Small Reward Weights', buildSmallRewardWeightsSheet(segments[0]?.recompletionBoards, { phase: 'rc' }), Array(12).fill(10), {
+  // (Small Rewards is per segment now - "S{n} Small Rewards", above. The bank
+  // and the weights are one table for every segment and both phases.)
+  const rc0 = segments[0]?.recompletionBoards ?? []
+  addFlatSheet(workbook, 'Small Rewards Bank', buildSmallRewardsBankSheet(segments[0]?.boards, { recompletionBoards: rc0 }), [12, 40])
+  addFlatSheet(workbook, 'Small Reward Weights', buildSmallRewardWeightsSheet(segments[0]?.boards, { recompletionBoards: rc0 }), Array(12).fill(10), {
     header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
   })
   // Endless mode: its containers, weights and rules (shared by every segment).
@@ -1069,14 +1129,12 @@ export function buildAllSegmentsSheetsAsValueRows(segments, twisterOptions = {})
     const n = (name) => `S${i + 1} ${name}`
     return [
       { title: n('Board Layouts'), rows: boardLayoutsSheetToRows(buildBoardLayoutsSheet(seg.boards)) },
-      { title: n('Blocked Queue'), rows: flat(buildBlockedQueueSheet(seg.boards)) },
+      { title: n('Blocked Queue'), rows: flat(buildBlockedQueueSheet(seg.boards, seg.recompletionBoards ?? [])) },
       { title: n('RC Board Layouts'), rows: boardLayoutsSheetToRows(buildBoardLayoutsSheet(seg.recompletionBoards)) },
-      { title: n('RC Blocked Queue'), rows: flat(buildBlockedQueueSheet(seg.recompletionBoards)) },
-      { title: n('Item Ladder'), rows: flat(buildItemLadderSheet(seg.boards)) },
-      { title: n('RC Item Ladder'), rows: flat(buildItemLadderSheet(seg.recompletionBoards)) },
+      { title: n('Item Ladder'), rows: flat(buildItemLadderSheet(seg.boards, seg.recompletionBoards ?? [])) },
+      { title: n('Small Rewards'), rows: flat(buildSmallRewardsSheet(seg.boards, seg.recompletionBoards ?? [])) },
       // V2 - parity with buildAllSegmentsWorkbook's own per-segment tabs.
       { title: n('V2 Reward Chain'), rows: flat(buildV2RewardChainSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2)) },
-      { title: n('V2 Drop Groups'), rows: flat(buildV2DropGroupsSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2)) },
       { title: n('V2 Economy'), rows: flat(buildV2EconomySheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2)) },
     ]
   })
@@ -1088,13 +1146,11 @@ export function buildAllSegmentsSheetsAsValueRows(segments, twisterOptions = {})
     ...perSegment,
     { title: 'Generator Weights', rows: flat(buildCombinedGeneratorWeightsSheet(segments)) },
     { title: 'V2 Twister', rows: flat(buildCombinedV2TwisterSheet(segments, twisterOptions)) },
+    { title: 'V2 Drop Groups', rows: flat(buildV2DropGroupsSheet(segments[0]?.boards ?? [], segments[0]?.recompletionBoards ?? [])) },
     // Same "Segment 1 is the one canonical source" scope decision as
     // buildAllSegmentsWorkbook's identical comment above.
-    { title: 'Small Rewards', rows: flat(buildSmallRewardsSheet(segments[0]?.boards)) },
-    { title: 'Small Rewards Bank', rows: flat(buildSmallRewardsBankSheet(segments[0]?.boards)) },
-    { title: 'Small Reward Weights', rows: flat(buildSmallRewardWeightsSheet(segments[0]?.boards)) },
-    { title: 'RC Small Rewards Bank', rows: flat(buildSmallRewardsBankSheet(segments[0]?.recompletionBoards, { phase: 'rc' })) },
-    { title: 'RC Small Reward Weights', rows: flat(buildSmallRewardWeightsSheet(segments[0]?.recompletionBoards, { phase: 'rc' })) },
+    { title: 'Small Rewards Bank', rows: flat(buildSmallRewardsBankSheet(segments[0]?.boards, { recompletionBoards: segments[0]?.recompletionBoards ?? [] })) },
+    { title: 'Small Reward Weights', rows: flat(buildSmallRewardWeightsSheet(segments[0]?.boards, { recompletionBoards: segments[0]?.recompletionBoards ?? [] })) },
     { title: 'Endless Small Rewards Bank', rows: flat(buildEndlessBankSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
     { title: 'Endless Small Reward Weights', rows: flat(buildEndlessWeightsSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
     { title: 'V2 Endless', rows: flat(buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },

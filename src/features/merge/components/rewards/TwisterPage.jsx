@@ -72,7 +72,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
   const dropGroups = board0?.dropGroups ?? []
   const dropGroupsConfig = board0?.dropGroupsConfig ?? []
   const minDropRank = board0?.minDropRank ?? DEFAULT_MIN_DROP_RANK
-  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'forfeit'
+  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'collect'
   const spinObjective = board0?.twisterSpinObjective ?? null
   const phaseMaxRank = phase === 'rc' ? RC_MAX_RANK : MAX_RANK
 

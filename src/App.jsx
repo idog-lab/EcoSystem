@@ -105,6 +105,7 @@ const SYNCED_REWARD_FIELDS = [
   'tileRewardType',
   'twisterByBuild',
   'twisterSteady',
+  'steadyDrops',
   'rewardLeftoverPolicy',
   // Twister: the rank ladder rides in rewardChainConfig and the drops in
   // dropGroups/dropGroupsConfig above, so both are shared already. The
@@ -266,7 +267,7 @@ function normalizeBoards(rawBoards) {
     multiDropRank: null,
     rewardQueueItems: [],
     rewardSemiItems: [],
-    rewardLeftoverPolicy: 'forfeit',
+    rewardLeftoverPolicy: 'collect',
     twisterSpinCost: null,
     twisterSpinObjective: null,
     effectiveBlockedValue: null,
@@ -313,7 +314,8 @@ function normalizeBoards(rawBoards) {
     // Decided for the whole project in migrateTwisterByBuild (below).
     twisterByBuild: first?.twisterByBuild ?? null,
     twisterSteady: first?.twisterSteady ?? null,
-    rewardLeftoverPolicy: first?.rewardLeftoverPolicy ?? 'forfeit',
+    steadyDrops: first?.steadyDrops ?? null,
+    rewardLeftoverPolicy: first?.rewardLeftoverPolicy ?? 'collect',
     twisterSpinCost: first?.twisterSpinCost ?? null,
     twisterSpinObjective: first?.twisterSpinObjective ?? null,
   }
@@ -559,14 +561,29 @@ function migrateTwisterByBuild(segments) {
   })
 }
 
+// LEFTOVERS ARE COLLECTED. Until this rule, every list was saved with
+// "unmerged reward items left at the end pay nothing" - the tool's assumption,
+// never something the economist chose (it was an open question). The economist
+// then said what the simulator should do: "after getting to rank 12, merges
+// all the small rewards and collect them. to understand how much really the
+// user got". So a project saved BEFORE the rule (no `leftoverRule` mark) is
+// switched to 'collect' when it is opened, on every list of every segment; a
+// project saved since keeps whatever step 4 was set to.
+const LEFTOVER_RULE_MARK = 'collect-by-default'
+function migrateLeftoverRule(segments, parsed) {
+  if (parsed?.leftoverRule === LEFTOVER_RULE_MARK) return segments
+  const fix = (boards) => (Array.isArray(boards) ? boards.map((b) => (b.rewardLeftoverPolicy === 'collect' ? b : { ...b, rewardLeftoverPolicy: 'collect' })) : boards)
+  return segments.map((seg) => ({ ...seg, boards: fix(seg.boards), recompletionBoards: fix(seg.recompletionBoards) }))
+}
+
 function segmentsFromPersisted(parsed) {
   if (!parsed) return null
   if (Array.isArray(parsed.segments) && parsed.segments.length) {
-    return preserveDivergentRewardConfig(migrateTwisterByBuild(DEFAULT_SEGMENT_NAMES.map((name, i) => normalizeSegment(parsed.segments[i] ?? {}, name))))
+    return migrateLeftoverRule(preserveDivergentRewardConfig(migrateTwisterByBuild(DEFAULT_SEGMENT_NAMES.map((name, i) => normalizeSegment(parsed.segments[i] ?? {}, name)))), parsed)
   }
   if (Array.isArray(parsed.boards) && parsed.boards.length) {
     const migrated = normalizeSegment({ ...parsed, name: DEFAULT_SEGMENT_NAMES[0] }, DEFAULT_SEGMENT_NAMES[0])
-    return migrateTwisterByBuild([migrated, ...DEFAULT_SEGMENT_NAMES.slice(1).map(freshSegment)])
+    return migrateLeftoverRule(migrateTwisterByBuild([migrated, ...DEFAULT_SEGMENT_NAMES.slice(1).map(freshSegment)]), parsed)
   }
   return null
 }
@@ -580,6 +597,9 @@ function initialState() {
 // file) write - kept as one function so the two paths can never drift.
 function buildSaveShape(segments) {
   return {
+    // Marks a project saved since leftovers are collected by default (see
+    // migrateLeftoverRule): its leftover setting is the economist's own.
+    leftoverRule: LEFTOVER_RULE_MARK,
     segments: segments.map((seg) => ({
       name: seg.name,
       boards: seg.main.boards,

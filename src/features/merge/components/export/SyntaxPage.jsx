@@ -44,13 +44,10 @@ const VIEWS = [
   { id: 'recompletion-board-layouts', label: 'Recompletion Board Layouts' },
   { id: 'generator-weights', label: 'Generator Weights' },
   { id: 'blocked-queue', label: 'Blocked Queue' },
-  { id: 'recompletion-blocked-queue', label: 'Recompletion Blocked Queue' },
   { id: 'item-ladder', label: 'Item Ladder' },
   { id: 'small-rewards', label: 'Small Rewards' },
   { id: 'small-rewards-bank', label: 'Small Rewards Bank' },
   { id: 'small-reward-weights', label: 'Small Reward Weights' },
-  { id: 'rc-small-rewards-bank', label: 'RC Small Rewards Bank' },
-  { id: 'rc-small-reward-weights', label: 'RC Small Reward Weights' },
   { id: 'endless-small-rewards-bank', label: 'Endless Small Rewards Bank' },
   { id: 'endless-small-reward-weights', label: 'Endless Small Reward Weights' },
   { id: 'v2-reward-chain', label: 'V2 Reward Chain' },
@@ -61,20 +58,18 @@ const VIEWS = [
 ]
 
 const DESCRIPTIONS = {
-  normal: "Every board's actual saved config, in play order — board pushes, semi placements, and blocked queue sequences, everything currently configured.",
-  cc: "CC Management's suggestions in the same format — +30%/+50% bigger-wave queues and +8%/+12% lucky-drop EV bumps, per board.",
+  normal: "Every board's actual saved config, in play order — board pushes, semi placements, and blocked queue sequences, everything currently configured. What the whole list shares (the lucky-drop EV, the rank rewards) is said once, at the top.",
+  cc: "CC Management's suggestions in the same format — +30%/+50% bigger-wave queues per board, and the +8%/+12% lucky-drop EV bumps once (they are the same for every board).",
   'event-data':
     "The real Ops \"Event Data\" sheet. Every value is a fixed constant for this event except TutorialDrAmount, which tracks Board 1's own onboarding-goal DR amount.",
   multipliers:
     'The real Ops "Multipliers" sheet — one row per generator tier (x1/x2/x4). Unlock Tier is each tier\'s own unlock rank; Lucky Drop Threshold is one rank above the tier\'s normal output (x1→2, x2→3, x4→4).',
   'generator-weights':
-    "The real Ops \"Generator Weights\" sheet — one row per (rank, tier) combo where that tier is unlocked, using Board 1's own lucky-drop target EV. Whole-number weights out of 1000, landing on T(normalRank)/T(normalRank+1)/T(normalRank+2); rows below a tier's Lucky Drop Threshold carry the normal weight only.",
+    "The real Ops \"Generator Weights\" sheet — one row per (rank, tier) combo where that tier is unlocked, using Board 1's own lucky-drop target EV. Whole-number weights out of 1000, landing on T(normalRank)/T(normalRank+1)/T(normalRank+2); rows below a tier's Lucky Drop Threshold carry the normal weight only. Runs to rank 14, in rows and in columns (T13 and T14 are always 0 - the generator never makes them): ranks 13 and 14 are Recompletion's, written with the Recompletion list's own lucky-drop EV and multiplier unlock ranks.",
   'blocked-queue':
-    'The real Ops "Blocked Queue" sheet — every board\'s blockedQueue, in play order, combined into one continuous pool table. A deliberately simplified case of the source sheet\'s weighted-loot-pool format: one trivial pool per entry (no alternatives), Item is the plain item rank, Stock and Weight both fixed at 1.',
-  'recompletion-blocked-queue':
-    'Same shape as Blocked Queue, but for the separate Recompletion board list (the "Recompletion" tab) — its own independent Entry Number sequence, starting fresh at 1.',
+    'The real Ops "Blocked Queue" sheet — every board\'s blockedQueue, in play order, combined into one continuous pool table: the normal boards first, then the Recompletion boards straight after them, with the Entry Number carrying on (they happen one after the other in the same event). A deliberately simplified case of the source sheet\'s weighted-loot-pool format: one trivial pool per entry (no alternatives), Item is the plain item rank, Stock and Weight both fixed at 1.',
   'item-ladder':
-    'The real Ops "Item Ladder" sheet — one row per rank 1-12, using Board 1\'s "Rank rewards" card. Milestone Reward Syntax is populated only for ranks marked as reward ranks there, with whatever syntax was typed for them.',
+    'The real Ops "Item Ladder" sheet — one row per rank 1-14, the normal ladder and Recompletion\'s together: ranks 1 to 12 use the normal list\'s milestone rewards, ranks 13 and 14 the Recompletion list\'s. Milestone Reward Syntax is populated only for ranks marked as reward ranks there, with whatever syntax was typed for them.',
   'board-layouts':
     "The real Ops \"Board Layouts\" sheet — one Section per board, in play order. B/S/E are each tile's blocked/semi/open state; a semi tile also carries its own item rank (e.g. \"S:2\"), read off that board's generated placements.",
   'recompletion-board-layouts':
@@ -82,13 +77,9 @@ const DESCRIPTIONS = {
   'small-rewards':
     'The real Ops "Small Rewards" sheet — one row per reward-chain key (coin/dr/puzzle/charm, rank 1-4), driven by the Rewards (V2) tab\'s own reward-chain config (syntax, Asset ID, prize). Seeded with the economist\'s real reference values, fully editable from there. The dr-twister rows (when the drops carry Twister items) are written as [dynamic(dr-twister:value)] unless a syntax was typed in the Twister tool - "dr-twister" is this tool\'s own name, NOT a confirmed Ops one.',
   'small-rewards-bank':
-    'The Ops "Small Rewards Bank" sheet — the containers a merge can drop in the normal event. Each container is one drop the model built and plays (Build event), named ContA, ContB, ... and written in the Small Rewards keys above (coin-r1+dr-r1 = a coin rank 1 and a merge energy rank 1 dropping together). Every container is a different drop.',
+    'The Ops "Small Rewards Bank" sheet — the containers a merge can drop in the normal event, followed by any container only the rank 13 and 14 merges drop. Each container is one drop the model built and plays (Build event), named ContA, ContB, ... and written in the Small Rewards keys above (coin-r1+dr-r1 = a coin rank 1 and a merge energy rank 1 dropping together). Every container is a different drop.',
   'small-reward-weights':
-    'The Ops "Small Reward Weights" sheet — the weight of each container per merge tier (the rank the merge makes), plus NoDrop, exactly as the model plays them. Tiers 2 to 12; a tier below the drop start rank can never drop, so it is NoDrop only.',
-  'rc-small-rewards-bank':
-    'The same as Small Rewards Bank, for Recompletion — its list has its own drops, so it has its own containers. Not in the Ops reference, which has no Recompletion tab for this.',
-  'rc-small-reward-weights':
-    'The same as Small Reward Weights, for Recompletion: merge tiers 2 to 14. Not in the Ops reference, which has no Recompletion tab for this.',
+    'The Ops "Small Reward Weights" sheet — the weight of each container per merge tier (the rank the merge makes), plus NoDrop, exactly as the model plays them. One table for the normal event and Recompletion (the game has one): tiers 2 to 12 drop the same in both, and tiers 13 and 14 - which can only be made in Recompletion - are the two rows the build sets for it. A tier below the drop start rank can never drop, so it is NoDrop only.',
   'endless-small-rewards-bank':
     'The containers endless mode drops (after rank 14), in the same shape as Small Rewards Bank. Worked out from the Recompletion containers: one rank lower, more per drop, mostly coins and merge energy. Not in the Ops reference.',
   'endless-small-reward-weights':
@@ -96,9 +87,9 @@ const DESCRIPTIONS = {
   'v2-endless':
     "V2 internal model, NOT a verified Ops sheet — the rules endless mode runs on: when it starts, where its drops start, and the two amounts behind its containers. The setting names are this app's own, and the two amounts are this tool's starting numbers, not confirmed game values.",
   'v2-reward-chain':
-    "V2 internal model, NOT a verified Ops sheet — the reward definitions of all three lists (Main / RC A / RC B, in the List column): every resource and rank with the key a queue or layout cell references it by, its configured item syntax, asset and prize. The Key column is how reward items are written in Blocked Queue and Board Layouts cells; that production expects those keys there is NOT confirmed by any Ops reference — this sheet exists so the key → syntax mapping can be checked.",
+    "V2 internal model, NOT a verified Ops sheet — the reward definitions: every resource and rank with the key a queue or layout cell references it by, its configured item syntax, asset and prize. The normal event and Recompletion play the same rank values, so they are listed once (List: Main + RC); a list that really differs is listed on its own. The Key column is how reward items are written in Blocked Queue and Board Layouts cells; that production expects those keys there is NOT confirmed by any Ops reference — this sheet exists so the key → syntax mapping can be checked.",
   'v2-drop-groups':
-    "V2 internal model, NOT a verified Ops sheet — the drop tables of all three lists (Main / RC A / RC B): for each resulting main-chain rank from that list’s drop start rank up, one row per group (plus a no-drop row) with its weight and which resource+rank each group bundles. Drop odds are one shared configuration across segments. Pending confirmation of the real V2 production mapping.",
+    "V2 internal model, NOT a verified Ops sheet — the event's one drop table: for each resulting main-chain rank from the drop start rank up, one row per group with its weight and which resource+rank each group bundles. A merge drops the same in the normal event and in Recompletion, so each rank is listed once (Main + RC); ranks 13 and 14 are the two only Recompletion makes (RC). Drop odds are one shared configuration across segments. Pending confirmation of the real V2 production mapping.",
   'v2-twister':
     'V2 internal model, NOT a verified Ops sheet — the Twister widget settings that are NOT part of the shared definitions. "Runtime - segment-specific" is this segment\'s DR cost per spin for each list (Main / RC A / RC B); "Runtime - shared" is the optional widget length; "Design metadata - not runtime" records the checkpoint, target spins and simulation settings the cost was derived from and configures nothing in the game. The shared Twister rank ladder is in V2 Reward Chain and its drop odds in V2 Drop Groups. No production contract for Twister has been confirmed.',
   'v2-economy':
@@ -112,14 +103,14 @@ const DESCRIPTIONS = {
 const SHEET_BUILDERS = {
   'event-data': buildEventDataSheet,
   multipliers: buildMultipliersSheet,
-  'generator-weights': buildGeneratorWeightsSheet,
-  'blocked-queue': buildBlockedQueueSheet,
-  'item-ladder': buildItemLadderSheet,
-  // The three Small Rewards sheets are fixed templates - they ignore the
-  // `boards` argument every other builder here takes.
-  'small-rewards': buildSmallRewardsSheet,
-  'small-rewards-bank': buildSmallRewardsBankSheet,
-  'small-reward-weights': buildSmallRewardWeightsSheet,
+  // One event: these hold the normal list and Recompletion together (ranks
+  // and merge tiers to 14; the queue and the ladder one after the other).
+  'generator-weights': (boards, rc) => buildGeneratorWeightsSheet(boards, rc ?? []),
+  'blocked-queue': (boards, rc) => buildBlockedQueueSheet(boards, rc ?? []),
+  'item-ladder': (boards, rc) => buildItemLadderSheet(boards, rc ?? []),
+  'small-rewards': (boards, rc) => buildSmallRewardsSheet(boards, rc ?? []),
+  'small-rewards-bank': (boards, rc) => buildSmallRewardsBankSheet(boards, { recompletionBoards: rc ?? [] }),
+  'small-reward-weights': (boards, rc) => buildSmallRewardWeightsSheet(boards, { recompletionBoards: rc ?? [] }),
 }
 
 const TILE_CODE_STYLE = {
@@ -188,13 +179,7 @@ export default function SyntaxPage({
         ? buildEndlessWeightsSheet(boards, recompletionBoards)
         : view === 'v2-endless'
           ? buildV2EndlessSheet(boards, recompletionBoards)
-          : view === 'rc-small-rewards-bank'
-      ? buildSmallRewardsBankSheet(recompletionBoards, { phase: 'rc' })
-      : view === 'rc-small-reward-weights'
-        ? buildSmallRewardWeightsSheet(recompletionBoards, { phase: 'rc' })
-        : view === 'recompletion-blocked-queue'
-      ? buildBlockedQueueSheet(recompletionBoards)
-        : view === 'v2-twister'
+          : view === 'v2-twister'
           ? buildV2TwisterSheet(boards, recompletionBoards, [], twisterOptions)
           : view === 'v2-economy'
           ? buildV2EconomySheet(boards, recompletionBoards)
@@ -202,7 +187,7 @@ export default function SyntaxPage({
             ? buildV2RewardChainSheet(boards, recompletionBoards)
             : view === 'v2-drop-groups'
               ? buildV2DropGroupsSheet(boards, recompletionBoards)
-          : (SHEET_BUILDERS[view]?.(boards) ?? null)
+          : (SHEET_BUILDERS[view]?.(boards, recompletionBoards) ?? null)
   const boardLayouts =
     view === 'board-layouts'
       ? buildBoardLayoutsSheet(boards)

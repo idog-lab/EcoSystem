@@ -205,7 +205,9 @@ ok(
     Math.round(seg1.sourceAllocation.main.tileWeight * 100) === 40 &&
     seg1.boards.some((b) => (b.rewardQueueItems ?? []).length + (b.rewardSemiItems ?? []).length > 0) &&
     seg1.boards[0].dropGroups.length >= 1 &&
-    seg1.boards[0].rewardLeftoverPolicy === 'forfeit',
+    // (Leftovers are collected by default, and a save made since says so.)
+    seg1.boards[0].rewardLeftoverPolicy === 'collect' &&
+    backup.leftoverRule === 'collect-by-default',
 )
 
 page.once('dialog', (d) => d.accept())

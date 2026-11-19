@@ -106,11 +106,16 @@ const generator = page.getByRole('button', { name: /Spend generator/ })
 // from the x1 generator: one is moved to row 2 (right above the blocked row),
 // the other merged into it there.
 await page.getByRole('button', { name: /^x1 · / }).click()
-await generator.click()
+// (Holding a rank 12, a tap can be a lucky drop - a rank 2 or 3 instead of a
+// rank 1 - so it taps until there are two rank-1 items. It used to tap twice
+// and timed out about one run in seven.)
+const rankOnes = () => page.locator('[data-cell][title="rank 1 (1 DR)"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-cell')))
+for (let taps = 0; taps < 12 && (await rankOnes()).length < 2; taps++) {
+  await generator.click()
+  await page.waitForTimeout(200)
+}
 await page.waitForTimeout(200)
-await generator.click()
-await page.waitForTimeout(300)
-const ones = await page.locator('[data-cell][title="rank 1 (1 DR)"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-cell')))
+const ones = await rankOnes()
 const target = '2-0'
 await page.locator(`[data-cell="${ones[0]}"]`).click()
 await page.locator(`[data-cell="${target}"]`).click()

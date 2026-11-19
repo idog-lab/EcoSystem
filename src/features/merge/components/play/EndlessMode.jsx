@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import GameArt from './GameArt'
 import { endlessArt, generatorArt } from '../../lib/play/artAssets'
-import { endlessOfDesign, describeEndlessDrops, ENDLESS_DROP_VALUE_MULTIPLIER, ENDLESS_COIN_ENERGY_SHARE } from '../../lib/rewards/endlessMode'
+import { endlessOfDesign, describeEndlessDrops, ENDLESS_DROP_VALUE_MULTIPLIER, ENDLESS_COIN_ENERGY_SHARE, ENDLESS_ENERGY_PAYBACK_MAX } from '../../lib/rewards/endlessMode'
 import { REWARD_TYPES, REWARD_TARGET_LABELS, formatRewardAmount } from '../../lib/rewards/rewardChain'
 import { RC_MAX_RANK } from '../../lib/core/ranks'
 import ContainersTable from '../build/ContainersTable'
@@ -91,8 +91,14 @@ export function EndlessDropDetails({ endless, rewardChainConfig, targetEv, class
           {selfFunding ? ' That is 100 or more: endless play would pay for itself and never need DR.' : ''} An estimate.
         </span>
       </span>
+      {endless.energyHeld && (
+        <span data-testid="endless-energy-held">
+          Merge energy is held to at most <span className="font-semibold">{Math.round(ENDLESS_ENERGY_PAYBACK_MAX * 100)} free taps per 100 DR</span>, so endless play can never pay for itself; what that takes off the merge energy
+          drops as coins instead.
+        </span>
+      )}
       <span className="text-[11px] text-slate-500">
-        The amounts ({ENDLESS_DROP_VALUE_MULTIPLIER}× per drop, {Math.round(ENDLESS_COIN_ENERGY_SHARE * 100)}% coins and merge energy, one rank lower) are this tool's starting numbers, not confirmed game values.
+        The amounts ({ENDLESS_DROP_VALUE_MULTIPLIER}× per drop, {Math.round(ENDLESS_COIN_ENERGY_SHARE * 100)}% coins and merge energy, one rank lower, merge energy at most {Math.round(ENDLESS_ENERGY_PAYBACK_MAX * 100)} free taps per 100 DR) are this tool's starting numbers, not confirmed game values.
       </span>
     </div>
   )

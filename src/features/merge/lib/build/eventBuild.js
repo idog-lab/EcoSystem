@@ -35,7 +35,7 @@
 import { regenerateBoard } from '../simulation/effortTargeting'
 import * as effortSim from '../simulation/mergeSimulation'
 import { buildSimulationRows as effortRowsOf } from '../simulation/simulationRows'
-import { generateSmallRewardsConfiguration, splitTargets, offTargetToleranceFor } from '../rewards/smallRewardsWorkflow'
+import { generateSmallRewardsConfiguration, splitTargets, offTargetToleranceFor, evaluatePhase } from '../rewards/smallRewardsWorkflow'
 import {
   REWARD_TYPES,
   REWARD_MAX_RANK,
@@ -61,10 +61,10 @@ import { rewardSlotCapacity, rewardSemiSlots } from '../rewards/rewardPlacement'
 import { resizeTwisterDrops } from '../rewards/rewardTargeting'
 import { TWISTER_FILL_MIN_SHARE } from '../rewards/dropGroups'
 import { boardHasTwisterUnderTiles, targetSpinsForSegment, priceTwisterForBuild, withDefaultTwisterValues, roundTwisterValues, TWISTER_EASY_CHECKPOINT_PCT, TWISTER_MIN_COLLECTS, TWISTER_OVER_TOLERANCE, TWISTER_DEFAULT_VALUES } from '../rewards/twisterEconomy'
-import { twisterLadderIsAuto, TWISTER_TYPE, withTypedRewardValues, syntaxWithAmount } from '../rewards/rewardChain'
+import { twisterLadderIsAuto, TWISTER_TYPE, withTypedRewardValues, syntaxWithAmount, tapPaysAtLeastAsMuch, rewardChainForNextPhase, typedRewardValues, withBuildRewardValues, niceRewardValues, niceCoinValues, niceStepAt, rewardLadderIsBuildValued, BUILD_VALUED_TYPES, REWARD_VALUE_FACTOR_MIN, REWARD_VALUE_FACTOR_MAX } from '../rewards/rewardChain'
 import { valueOf, MAX_RANK } from '../core/ranks'
 import { effectiveMinRank, effectiveMaxRank } from '../core/rankWindow'
-import { spreadSubsidy } from '../core/subsidyBudget'
+import { spreadSubsidy, chaseValue } from '../core/subsidyBudget'
 
 export const MAX_PASSES = 4
 // The credit is "settled" when the credit implied by a pass's own simulation
@@ -73,6 +73,25 @@ export const MAX_PASSES = 4
 // (An earlier, looser tolerance let a build stop on its first pass with the
 // boards carrying a few DR more than the simulated energy justified.)
 export const CREDIT_TOLERANCE_DR = 0.5
+// ...or this share of the DR the segment's player spends, when that is more.
+// The merge energy a configuration collects is an average over simulated
+// players, known to a few percent at best - and since the model's values are
+// round amounts it lands NEAR its target, not on it. Asking the credit to
+// agree to half a DR then only made the passes chase noise. 1.5% of the
+// demand (4 DR for a segment that spends 300) is well inside the 5% a board's
+// DR may be off by. This app's own number.
+export const CREDIT_TOLERANCE_SHARE = 0.015
+// Recompletion: 5% of the DR its player spends. Its drops and rank values are
+// the normal event's (one event, one table), so the merge energy it collects
+// follows from its boards alone, and those are made anew, at random, in every
+// pass: the passes then differ by a few energy items whatever credit they
+// assume. A segment with a lot of subsidy spends little DR there (about 300),
+// and 1.5% of that - 4 DR, less than one energy item - left it "Can be
+// improved" with nothing to improve. 5% is a fifth of the 25% a Recompletion
+// board's DR may be off by (economist). This app's own number.
+export const CREDIT_TOLERANCE_SHARE_RC = 0.05
+export const creditToleranceFor = (phase, totalBudget) =>
+  Math.max(CREDIT_TOLERANCE_DR, (phase === 'rc' ? CREDIT_TOLERANCE_SHARE_RC : CREDIT_TOLERANCE_SHARE) * Math.max(0, chaseValue(phase) - totalBudget))
 // How far the DR placed under a board's tiles may be from the DR it should
 // hold before that is a problem: 5%, by explicit economist decision (asked,
 // and chosen over 10% and 15% - a wider margin moves player effort too far).
@@ -107,8 +126,16 @@ export function coinPlanTargetFor(baseCoinTarget) {
   return collects * top
 }
 
-export const DEFAULT_VALIDATION_RUNS = 100
+// (300: enough players to say how many of them land near an amount - with 100
+// that share itself moved by several points between two checks.)
+export const DEFAULT_VALIDATION_RUNS = 300
 export const DEFAULT_VALIDATION_SEED = 21
+// Simulated players for each of the other two ways of playing (see
+// validateDraftSegment: "the same event, played three ways").
+export const STYLE_VALIDATION_RUNS = 30
+// ...and for the player who merges without looking: what that one spends
+// varies a lot from player to player, so an average needs more of them.
+export const CARELESS_VALIDATION_RUNS = 100
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 const sum = (list) => list.reduce((s, v) => s + v, 0)
@@ -376,6 +403,7 @@ function sharedInputs(board0) {
     ...(board0.soloDropRank != null ? ['one-item-up-to-rank', board0.soloDropRank] : []),
     ...(board0.tileRewardType != null ? ['reward-under-tiles', board0.tileRewardType] : []),
     ...(board0.rankValuesByBuild === false ? ['rank-values-as-typed'] : []),
+    ...(board0.steadyDrops === false ? ['varied-containers'] : []),
   ]
 }
 
@@ -399,7 +427,11 @@ export function buildInputParts({ phase, segments }) {
     budgets: j(segments.map((s) => s.boards.map((b) => [b.blockedValue, b.ccPercent ?? 0]))),
     targets: j(segments.map((s) => s.targets)),
     split: j(segments.map((s) => s.split)),
-    definitions: j(segments.map((s) => sharedInputs(s.boards[0]))),
+    // (Recompletion plays the normal event's values, drop rules and drops -
+    // see buildSegment: `inherit` - so those are what counts here, before
+    // and after an apply has written them onto its boards. Its own lucky
+    // drops, multipliers and reward under the tiles stay its own.)
+    definitions: j(segments.map((s) => sharedInputs(phase === 'rc' && s.mainBoards?.[0] ? { ...s.boards[0], ...eventRulesOf(s.mainBoards[0]), dropGroups: [], dropGroupsConfig: [], rankValuesByBuild: null } : s.boards[0]))),
     // The RC phase is played after the main chain, so the applied main
     // boards (contents included) are an input to it.
     mainPhase: phase === 'rc' ? j(segments.map((s) => (s.mainBoards ?? []).map((b) => [boardInputs(b), b.semiPlacements, b.blockedQueue, b.dropGroups, b.dropGroupsConfig]))) : null,
@@ -600,7 +632,10 @@ export async function repriceTwister({ phase, draft, segments, isCancelled }) {
   // The Twister items were sized for the twists the build was given. When the
   // new twists need more than they carry, that takes a build - said, not done.
   const sizing = draft.twister?.sizing ?? null
-  if (twister && sizing) twister.sizing = { ...sizing, short: false, needsRebuild: sizing.valuesByBuild ? twisterIncomeNeed(twister.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM) > 1.05 : twisterIncomeNeed(twister.rows, segments) > 1.05 && (sizing.minShare < 1 - 1e-9 || sizing.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9) }
+  // ...or far less: the values were sized for the old twists, and at the new
+  // ones no whole-step price leaves the typical player near what was asked.
+  const tooMuch = !!sizing?.valuesByBuild && twister?.rows.some((r) => r.twists > 0 && r.spinsMedian != null && r.spinsMedian > r.twists * (1 + TWISTER_OVER_TOLERANCE) + 1e-9)
+  if (twister && sizing) twister.sizing = { ...sizing, short: false, needsRebuild: tooMuch || (sizing.valuesByBuild ? twisterIncomeNeed(twister.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM) > 1.05 : twisterIncomeNeed(twister.rows, segments) > 1.05 && (sizing.minShare < 1 - 1e-9 || sizing.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9)) }
   return { ...draft, twister, twisterKey: twisterInputsKey(segments) }
 }
 
@@ -739,9 +774,13 @@ export function boardsWithDraftApplied(currentBoards, draftSegment, shared, { dr
     }
     // Twister rank values the build sized (shared by every segment).
     if (draft?.shared?.twisterLadder) next.rewardChainConfig = { ...next.rewardChainConfig, [TWISTER_TYPE]: draft.shared.twisterLadder }
-    // Rank values the build changed (shared by every segment): written over
-    // the TYPED ladders, so one it left alone this time goes back to as typed.
-    if (draft?.shared) next.rewardChainConfig = { ...withTypedRewardValues(next.rewardChainConfig), ...(draft.shared.rewardLadders ?? {}) }
+    // Rank values the build gave THIS segment: written over the TYPED ladders,
+    // so one it left alone this time goes back to as typed. (A draft from
+    // before values were per segment has them once, in `shared`.)
+    if (draft?.shared) next.rewardChainConfig = { ...withTypedRewardValues(next.rewardChainConfig), ...(draftSegment.rewardLadders ?? draft.shared.rewardLadders ?? {}) }
+    // Recompletion plays the normal event's values and drop rules (one table
+    // for the whole event): exactly the ones it was built with.
+    if (draftSegment.inherited) Object.assign(next, draftSegment.inherited)
     // The price of a twist the build worked out for THIS segment.
     if (twisterRow?.cost != null) {
       next.twisterSpinCost = twisterRow.cost
@@ -1018,6 +1057,7 @@ export const CAUSES = {
   'rc-not-reached': { title: 'Players never reach Recompletion', step: 'phase', action: 'Fix the Normal phase first' },
   'drop-floor': { title: 'Every merge from the start rank drops, and that alone pays more than the target', step: 'rewards', action: 'Start merge drops at a later rank, or raise the reward targets' },
   'off-target': { title: 'A reward is paid more than 15% away from its target', step: 'rewards', action: 'See the rewards table below for which one and by how much' },
+  'rc-follows-normal': { title: 'Recompletion pays what the normal event\'s merge drops give', step: 'rewards', action: 'Recompletion plays the same merge drops and rank values as the normal event (the game has one table for both), so they cannot be sized for it. Ask for what it really pays, or change the normal event\'s amounts' },
 }
 
 // Merge-energy deduction that could not be taken off the boards only matters
@@ -1026,7 +1066,29 @@ function creditShortfallMatters(allocation) {
   return allocation.creditUnabsorbed > Math.max(0.5, drToleranceFor(activePhase) * allocation.totalBefore)
 }
 
-function causesFrom({ sub, allocation, boardChecks, dropsFixed, context = {} }) {
+// Reward-amount problems that are about sizing drops or values - none of which
+// a Recompletion build can do (it plays the normal event's).
+const SIZING_CAUSES = new Set(['few-merges', 'coarse-ladder', 'shared-odds', 'drop-floor', 'off-target'])
+function causesFrom(args) {
+  const found = causesOf(args)
+  if (!args.inherited) return found
+  const { sub, context = {} } = args
+  const off = sub.feasibility.offTarget ?? []
+  const kept = found.filter((c) => !SIZING_CAUSES.has(c.code) && !(c.code === 'tile-capacity' && /reward items/.test(c.short ?? '')))
+  if (off.length === 0) return kept
+  const isBase = (context.index ?? 0) === 0
+  const rows = off.map((type) => sub.perResourceReview.find((r) => r.type === type)).filter(Boolean)
+  const said = rows.map((r) => `${REWARD_TARGET_LABELS[r.type]} about ${formatRewardAmount(r.type, r.predicted)} against ${formatRewardAmount(r.type, r.target)} asked`).join('; ')
+  const fixes = isBase
+    ? rows.map((r) => {
+        const v = roundRewardAmount(r.type, r.predicted)
+        return v > 0 && v !== (context.baseTargets?.[r.type] ?? 0) ? quickFix('setBaseTarget', `Change the ${REWARD_TARGET_LABELS[r.type].toLowerCase()} target to ${formatRewardAmount(r.type, v)} (what Recompletion pays)`, { type: r.type, value: v }) : null
+      })
+    : []
+  return [...kept, { code: 'rc-follows-normal', detail: `With the normal event's merge drops and rank values a Recompletion player gets: ${said}.`, short: `Follows the normal event: ${rows.map((r) => REWARD_TARGET_LABELS[r.type].toLowerCase()).join(', ')} off`, fixes: fixes.filter(Boolean), ...CAUSES['rc-follows-normal'] }]
+}
+
+function causesOf({ sub, allocation, boardChecks, dropsFixed, context = {} }) {
   const { index = 0, name = 'this segment', factor = 1, baseTargets = {} } = context
   const isBase = index === 0
   const out = []
@@ -1189,25 +1251,38 @@ function causesFrom({ sub, allocation, boardChecks, dropsFixed, context = {} }) 
 // --- One segment --------------------------------------------------------------
 // `context` ({ index, name, factor, baseTargets }) says which segment this
 // is, so a problem's quick fix can name what to change for it.
-export async function buildSegment({ phase, boards: inputBoards, mainBoards = null, targets, split, dropsFixed = false, sharedDrops = null, coinPlanTarget = null, dropCapPct = null, twisterNeed = null, twisterCheckpointPct = null, context = null, maxPasses = MAX_PASSES, onProgress, isCancelled }) {
+export async function buildSegment({ phase, boards: givenBoards, mainBoards = null, targets, split, dropsFixed = false, sharedDrops = null, inherit = false, coinPlanTarget = null, dropCapPct = null, twisterNeed = null, twisterCheckpointPct = null, context = null, maxPasses = MAX_PASSES, onProgress, isCancelled }) {
   activeFirstBoardCap = firstBoardCapFor(phase)
   activePhase = phase
   const ctx = { index: 0, name: 'this segment', factor: 1, baseTargets: targets ?? {}, ...(context ?? {}) }
   const noise = 0.15
+  // ONE TABLE, ONE SET OF VALUES FOR THE WHOLE EVENT (economist: "as for now
+  // its the same for both normal and RC"). The game has one Small Rewards
+  // table, one Bank and one Weights table: a Recompletion merge drops what
+  // the same merge drops in the normal event, and an item pays the same. So a
+  // Recompletion segment is built with `inherit`: it takes this segment's
+  // normal-event rank values and drop rules as they are, and its merge drops
+  // are the normal event's (`sharedDrops`). Nothing of that is sized here.
+  const inherited = inherit && mainBoards?.[0] ? eventRulesOf(mainBoards[0]) : null
+  const inputBoards = inherited ? givenBoards.map((b) => ({ ...b, ...inherited })) : givenBoards
   // Coin rank values set by the build: every pass starts from the same
   // provisional values (so a rebuild does not depend on the last one), and
   // the solve sizes them for this segment at the end.
-  const autoCoins = (targets?.coins ?? 0) > 0 && coinLadderIsAuto(inputBoards[0]?.rewardChainConfig) ? { planTarget: coinPlanTarget ?? coinPlanTargetFor(targets.coins) } : null
+  const autoCoins = !inherited && (targets?.coins ?? 0) > 0 && coinLadderIsAuto(inputBoards[0]?.rewardChainConfig) ? { planTarget: coinPlanTarget ?? coinPlanTargetFor(targets.coins) } : null
   // Rank values an earlier build changed are a RESULT: every build starts
   // again from what the economist typed (rewardChain.js: "RANK VALUES THE
   // BUILD MAY CHANGE"). A segment built against the base segment's shared
   // drops takes the values the base segment's build ended with.
   const sharedLadders = dropsFixed ? (sharedDrops?.rewardLadders ?? {}) : {}
   const boards = inputBoards.map((b) => {
+    if (inherited) return b
     const typed = withTypedRewardValues(b.rewardChainConfig)
     const withShared = Object.keys(sharedLadders).length > 0 ? { ...typed, ...sharedLadders } : typed
     return { ...b, rewardChainConfig: autoCoins ? withGeneratedCoinValues(withShared, COIN_VALUE_SHAPE) : withShared }
   })
+  // Whether the model gives this segment its rank values (step 4's switch;
+  // never for Recompletion, which plays the normal event's).
+  const valuesByBuild = !inherited && inputBoards[0]?.rankValuesByBuild !== false
   let credit = ENERGY_CREDIT_RATE * Math.max(0, targets?.energy ?? 0)
   const passes = []
   let best = null
@@ -1220,13 +1295,15 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
   // Reward items a pass kept off a board (they held the next board back)
   // stay off in the passes after it, so the passes settle.
   let tileCaps = null
+  // The values the pass before ended with ({ type: ladder }) - see "VALUES STAY PUT".
+  let keep = null
   for (let pass = 1; pass <= maxPasses; pass++) {
     const allocation = allocateSubsidy(boards, credit, { firstBoardCap: activeFirstBoardCap })
     onProgress?.({ pass, maxPasses, label: 'Building board contents' })
     await tick()
     if (isCancelled?.()) return null
     const work = boards.map((b, i) => regenerateBoard({ ...b, effectiveBlockedValue: allocation.after[i] }, i, b.blockedValue, noise))
-    const sub = await generateSmallRewardsConfiguration({
+    const solved = await generateSmallRewardsConfiguration({
       phase,
       boards: work,
       mainBoards,
@@ -1240,11 +1317,18 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
       twisterNeed,
       twisterCheckpointPct,
       tileCapsStart: tileCaps,
+      startLadders: keep ? Object.fromEntries(BUILD_VALUED_TYPES.filter((t) => keep[t]).map((t) => [t, keep[t]])) : null,
       noise,
       onProgress: (label) => onProgress?.({ pass, maxPasses, label }),
       isCancelled,
     })
-    if (!sub) return null
+    if (!solved) return null
+    // The values the model gives are set on this pass's boards straight away
+    // (fitValuesOnFinalBoards), so the merge energy a pass is judged on is
+    // what its boards collect with the values the segment will really have.
+    const fittedPass = fitValuesOnFinalBoards({ phase, boards: solved.boards, mainBoards, sub: solved, targets, autoCoins, valuesByBuild, keep })
+    const sub = { ...fittedPass.sub, boards: fittedPass.boards }
+    keep = Object.fromEntries([...(autoCoins ? [COIN_TYPE] : []), ...(valuesByBuild ? BUILD_VALUED_TYPES : [])].filter((t) => sub.rewardChainConfig?.[t]).map((t) => [t, sub.rewardChainConfig[t]]))
     tileCaps = sub.tileHold?.caps ?? tileCaps
     const energySimulated = sub.energy.expectedCollectibleEnergy
     const creditSimulated = ENERGY_CREDIT_RATE * energySimulated
@@ -1253,7 +1337,7 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
     const gap = creditSimulated - allocation.creditWanted
     passes.push({ pass, creditAssumed: credit, creditTaken: allocation.creditTaken, energySimulated, creditSimulated, gap, allocationAfter: allocation.after })
     if (!best || Math.abs(gap) < Math.abs(best.gap)) best = { sub, allocation, gap, pass, energySimulated, creditSimulated }
-    if (Math.abs(gap) <= CREDIT_TOLERANCE_DR) {
+    if (Math.abs(gap) <= creditToleranceFor(phase, allocation.totalBudget)) {
       converged = true
       break
     }
@@ -1264,24 +1348,45 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
     // or two and misses again on the other side. Any other result is
     // followed as it is. Either way a pass only counts as settled when its
     // own simulation agrees with the credit it was built with.
+    // (With merge energy's values set by the model the amount lands on a
+    // round value near the target, not on it - so the credit that amount
+    // implies is the one to build for, and the target is not tried again.)
     const targetCredit = ENERGY_CREDIT_RATE * Math.max(0, targets?.energy ?? 0)
-    credit = targetCredit > 0 && Math.abs(creditSimulated - targetCredit) <= targetCredit * NEAR_TARGET_CREDIT ? targetCredit : creditSimulated
+    const energyFitted = valuesByBuild && !!sub.rankValues?.energy
+    credit = !energyFitted && targetCredit > 0 && Math.abs(creditSimulated - targetCredit) <= targetCredit * NEAR_TARGET_CREDIT ? targetCredit : creditSimulated
   }
 
-  const { sub, allocation } = best
+  const { allocation } = best
   // The boards the build made, or - when the economist asked for an effort
   // distribution - the equally sound set that is closest to it.
   const effortTarget = phase === 'main' ? effortTargets.main : null
-  const effortDrops = { dropGroups: sub.dropGroups, dropGroupsConfig: sub.dropGroupsConfig, rewardChainConfig: sub.rewardChainConfig ?? sub.boards[0]?.rewardChainConfig, minDropRank: sub.boards[0]?.minDropRank, leftoverPolicy: sub.leftoverPolicy }
-  const effortFit = effortTarget ? pickBoardsForEffort(sub.boards, effortTarget, noise, EFFORT_LAYOUT_TRIES, effortDrops) : null
-  const draftBoards = effortFit ? effortFit.boards : sub.boards
+  const effortDrops = { dropGroups: best.sub.dropGroups, dropGroupsConfig: best.sub.dropGroupsConfig, rewardChainConfig: best.sub.rewardChainConfig ?? best.sub.boards[0]?.rewardChainConfig, minDropRank: best.sub.boards[0]?.minDropRank, leftoverPolicy: best.sub.leftoverPolicy }
+  const effortFit = effortTarget ? pickBoardsForEffort(best.sub.boards, effortTarget, noise, EFFORT_LAYOUT_TRIES, effortDrops) : null
+  // ...and when that is another set of boards, the values are set once more,
+  // on exactly those (and every amount of the review measured there).
+  let sub = best.sub
+  let draftBoards = best.sub.boards
+  if (effortFit) {
+    onProgress?.({ pass: best.pass, maxPasses, label: 'Setting the rank values on the final boards' })
+    await tick()
+    if (isCancelled?.()) return null
+    const fitted = fitValuesOnFinalBoards({ phase, boards: effortFit.boards, mainBoards, sub: best.sub, targets, autoCoins, valuesByBuild, keep })
+    sub = fitted.sub
+    draftBoards = fitted.boards
+    // The effort these boards give is read once more with the values they
+    // ended with (merge energy funds taps, so its value moves the curve a
+    // little): what step 6 charts is exactly what is returned.
+    const finalCurve = effortCurveOf(draftBoards, { ...effortDrops, rewardChainConfig: sub.rewardChainConfig }).curve
+    effortFit.curve = finalCurve
+    effortFit.distance = effortDistance(finalCurve, effortTarget)
+  }
   // Spreading only helps when it would actually give every later board DR.
   const spreadHelps =
     draftBoards.length > 1 &&
     allocation.totalBudget - Math.min(activeFirstBoardCap, allocation.totalBudget) >= draftBoards.length - 1 &&
     spreadSubsidy(draftBoards.length, allocation.totalBudget, phase).join() !== allocation.budget.join()
   const boardChecks = draftBoards.map((b, i) => boardChecksFor(b, i, allocation.after[i], { segmentIndex: ctx.index, name: ctx.name, spreadHelps }))
-  const causes = causesFrom({ sub, allocation, boardChecks, dropsFixed, context: ctx })
+  const causes = causesFrom({ sub, allocation, boardChecks, dropsFixed, inherited: !!inherited, context: ctx })
   const constraintsOk = boardChecks.every((checks) => checks.every((c) => c.ok))
   // What stops a build from being usable is structural: a board that cannot
   // hold its DR, a starting goal that fails, a deduction that does not fit,
@@ -1332,12 +1437,15 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
     generatedGroups: sub.generatedGroups,
     // Coin rank values sized for this segment (null when the economist typed
     // their own, which are shared and left alone).
-    coinLadder: sub.coinValues ? sub.rewardChainConfig[COIN_TYPE] : null,
-    coinValues: sub.coinValues,
+    coinLadder: !inherited && sub.coinValues ? sub.rewardChainConfig[COIN_TYPE] : null,
+    coinValues: inherited ? null : sub.coinValues,
     // Rewards whose rank values the build changed (to reach their amount with
     // the drop rules as set), and the ladders it ended with.
-    rankValues: sub.rankValues ?? {},
-    rewardLadders: Object.fromEntries(Object.keys(sub.rankValues ?? {}).map((type) => [type, sub.rewardChainConfig[type]])),
+    // (This segment's own - every segment has its own values.)
+    rankValues: inherited ? {} : (sub.rankValues ?? {}),
+    rewardLadders: inherited ? {} : Object.fromEntries(Object.keys(sub.rankValues ?? {}).map((type) => [type, sub.rewardChainConfig[type]])),
+    // Recompletion: the normal event's values and drop rules it was built with.
+    inherited,
     dropStartRank: sub.dropStartRank,
     multiDropRank: sub.multiDropRank ?? null,
     multiDropShort: !!sub.multiDropShort,
@@ -1345,6 +1453,8 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
     tripleDropShort: !!sub.tripleDropShort,
     twisterMinShare: sub.twisterMinShare ?? null,
     twisterItemUnits: sub.twisterItemUnits ?? null,
+    // Every merge of a rank drops the same items (steady containers).
+    steadyDrops: !!sub.steadyDrops,
     lowerStartRank: sub.lowerStartRank ?? null,
     // The one reward under the tiles, how many items a merge drops, and what
     // the first dropping rank's drops are made of.
@@ -1361,6 +1471,9 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
     dropFloor: sub.dropFloor,
     targets: { ...targets },
     resources: sub.perResourceReview,
+    // (What each amount could be paid as, and which rewards the drops left short - for a second measurement.)
+    plan: sub.plan,
+    shortDropTypes: sub.shortDropTypes ?? [],
     leftoverPolicy: sub.leftoverPolicy,
     dropsFixed,
     deductionPolicy: DEDUCTION_POLICY.id,
@@ -1407,6 +1520,222 @@ export async function buildSegment({ phase, boards: inputBoards, mainBoards = nu
   }
 }
 
+// --- One event: what Recompletion takes from the normal event -----------------
+// The values and drop rules a Recompletion list plays with: the normal
+// event's, for the same segment (see buildSegment: `inherit`).
+const EVENT_RULE_FIELDS = ['rewardChainConfig', 'minDropRank', 'multiDropRank', 'tripleDropRank', 'soloDropRank', 'rewardLeftoverPolicy']
+export function eventRulesOf(mainBoard0) {
+  return Object.fromEntries(EVENT_RULE_FIELDS.filter((key) => mainBoard0?.[key] !== undefined).map((key) => [key, mainBoard0[key]]))
+}
+// The normal event's merge drops, as the `shared` drops of a Recompletion build.
+export function eventDropsOf(mainBoard0) {
+  if (!mainBoard0) return null
+  return { dropGroups: mainBoard0.dropGroups ?? [], dropGroupsConfig: mainBoard0.dropGroupsConfig ?? [], dropStartRank: mainBoard0.minDropRank ?? null, multiDropRank: mainBoard0.multiDropRank ?? null, tripleDropRank: mainBoard0.tripleDropRank ?? null, rankValues: {}, rewardLadders: {}, fromNormalEvent: true }
+}
+
+// WHAT BELONGS TO RECOMPLETION ALONE: the merges that make rank 13 (two of
+// them in a run) and rank 14 (one). Only Recompletion ever makes them, so
+// their two rows of the one table are the only drops that can be set for it
+// without touching the normal event. Each row becomes ONE container of three
+// different items (rank 10+ drops three), holding the rewards Recompletion is
+// furthest BELOW its amount with - as big an item as closes the gap without
+// overshooting it (rank 3 at most). A reward already over its amount is left
+// out: the place goes to the Twister item, else to the reward least over. It
+// is a small lever - nine items - and it is all there is: everything else a
+// Recompletion player gets follows from the normal event's table.
+export const RC_TOP_ROW_MERGES = { 13: 2, 14: 1 }
+export function tuneRecompletionTopRows(shared, { resources, rewardChainConfig }) {
+  const tables = shared?.dropGroupsConfig ?? []
+  const groups = shared?.dropGroups ?? []
+  const byId = new Map(groups.map((g) => [g.id, g]))
+  const valueOf = (type, rank) => rewardPrizeAmount(rewardChainConfig, type, rank)
+  const totalOf = (table) => (table?.noDropWeight ?? 0) + (table?.entries ?? []).reduce((s, e) => s + Math.max(0, e.weight), 0)
+  // What the rows pay now, taken off what was measured: the gap they have to close.
+  const gap = {}
+  for (const type of REWARD_TYPES) {
+    const row = resources.find((r) => r.type === type)
+    if (!row || !(row.target > 0) || !(valueOf(type, REWARD_MAX_RANK) > 0)) continue
+    let now = 0
+    for (const [rank, merges] of Object.entries(RC_TOP_ROW_MERGES)) {
+      const table = tables[rank - 1]
+      const total = totalOf(table)
+      if (!(total > 0)) continue
+      for (const e of table.entries) {
+        const itemRank = byId.get(e.groupId)?.items?.[type]
+        if (itemRank != null && e.weight > 0) now += merges * (e.weight / total) * valueOf(type, itemRank)
+      }
+    }
+    gap[type] = { left: row.target - (row.predicted - now), target: row.target }
+  }
+  const twisterOn = groups.some((g) => g?.items?.[TWISTER_TYPE] != null) && valueOf(TWISTER_TYPE, REWARD_MAX_RANK) > 0
+  const nextGroups = groups.filter((g) => !g.rcTopRow)
+  const nextTables = tables.map((t) => t)
+  const chosen = {}
+  for (const [rankText, merges] of Object.entries(RC_TOP_ROW_MERGES)) {
+    const rank = Number(rankText)
+    const table = tables[rank - 1]
+    if (!table || table.locked) continue
+    const items = {}
+    const short = Object.keys(gap).filter((t) => gap[t].left > 0.5 * merges * valueOf(t, 1)).sort((a, b) => gap[b].left / gap[b].target - gap[a].left / gap[a].target)
+    for (const type of short.slice(0, 3)) {
+      let itemRank = 1
+      for (let k = REWARD_MAX_RANK - 1; k >= 1; k--) {
+        if (merges * valueOf(type, k) <= gap[type].left + 1e-9) {
+          itemRank = k
+          break
+        }
+      }
+      items[type] = itemRank
+      gap[type].left -= merges * valueOf(type, itemRank)
+    }
+    if (Object.keys(items).length < 3 && twisterOn) items[TWISTER_TYPE] = 1
+    const rest = Object.keys(gap).filter((t) => items[t] == null).sort((a, b) => gap[b].left / gap[b].target - gap[a].left / gap[a].target)
+    for (const type of rest) {
+      if (Object.keys(items).length >= 3) break
+      items[type] = 1
+      gap[type].left -= merges * valueOf(type, 1)
+    }
+    if (Object.keys(items).length === 0) continue
+    const id = `rc-rank-${rank}`
+    nextGroups.push({ id, name: `Recompletion: the rank ${rank} merge`, items, auto: true, rcTopRow: true })
+    nextTables[rank - 1] = { ...table, entries: [{ groupId: id, weight: 1000 }], noDropWeight: 0 }
+    chosen[rank] = items
+  }
+  // A group no row uses any more is left out.
+  const used = new Set(nextTables.flatMap((t) => (t?.entries ?? []).filter((e) => e.weight > 0).map((e) => e.groupId)))
+  return { ...shared, dropGroups: nextGroups.filter((g) => used.has(g.id) || !g.auto), dropGroupsConfig: nextTables, rcTopRows: chosen }
+}
+
+// --- The values, fitted on the boards the segment really gets -----------------
+// "we need to make sure the EV is as good as it can be so we will hit nearly
+// what we are looking for" (economist). The solve above sizes values on a few
+// simulated players and on the boards of its own pass - and then the boards
+// may still change (the set closest to the effort distribution is picked
+// afterwards), and a reward within its margin was left where it was. So, last
+// of all, the segment's FINAL boards are played by more simulated players and
+// every value the model gives is set from that: each reward's four rank
+// values (round, rewarding merging - niceRewardValues) and the coin values,
+// for THIS segment, so its average lands on its own amount. A payout is the
+// same items times their value, so this moves nothing else - except merge
+// energy, which also funds taps, hence the second and third look.
+// Recompletion has no values of its own (it plays the normal event's), so it
+// is only measured.
+// VALUES STAY PUT. A build makes its boards several times over (the passes of
+// buildSegment), and round values move in steps: a reward sitting between two
+// round amounts would flip from one to the other from pass to pass, and the
+// passes would never agree. So a later pass starts from the values the pass
+// before ended with (`keep`), and a value is only moved when the amount is
+// off by clearly more than half a step of it (VALUE_DEAD_BAND steps).
+// (150 simulated players: an amount is then known to about 2% - 3% for merge
+  // energy, which comes in the fewest and biggest prizes. With 50 the build's
+  // own number and an independent check of it could sit 10% apart.)
+export const FINAL_FIT_RUNS = 150
+export const FINAL_FIT_SEED = 11
+const FINAL_FIT_ROUNDS = 3
+const VALUE_DEAD_BAND = 0.75
+function fitValuesOnFinalBoards({ phase, boards, mainBoards, sub, targets, autoCoins, valuesByBuild, keep = null }) {
+  const typedConfig = withTypedRewardValues(boards[0].rewardChainConfig)
+  const kept = Object.fromEntries(Object.entries(keep ?? {}).filter(([type]) => (type === COIN_TYPE ? !!autoCoins : valuesByBuild)))
+  let config = { rewardChainConfig: { ...boards[0].rewardChainConfig, ...kept }, dropGroups: sub.dropGroups, dropGroupsConfig: sub.dropGroupsConfig, minDropRank: boards[0].minDropRank, leftoverPolicy: sub.leftoverPolicy }
+  const measure = (cfg) => evaluatePhase({ phase, boards: boards.map((b) => ({ ...b, rewardChainConfig: cfg.rewardChainConfig })), mainBoards, config: cfg, runs: FINAL_FIT_RUNS, seed: FINAL_FIT_SEED })
+  let evaluation = measure(config)
+  const paidBefore = {}
+  const limited = {}
+  let coinValues = sub.coinValues ?? null
+  for (let round = 0; phase !== 'rc' && round < FINAL_FIT_ROUNDS; round++) {
+    let next = config.rewardChainConfig
+    let moved = false
+    for (const type of REWARD_TYPES) {
+      const target = targets?.[type] ?? 0
+      const simulated = evaluation.payouts?.[type]?.mean ?? 0
+      if (!(target > 0) || !(simulated > 0)) continue
+      const current = (next[type] ?? []).slice(0, REWARD_MAX_RANK).map((r) => r?.prizeAmount ?? 0)
+      const top = current[REWARD_MAX_RANK - 1]
+      if (!(top > 0)) continue
+      let values
+      if (type === COIN_TYPE) {
+        if (!autoCoins) continue
+        if (Math.abs(target - simulated) <= target * 0.01) continue
+        values = niceCoinValues((top * target) / simulated)
+      } else {
+        if (!valuesByBuild) continue
+        const typed = typedRewardValues(typedConfig, type)
+        const typedTop = typed[REWARD_MAX_RANK - 1]
+        if (!(typedTop > 0)) continue
+        const wanted = (top * target) / simulated
+        const bounded = Math.min(typedTop * REWARD_VALUE_FACTOR_MAX, Math.max(typedTop * REWARD_VALUE_FACTOR_MIN, wanted))
+        limited[type] = Math.abs(bounded - wanted) > 1e-9
+        // Values an earlier pass of this build gave, and not off by enough to
+        // move them. (The first time, a value always goes to the nearest round amount.)
+        const isModel = niceRewardValues(top, typed).every((v, i) => v === current[i])
+        if (kept[type] && round === 0 && isModel && Math.abs(bounded - top) <= VALUE_DEAD_BAND * niceStepAt(top)) continue
+        values = niceRewardValues(bounded, typed)
+        if (paidBefore[type] == null) paidBefore[type] = simulated
+      }
+      if (values.every((v, i) => v === current[i])) continue
+      if (type === COIN_TYPE) {
+        next = withGeneratedCoinValues(next, values)
+        coinValues = { ...(coinValues ?? { planTarget: autoCoins.planTarget }), values, scale: values[REWARD_MAX_RANK - 1] / COIN_VALUE_SHAPE[REWARD_MAX_RANK - 1] }
+      } else {
+        next = withBuildRewardValues(next, type, values).rewardChainConfig
+      }
+      moved = true
+    }
+    if (!moved) break
+    config = { ...config, rewardChainConfig: next }
+    evaluation = measure(config)
+  }
+
+  // What the build did to each reward's values, for the review.
+  const rankValues = {}
+  for (const type of BUILD_VALUED_TYPES) {
+    if (!rewardLadderIsBuildValued(config.rewardChainConfig, type)) continue
+    const from = typedRewardValues(typedConfig, type)
+    const to = config.rewardChainConfig[type].slice(0, REWARD_MAX_RANK).map((r) => r?.prizeAmount ?? 0)
+    const was = sub.rankValues?.[type]
+    rankValues[type] = { from, to, factor: from[REWARD_MAX_RANK - 1] > 0 ? to[REWARD_MAX_RANK - 1] / from[REWARD_MAX_RANK - 1] : 1, paidBefore: was ? was.paidBefore : (paidBefore[type] ?? null), limited: limited[type] ?? was?.limited ?? false, reason: was?.reason ?? 'fit' }
+  }
+
+  // The review rows, read off the final boards and values.
+  const tolerance = offTargetToleranceFor(phase)
+  const perResourceReview = sub.perResourceReview.map((row) => {
+    const stats = evaluation.payouts?.[row.type]
+    const predicted = stats?.mean ?? 0
+    const tile = evaluation.bySource?.tile?.[row.type]?.mean ?? 0
+    const drop = evaluation.bySource?.drop?.[row.type]?.mean ?? 0
+    return { ...row, predicted, p10: stats?.p10 ?? 0, p90: stats?.p90 ?? 0, diff: predicted - row.target, tile, drop, forfeited: evaluation.summary.leftoverForfeited?.[row.type]?.mean ?? 0, achievedTilePct: tile + drop > 0 ? (tile / (tile + drop)) * 100 : null }
+  })
+  const offTarget = perResourceReview.filter((r) => r.target > 0 && Math.abs(r.diff) > r.target * tolerance).map((r) => r.type)
+  const stillOff = (reason) => {
+    const type = REWARD_TYPES.find((t) => reason.startsWith(`${t}: tile placements`))
+    if (type) return offTarget.includes(type)
+    if (/neither tiles nor merge drops|not enough eligible merges/.test(reason)) return (sub.shortDropTypes ?? []).some((t) => offTarget.includes(t))
+    return true
+  }
+  const infeasibleReasons = sub.feasibility.infeasibleReasons.filter(stillOff)
+  const ladderLimited = offTarget.filter((t) => !sub.plan[t].exact && Math.abs(perResourceReview.find((r) => r.type === t).predicted - sub.plan[t].feasiblePayout) <= sub.plan[t].target * tolerance)
+  const plan = { ...sub.plan }
+  for (const type of Object.keys(rankValues)) if (!rankValues[type].limited) plan[type] = { ...plan[type], fitted: true }
+  return {
+    boards: boards.map((b) => ({ ...b, rewardChainConfig: config.rewardChainConfig })),
+    sub: {
+      ...sub,
+      plan,
+      rewardChainConfig: config.rewardChainConfig,
+      coinValues,
+      rankValues,
+      perResourceReview,
+      shortDropTypes: (sub.shortDropTypes ?? []).filter((t) => offTarget.includes(t)),
+      // Merge energy and the credit it earns, for the values as they are now.
+      energy: sub.energy
+        ? { ...sub.energy, expectedCollectibleEnergy: evaluation.payouts?.energy?.mean ?? 0, energyCredit: ENERGY_CREDIT_RATE * (evaluation.payouts?.energy?.mean ?? 0), effectiveSubsidy: sub.energy.ccAdjusted - ENERGY_CREDIT_RATE * (evaluation.payouts?.energy?.mean ?? 0) }
+        : sub.energy,
+      feasibility: { status: infeasibleReasons.length > 0 ? 'infeasible' : offTarget.length > ladderLimited.length ? 'off-target' : ladderLimited.length > 0 ? 'ladder-limited' : 'ok', infeasibleReasons, offTarget, ladderLimited },
+      evaluation: { runs: FINAL_FIT_RUNS, seed: FINAL_FIT_SEED, summary: evaluation.summary, entryRate: evaluation.entryRate },
+    },
+  }
+}
+
 // --- The whole event (one phase, every configured segment) --------------------
 // `segments`: [{ index, name, boards, mainBoards, targets, split }] with the
 // base segment (index 0) first. A segment with no subsidy budget is skipped
@@ -1422,9 +1751,12 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
 
   // One pass over every segment. `tilePct` overrides the under-tiles share
   // per resource (see the rebalance below).
+  // Recompletion plays the normal event's table: no drops are generated for
+  // it, for any segment (see buildSegment: `inherit`).
+  const rcPhase = phase === 'rc'
   async function buildAll(tilePct, dropCapPct, passLabel) {
     const out = []
-    let shared = null
+    let shared = rcPhase ? eventDropsOf(segments[0]?.mainBoards?.[0]) : null
     let done = 0
     for (const seg of segments) {
       const budget = sum(seg.boards.map((b) => b.blockedValue ?? 0))
@@ -1447,8 +1779,9 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
         mainBoards: seg.mainBoards,
         targets: seg.targets,
         split: { ...seg.split, perResource: { ...(seg.split?.perResource ?? {}), ...tilePct } },
-        dropsFixed: seg.index !== 0,
-        sharedDrops: seg.index !== 0 ? shared : null,
+        dropsFixed: rcPhase || seg.index !== 0,
+        sharedDrops: rcPhase || seg.index !== 0 ? shared : null,
+        inherit: rcPhase,
         coinPlanTarget,
         dropCapPct: seg.index === 0 ? dropCapPct : null,
         twisterNeed: seg.index === 0 ? twisterNeed : null,
@@ -1459,7 +1792,21 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
       })
       if (!result) return null
       done += 1
-      if (seg.index === 0) shared = { dropGroups: result.dropGroups, dropGroupsConfig: result.dropGroupsConfig, dropStartRank: result.dropStartRank, multiDropRank: result.multiDropRank ?? null, multiDropShort: !!result.multiDropShort, tripleDropRank: result.tripleDropRank ?? null, tripleDropShort: !!result.tripleDropShort, rankValues: result.rankValues ?? {}, rewardLadders: result.rewardLadders ?? {}, twisterMinShare: result.twisterMinShare ?? null, twisterItemUnits: result.twisterItemUnits ?? null, tileType: result.tileType ?? null, tileTypeAsked: result.tileTypeAsked ?? null, soloRanks: result.soloRanks ?? null, oneItemOnly: !!result.oneItemOnly, dropFocus: result.dropFocus ?? null }
+      if (rcPhase) {
+        // The base segment decides the two rows that are Recompletion's own
+        // (tuneRecompletionTopRows); it is then measured again with them, and
+        // every other segment is built against the finished table.
+        if (seg.index === 0) {
+          const tuned = tuneRecompletionTopRows(shared, { resources: result.resources, rewardChainConfig: result.boards[0].rewardChainConfig })
+          const measured = fitValuesOnFinalBoards({ phase, boards: result.boards, mainBoards: seg.mainBoards, sub: { ...result, perResourceReview: result.resources, plan: result.plan, dropGroups: tuned.dropGroups, dropGroupsConfig: tuned.dropGroupsConfig }, targets: seg.targets, autoCoins: null, valuesByBuild: false })
+          shared = tuned
+          out.push({ index: seg.index, name: seg.name, ...result, dropGroups: tuned.dropGroups, dropGroupsConfig: tuned.dropGroupsConfig, resources: measured.sub.perResourceReview, feasibility: measured.sub.feasibility, evaluation: measured.sub.evaluation })
+        } else {
+          out.push({ index: seg.index, name: seg.name, ...result })
+        }
+        continue
+      }
+      if (seg.index === 0) shared = { dropGroups: result.dropGroups, dropGroupsConfig: result.dropGroupsConfig, dropStartRank: result.dropStartRank, multiDropRank: result.multiDropRank ?? null, multiDropShort: !!result.multiDropShort, tripleDropRank: result.tripleDropRank ?? null, tripleDropShort: !!result.tripleDropShort, rankValues: result.rankValues ?? {}, rewardLadders: result.rewardLadders ?? {}, twisterMinShare: result.twisterMinShare ?? null, twisterItemUnits: result.twisterItemUnits ?? null, steadyDrops: !!result.steadyDrops, tileType: result.tileType ?? null, tileTypeAsked: result.tileTypeAsked ?? null, soloRanks: result.soloRanks ?? null, oneItemOnly: !!result.oneItemOnly, dropFocus: result.dropFocus ?? null }
       out.push({ index: seg.index, name: seg.name, ...result })
     }
     return { out, shared }
@@ -1474,7 +1821,7 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
   // item of rank 3 at most).
   const twisterValuesByBuild = twisterLadderIsAuto(segments[0]?.boards?.[0]?.rewardChainConfig)
   const twisterNeed =
-    segments[0]?.twisterByBuild && asking.length > 0 && !twisterValuesByBuild
+    !rcPhase && segments[0]?.twisterByBuild && asking.length > 0 && !twisterValuesByBuild
       ? { dr: Math.max(...asking.map((s2) => TWISTER_PRICE_STEPS_AIM * s2.twists * Math.max(1, Math.round(s2.twisterCostStep ?? 1)))), checkpointPct: asking[0].twisterCheckpointPct ?? TWISTER_EASY_CHECKPOINT_PCT }
       : null
   let pass = await buildAll({}, null, null)
@@ -1521,6 +1868,8 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
   const used = { ...asked }
   const caps = {}
   for (let round = 1; round <= MAX_REBALANCES; round++) {
+    // (Recompletion has no drops of its own to rebalance.)
+    if (rcPhase) break
     const baseBuilt = pass.out.find((s) => s.index === 0 && s.status !== 'skipped')
     if (!baseBuilt) break
     const tilePct = {}
@@ -1569,13 +1918,18 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
   // twists asked (see TWISTER_PRICE_STEPS_AIM); only the Twister items'
   // ranks change, so nothing else is built again.
   onProgress?.({ label: 'Working out the price of a twist' })
-  const byBuild = !!segments[0]?.twisterByBuild && !!shared
+  // (In Recompletion the Twister items and their values are the normal
+  // event's too: only each segment's price of a twist is set.)
+  const byBuild = !rcPhase && !!segments[0]?.twisterByBuild && !!shared
   let twister = await priceTwisterForBuild({ phase, segments, built: out, shared, runs: byBuild ? TWISTER_SIZING_RUNS : undefined, isCancelled })
   if (byBuild && twister) {
     const pristine = shared
     // The Twister item starts at the size the build gave it (rank 1; with
     // one item per merge, ranks 1 and 2 mixed).
-    const size = { minShare: 0, itemUnits: pristine.twisterItemUnits ?? 1 }
+    const size = { minShare: 0, itemUnits: pristine.twisterItemUnits ?? 1, steady: !!pristine.steadyDrops }
+    // (With steady containers an in-between size is not a coin toss at each
+    // merge: the bigger item goes to whole merge ranks - rewardTargeting.js.)
+    const bigger = (units) => Math.min(TWISTER_MAX_ITEM_UNITS, units + 0.75)
     let tier = resizeTwisterDrops(pristine, size)
     let rounds = 0
     let valueFactor = 1
@@ -1595,7 +1949,7 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
     const minCollects = segments[0]?.twisterSteady === false ? 0 : TWISTER_MIN_COLLECTS
     const tooFewCollects = () => twister.rows.some((r) => r.twists > 0 && r.incomeMean != null && (!(r.incomeMedian > 0) || (minCollects > 0 && !((r.collectsMedian ?? 0) >= minCollects - 1e-9))))
     while (rounds < MAX_TWISTER_SIZINGS && tooFewCollects() && size.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9) {
-      size.itemUnits = Math.min(TWISTER_MAX_ITEM_UNITS, size.itemUnits + 0.75)
+      size.itemUnits = bigger(size.itemUnits)
       rounds += 1
       tier = resizeTwisterDrops(pristine, size)
       shared = { ...pristine, dropGroups: tier.dropGroups, dropGroupsConfig: tier.dropGroupsConfig }
@@ -1607,38 +1961,13 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
       twister = again
     }
     const sizedForCollects = rounds
-    if (twisterValuesByBuild) {
-      // THE VALUES. Measured on the full number of simulated players - the
-      // same ones the prices are set on - and then scaled to the smallest
-      // values at which every segment has a price that fits its twists
-      // (fitTwisterValues). The values are always built up from this app's
-      // starting numbers, so a rebuild does not compound them. Bigger values
-      // cost nothing in play; they are written as round numbers
-      // (roundTwisterValues).
-      onProgress?.({ label: 'Sizing the Twister values so every segment lands on its twists' })
-      const measured = await priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
-      if (!measured) return null
-      twister = measured
-      const base = withDefaultTwisterValues({})[TWISTER_TYPE].map((r) => r.prizeAmount)
-      const current = (segments[0].boards[0].rewardChainConfig[TWISTER_TYPE] ?? []).map((r) => r?.prizeAmount ?? 0)
-      const already = base[3] > 0 && current[3] > 0 ? current[3] / base[3] : 1
-      const fitted = fitTwisterValues(twister.rows, segments, already)
-      if (fitted) valueFactor = fitted.factor
-      else {
-        // Nobody's typical player collects anything: size on the average.
-        const need = twisterIncomeNeed(twister.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM)
-        valueFactor = Number.isFinite(need) ? Math.max(1, already * need) : Math.max(1, already)
-      }
-      const values = fitted ? fitted.values : roundTwisterValues(valueFactor)
-      valueFactor = Math.round((values[3] / base[3]) * 10) / 10
-      // (A syntax holding one amount follows the new value; a blank one is
-      // written from the value at export - twisterSyntaxFor.)
-      const ladder = values.map((v, i) => {
-        const was = segments[0].boards[0].rewardChainConfig[TWISTER_TYPE]?.[i] ?? {}
-        return { ...was, syntax: syntaxWithAmount(was.syntax, v), prizeAmount: v, auto: true }
-      })
-      shared = { ...shared, twisterLadder: ladder }
-      out = out.map((s2) => (s2.status === 'skipped' || !s2.boards ? s2 : { ...s2, boards: s2.boards.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, [TWISTER_TYPE]: ladder } })) }))
+    // The Twister item at a new size, in every segment's drops. (The values
+    // the build sized are kept: they belong to the reward chain, not the drops.)
+    const applySize = () => {
+      tier = resizeTwisterDrops(pristine, size)
+      shared = { ...pristine, ...(shared.twisterLadder ? { twisterLadder: shared.twisterLadder } : {}), dropGroups: tier.dropGroups, dropGroupsConfig: tier.dropGroupsConfig }
+      const drops = tier
+      out = out.map((s2) => (s2.status === 'skipped' || !s2.dropGroups ? s2 : { ...s2, dropGroups: drops.dropGroups, dropGroupsConfig: drops.dropGroupsConfig, ...(s2.index === 0 ? { generatedGroups: drops.dropGroups.filter((g) => g.auto) } : {}) }))
     }
     while (!twisterValuesByBuild && rounds < MAX_TWISTER_SIZINGS) {
       const need = twisterIncomeNeed(twister.rows, segments)
@@ -1648,18 +1977,67 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
       // nothing, and acting on it in one go overshoots badly.
       size.itemUnits = Math.min(TWISTER_MAX_ITEM_UNITS, size.itemUnits * Math.min(2, need))
       rounds += 1
-      tier = resizeTwisterDrops(pristine, size)
-      shared = { ...pristine, dropGroups: tier.dropGroups, dropGroupsConfig: tier.dropGroupsConfig }
-      const drops = tier
-      out = out.map((s2) => (s2.status === 'skipped' || !s2.dropGroups ? s2 : { ...s2, dropGroups: drops.dropGroups, dropGroupsConfig: drops.dropGroupsConfig, ...(s2.index === 0 ? { generatedGroups: drops.dropGroups.filter((g) => g.auto) } : {}) }))
+      applySize()
       onProgress?.({ label: 'Raising the Twister drops to fit the twists' })
       const again = await priceTwisterForBuild({ phase, segments, built: out, shared, runs: TWISTER_SIZING_RUNS, isCancelled })
       if (!again) return null
       twister = again
     }
-    // The prices themselves, on the full number of simulated players.
-    const final = await priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
+    // THE VALUES AND THE PRICES, on the full number of simulated players.
+    // Values nobody typed are first scaled to the smallest ones at which
+    // every segment has a price that fits its twists (fitTwisterValues),
+    // measured on the same players the prices are then set on. They are
+    // always built up from this app's starting numbers, so a rebuild does not
+    // compound them. Bigger values cost nothing in play; they are written as
+    // round numbers (roundTwisterValues).
+    const base = withDefaultTwisterValues({})[TWISTER_TYPE].map((r) => r.prizeAmount)
+    const settle = async () => {
+      if (twisterValuesByBuild) {
+        onProgress?.({ label: 'Sizing the Twister values so every segment lands on its twists' })
+        const measured = await priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
+        if (!measured) return null
+        // The values these players were measured at (the build's inputs the
+        // first time, the values of the round before after that).
+        const top = measured.rows.find((r) => r.topValue > 0)?.topValue ?? base[3]
+        const already = base[3] > 0 && top > 0 ? top / base[3] : 1
+        const fitted = fitTwisterValues(measured.rows, segments, already)
+        if (fitted) valueFactor = fitted.factor
+        else {
+          // Nobody's typical player collects anything: size on the average.
+          const need = twisterIncomeNeed(measured.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM)
+          valueFactor = Number.isFinite(need) ? Math.max(1, already * need) : Math.max(1, already)
+        }
+        const values = fitted ? fitted.values : roundTwisterValues(valueFactor)
+        valueFactor = Math.round((values[3] / base[3]) * 10) / 10
+        // (A syntax holding one amount follows the new value; a blank one is
+        // written from the value at export - twisterSyntaxFor.)
+        const ladder = values.map((v, i) => {
+          const was = segments[0].boards[0].rewardChainConfig[TWISTER_TYPE]?.[i] ?? {}
+          return { ...was, syntax: syntaxWithAmount(was.syntax, v), prizeAmount: v, auto: true }
+        })
+        shared = { ...shared, twisterLadder: ladder }
+        out = out.map((s2) => (s2.status === 'skipped' || !s2.boards ? s2 : { ...s2, boards: s2.boards.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, [TWISTER_TYPE]: ladder } })) }))
+      }
+      return priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
+    }
+    let final = await settle()
     if (!final) return null
+    // STILL EARLY? Three finished items are a floor, not a promise: the last
+    // one a player needs can still be finished well before twists are counted
+    // (found on a test event: a segment with a lot of subsidy had every twist
+    // at 75% of the phase, with three items). So while a segment's typical
+    // player has all the twists early and the Twister items can still grow,
+    // they are made one more step bigger and everything above is done again -
+    // the verdict the economist reads in step 6 is the test, not a stand-in
+    // for it. At rank 3 the build stops and the table says who is early.
+    while (minCollects > 0 && size.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9 && final.rows.some((r) => r.twists > 0 && r.pace === 'early')) {
+      size.itemUnits = bigger(size.itemUnits)
+      rounds += 1
+      applySize()
+      onProgress?.({ label: 'Making the Twister items bigger so no segment has its twists early' })
+      final = await settle()
+      if (!final) return null
+    }
     twister = final
     const asked = twister.rows.filter((r) => r.twists > 0 && r.collectsMedian != null)
     twister.sizing = {
@@ -1702,17 +2080,19 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
 // The same simulation everything else uses, at a higher run count and a
 // different seed than the solver scored on - an independent check of the
 // draft, not a re-read of the solver's own numbers.
-export function validateDraftSegment({ phase, draftSegment, shared, mainBoards = null, runs = DEFAULT_VALIDATION_RUNS, seed = DEFAULT_VALIDATION_SEED }) {
+export function validateDraftSegment({ phase, draftSegment, shared, mainBoards = null, runs = DEFAULT_VALIDATION_RUNS, seed = DEFAULT_VALIDATION_SEED, styleRuns = STYLE_VALIDATION_RUNS }) {
   const boards = draftSegment.boards
   const board0 = boards[0]
   const groups = shared?.dropGroups ?? draftSegment.dropGroups ?? []
   const tables = shared?.dropGroupsConfig ?? draftSegment.dropGroupsConfig ?? []
   const byId = new Map(groups.map((g) => [g.id, g]))
-  let summary
-  let payouts
+  // One description of the run, played by every kind of player below.
+  let playBoards
+  let playOptions
   if (phase === 'rc') {
     const main0 = mainBoards[0]
-    summary = validateConfigAcrossRuns(mainBoards, {
+    playBoards = mainBoards
+    playOptions = {
       rewardChainConfig: main0.rewardChainConfig,
       dropGroupsConfig: main0.dropGroupsConfig,
       dropGroupsById: new Map((main0.dropGroups ?? []).map((g) => [g.id, g])),
@@ -1724,32 +2104,90 @@ export function validateDraftSegment({ phase, draftSegment, shared, mainBoards =
       rcDropGroupsById: byId,
       rcMinDropRank: board0.minDropRank,
       rcLeftoverPolicy: board0.rewardLeftoverPolicy,
-      runs,
-      seed,
-    })
-    payouts = summary.payoutsRcPhase
+    }
   } else {
-    summary = validateConfigAcrossRuns(boards, {
+    playBoards = boards
+    playOptions = {
       rewardChainConfig: board0.rewardChainConfig,
       dropGroupsConfig: tables,
       dropGroupsById: byId,
       minDropRank: board0.minDropRank,
       leftoverPolicy: board0.rewardLeftoverPolicy,
-      runs,
-      seed,
-    })
-    payouts = summary.payoutsMainPhase
+    }
   }
+  const payoutsOf = (sum) => (phase === 'rc' ? sum.payoutsRcPhase : sum.payoutsMainPhase)
+  // HOW CLOSE IS ONE PLAYER? These players roll their own lucky drops, like
+  // real ones (`randomLuck`), and each one's own amounts are kept: besides the
+  // average, every reward reports the share of players who land within the
+  // margin of the amount asked (`nearShare`) - economist: "we need to make
+  // sure we will know that the resources the user gets will be some what
+  // close to what we wanted him to get".
+  const summary = validateConfigAcrossRuns(playBoards, { ...playOptions, runs, seed, randomLuck: true, keepSamples: true })
+  const payouts = payoutsOf(summary)
+  const samplesOf = (type) => (phase === 'rc' ? summary.samples?.rc?.[type] : summary.samples?.main?.[type]) ?? []
+  const margin = offTargetToleranceFor(phase)
+  // ...and the share of players who are within the margin on EVERY reward at
+  // once: the one number that answers "will a player get what we wanted".
+  const asked = REWARD_TYPES.filter((type) => (draftSegment.targets?.[type] ?? 0) > 0)
+  const players = asked.length > 0 ? samplesOf(asked[0]).length : 0
+  let nearOnAll = 0
+  for (let i = 0; i < players; i++) if (asked.every((type) => Math.abs(samplesOf(type)[i] - draftSegment.targets[type]) <= draftSegment.targets[type] * margin + 1e-9)) nearOnAll += 1
+  const allNearShare = players > 0 ? nearOnAll / players : null
   const resources = REWARD_TYPES.map((type) => {
     const target = draftSegment.targets?.[type] ?? 0
     const stat = payouts?.[type] ?? {}
     const estimate = draftSegment.resources.find((r) => r.type === type)?.predicted ?? 0
-    return { type, target, mean: stat.mean ?? 0, p10: stat.p10 ?? 0, p50: stat.p50 ?? 0, p90: stat.p90 ?? 0, estimate, withinTolerance: target > 0 ? Math.abs((stat.mean ?? 0) - target) <= target * offTargetToleranceFor(phase) : true }
+    const own = samplesOf(type)
+    const nearShare = target > 0 && own.length > 0 ? own.filter((v) => Math.abs(v - target) <= target * margin + 1e-9).length / own.length : null
+    return { type, target, mean: stat.mean ?? 0, p10: stat.p10 ?? 0, p50: stat.p50 ?? 0, p90: stat.p90 ?? 0, min: stat.min ?? 0, max: stat.max ?? 0, nearShare, estimate, withinTolerance: target > 0 ? Math.abs((stat.mean ?? 0) - target) <= target * margin : true }
   })
+
+  // THE SAME EVENT, PLAYED THREE WAYS (economist: "a friend did a run on the
+  // share stage and he ended up with crazy rewards ... the simulator needs to
+  // be as tight as it can be"). What a player collects depends on what they do
+  // with a reward item - merge it on, or tap it - and the build sizes for the
+  // first only. So the other two are played too (mergeSimulation.js:
+  // findTapCollectCell), on fewer simulated players, and shown next to it.
+  // Each was checked against a robot on the real play screen's engine
+  // (scripts/verify/verify-real-play.mjs).
+  const values = phase === 'rc' ? rewardChainForNextPhase(mainBoards[0].rewardChainConfig, board0.rewardChainConfig) : board0.rewardChainConfig
+  const tapPays = []
+  for (const type of REWARD_TYPES) {
+    if (!((draftSegment.targets?.[type] ?? 0) > 0)) continue
+    for (let rank = 1; rank < REWARD_MAX_RANK; rank++) if (tapPaysAtLeastAsMuch(values, type, rank)) tapPays.push({ type, rank })
+  }
+  const styleOf = (id, sum, extra = {}) => ({
+    id,
+    resources: REWARD_TYPES.map((type) => ({ type, target: draftSegment.targets?.[type] ?? 0, mean: payoutsOf(sum)?.[type]?.mean ?? 0 })),
+    drSpent: sum.drSpent.mean ?? 0,
+    completionRate: phase === 'rc' ? sum.rcPhaseCompletionRate : sum.mainPhaseCompletionRate,
+    ...extra,
+  })
+  const styles = [styleOf('merge', summary)]
+  if (styleRuns > 0) {
+    // A PLAYER WHO MERGES WITHOUT LOOKING (mergeSimulation.js: options.mergeRng):
+    // free items merged with each other while a semi-blocked item of their
+    // rank waits. What is still semi-blocked when the top rank is made is
+    // subsidy never used, so this player pays more DR, merges more and
+    // collects more - most in a segment that lives on its subsidy.
+    styles.push(styleOf('careless', validateConfigAcrossRuns(playBoards, { ...playOptions, runs: Math.max(styleRuns, CARELESS_VALIDATION_RUNS), seed, randomLuck: true, carelessMerges: true })))
+    // A player who taps can stay on one board for ever: a longer leash.
+    const played = (collectPolicy) => validateConfigAcrossRuns(playBoards, { ...playOptions, runs: styleRuns, seed, collectPolicy, maxSteps: 200000 })
+    // With rank values that reward merging, tapping never pays more: the same player.
+    styles.push(tapPays.length > 0 ? styleOf('best', played('best')) : { ...styleOf('merge', summary), id: 'best', sameAsMerge: true })
+    styles.push(styleOf('all', played('all')))
+  }
+
   return {
     runs,
     seed,
     resources,
+    // The margin the shares above are measured with (15%, Recompletion 25%).
+    margin,
+    allNearShare,
+    styles,
+    styleRuns,
+    tapPays,
     drSpent: summary.drSpent,
     completionRate: phase === 'rc' ? summary.rcPhaseCompletionRate : summary.mainPhaseCompletionRate,
     entryRate: phase === 'rc' ? summary.rcEntryRate : 1,

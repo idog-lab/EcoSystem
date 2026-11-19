@@ -285,6 +285,22 @@ console.log('--- 4c. Jump ahead, on the shared stage ---')
   await browser.close()
 }
 
+console.log('--- 4d. Links: the new writing, and one sent before it ---')
+{
+  ok(`a link is letters and digits only after the address (${url.length} characters)`, /[?&]stage=[0-9A-Za-z]+$/.test(url))
+  // A link as it was written before (base64url, with "-" and "_" in it) still opens.
+  const { gzipSync, strToU8 } = await import('fflate')
+  const oldCode = Buffer.from(gzipSync(strToU8(JSON.stringify(stage())))).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const old = await open({ width: 844, height: 390, link: `${BASE}?play&stage=${oldCode}` })
+  ok(`a link sent before the change (it has ${(oldCode.match(/[-_]/g) ?? []).length} "-" and "_" in it) still opens and plays`, /[-_]/.test(oldCode) && (await old.page.locator('[data-cell]').count()) === 40 && (await old.page.locator('[data-tutorial="generate-button"]').isEnabled()) && old.errors.length === 0)
+  await old.browser.close()
+  // A link that lost its end on the way says so, and does not open as something else.
+  const cut = await open({ width: 844, height: 390, link: url.slice(0, url.length - 400) })
+  const cutText = (await cut.page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(`a link that lost its end on the way says so instead of opening as half a stage ("${cutText.slice(0, 70)}...")`, /This share link looks broken/.test(cutText) && cut.errors.length === 0)
+  await cut.browser.close()
+}
+
 console.log('--- 5. A desktop window is unchanged ---')
 {
   const browser = await chromium.launch()

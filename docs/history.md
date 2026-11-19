@@ -6411,3 +6411,239 @@ convention `rewardRanks`/`rewardSyntax` already follow.
   to single-hue purple or inventing a second palette.
 - No backend, no database, no auth — pure client-side state plus
   `localStorage` for persistence.
+
+## Real play against the simulator, and one event in the sheets
+
+Economist: "i got a friend that did a run on the share stage and he ended up
+with crazy rewards from the small rewards. we need to try and make the
+simulator that runs on the boards better with the small rewards. it needs to
+be as tight as it can be." And, in the same round, about the Syntax output:
+"the generator weight should add the new rank 13 and 14 ... the small rewards
+should hold a drop for the rank13 and 14 merge ... the blocked queue, now we
+need to merge the normal and the RC one after another, because they happen one
+after another in the same event ... in the item ladder we need to hold the
+ladders also together."
+
+### What a robot on the real play engine found
+
+A robot (`scripts/verify/playRobot.mjs`) played a built event's decoded stage
+link on `playSession.js` - the engine a link runs - in different ways, next to
+the simulator's own numbers. Measured on a two-segment test event (single
+builds; the figures move a little from build to build):
+
+- **A player who merges every reward item gets what the simulator says.** Normal
+  event and Recompletion, every reward within about 10 points of the
+  simulator's average. Biggest multiplier or x1 only, with or without merge
+  energy, merging in any order: no real difference. Nothing to fix there.
+- **Endless mode paid for itself.** 40% of 1.5x drops as merge energy, each
+  merge energy a free tap, each tap leading to more drops: the loop gave back
+  more taps than it used. 45 DR paid, 28,000 free taps (the robot was stopped,
+  it would have gone on), 44,000 merge energy, 4,300 puzzles, 7,500 charms.
+  The tool already showed an amber "would pay for itself" line; nothing
+  stopped it. Now `ENDLESS_ENERGY_PAYBACK_MAX` (0.5, this app's own) holds the
+  merge energy in the endless drops to 50 free taps per 100 DR of generator
+  output, and what is taken off drops as coins (as the other rewards when
+  coins have no values). Measured after: 600 DR paid, about 640 free taps.
+- **Tapping a reward item can pay more than merging it.** The reference rank
+  values do not reward merging (puzzles 5/15/15/40: 7.5 a piece at rank 2, 5
+  at rank 4; charms 5/10/30/40: 7.5 at rank 3). The simulated player always
+  merged to rank 4. A robot that taps when it pays got about 1.2-1.65x the
+  puzzles and 1.4-1.5x the charms.
+- **Tapping everything stops the boards.** A reward under a tile only opens
+  when a matching item is merged into it (economist rule: the board waits), so
+  a player who taps every item never clears that board, never gets the later
+  boards or their subsidy, and spends several times the DR - free on a play
+  link. Up to 2.7x a reward's target in Recompletion, on 4,800 DR against
+  1,265.
+
+### What changed
+
+- `simulatePlaythrough({ collectPolicy })`: `'merge'` (default, unchanged -
+  every build is still sized for it), `'best'`, `'all'`
+  (`findTapCollectCell`). The simulator agrees with the robot for all three.
+- Step 7's validation plays all three (`validateDraftSegment().styles`, 30
+  simulated players for each tapping style) and shows "The same event, played
+  three ways", names the ranks where a tap pays more, and links to step 4's
+  existing one-click fix. **The build does not change the shape of typed rank
+  values by itself** - that is the economist's call (asked, see CLAUDE.md's
+  open questions).
+- Rejected: sizing every build for the player who taps when it pays (the
+  merging player would then land at about two thirds of each amount); and a
+  re-layout of the containers to narrow one player's spread - with each merge
+  rolling on its own and a reward getting only 15-40 items a phase, the spread
+  of a single player (about 15% standard deviation for a reward) is close to
+  what the drop rules allow.
+
+### One event in the sheets
+
+- Generator Weights: rows for ranks 13 and 14 (every multiplier), written with
+  the Recompletion list's own lucky-drop EV and unlock ranks; columns T1-T14.
+  The economist's screenshot has five extra columns after T12 headed "T1
+  weight" to "T5 weight" (all 0) and rows to rank 16 - not confirmed which the
+  parser wants; ours are T13 and T14.
+- Blocked Queue: the normal boards' entries, then Recompletion's, Entry Number
+  carrying on. The "Recompletion Blocked Queue" tab (and "RC Blocked Queue" in
+  the all-segments workbook) is gone.
+- Item Ladder: tiers 1-14; 1-12 the normal list's milestone rewards, 13-14
+  Recompletion's. "RC Item Ladder" is gone.
+- Small Rewards Bank / Small Reward Weights: merge tiers 2-14
+  (`containersOfEvent`). Tiers 13-14 are the Recompletion list's rows for
+  them; a Recompletion container the normal list does not have is added after
+  the normal ones. The RC tabs stay: Recompletion's tiers 6-12 differ from the
+  normal ones, and whether the game has one table or two is an open question.
+
+### The economist's answers, and what they changed (same round)
+
+"i want the model to give the values of the ranks but with nice rounding for
+the amounts" · "as for the generator weights, we need now only until rank 14"
+· "as for now its the same for both normal and RC" · "we need to make sure the
+EV is as good as it can be so we will hit nearly what we are looking for" ·
+"my friend did those amount in the normal only. he didnt go to the RC or the
+endless mode" · "we need to make sure the simulator after getting to rank 12,
+merges all the small rewards and collect them. to understand how much really
+the user got". Asked two questions with options: rank values **per segment**;
+**the normal event exact**, Recompletion following it.
+
+- **The model gives the rank values.** Round (`niceRewardValues`,
+  `niceCoinValues`), rewarding merging, each segment its own, set last on the
+  boards the segment really gets and on 150 simulated players
+  (`fitValuesOnFinalBoards`). Before: one set for all segments, only changed
+  when a reward was more than 15% off, by one factor on the typed shape (so
+  8/23/23/61), and sized on 20 players on boards the effort pick could still
+  replace. Measured on test events (single builds, independent 150-200 player
+  checks): every reward of every segment within about 93-109% of its amount,
+  coins within 3%; before, the non-base segments sat 20-45% over. The cost of
+  round amounts is half a rounding step of the top value (3% at 75, 6% at 40,
+  10% at 25) - a finer grid would give 61 and 23 back.
+- **The credit loop.** With round values merge energy lands near its target,
+  not on it, so the passes follow the simulated credit, keep the values of
+  the pass before (a dead band of 0.75 step) and settle within
+  `creditToleranceFor` (0.5 DR or 1.5% of the segment's demand). Asking for
+  0.5 DR had the passes chase sampling noise: gaps of 3 to 17 DR, never
+  converged, every segment "Can be improved".
+- **Leftovers are collected** at a phase's top rank (default 'collect', older
+  saves migrated once). The simulator's amounts rose 8-15% on a test event -
+  what a player really taps before stopping.
+- **One event, one table.** Recompletion builds `inherit`: the normal event's
+  values, drop rules and containers. Its own: the reward under its tiles and
+  the rows for the merges that make rank 13 and 14
+  (`tuneRecompletionTopRows`). Its targets are compared, not sized for; a
+  miss is reported as "Recompletion pays what the normal event's merge drops
+  give" with a one-click "ask for what it pays". The RC bank/weights tabs are
+  gone from the exports; the all-segments workbook has "S{n} Small Rewards".
+  Rejected: balancing the table between the two phases (the economist chose
+  the normal event exact).
+- **A normal-only play link ends at rank 12.** The generator used to stay on
+  after "the chain is complete". The most likely reasons a friend's
+  normal-only run paid far more than designed, in order: playing on after
+  rank 12; tapping reward items (which paid more than merging at the
+  reference values, and - tapping every one - leaves the reward under a tile
+  closed, so the boards never clear and the taps, free on a link, never
+  stop: 8x the DR on one test segment); leftovers the simulator did not count.
+
+### Duplicates in the Syntax output
+
+Economist: "it can take diff numbers" (per-segment rank values are fine in
+production) and "in alot of pages we got many duplicants of think we dont
+need. go over the output and check which we duplicate alot in the same page
+without any need for that." An audit of every page of a built three-segment
+event (rows that repeat once the first column is ignored, columns equal to
+another, columns with one value) found, and fixed:
+
+- All-segments Event Data, Multipliers, Generator Weights: one full copy per
+  segment although these are the same for every segment by rule (42, 9 and 81
+  rows for 14, 3 and 27; with eight segments Generator Weights was 216). Now
+  each row once with Segment "All"; a row that differs (TutorialDrAmount) per
+  segment in its place; segments with different row sets keep their blocks.
+- V2 Reward Chain: every row twice (Main, RC) since Recompletion plays the
+  normal event's values. Once, as "Main + RC".
+- V2 Drop Groups: 130 rows for 50 - Recompletion repeating the normal table,
+  the normal list's never-played ranks 13-14, and a zero "(no drop)" line at
+  every rank. And one tab in the all-segments workbook instead of one per
+  segment.
+- Normal / CC text views: the list's rank rewards and lucky-drop EV under
+  every board, the two EV bumps under every board; reward items printed as
+  R1001.
+
+Left as they are, because they are the reference format: one Generator
+Weights row per rank and multiplier (and columns T6-T14 always 0), Pool Number
+= Entry Number with Stock and Weight 1, Section on every Board Layouts row,
+the NoDrop-only rows of Small Reward Weights below the start rank. Noted, not
+changed: the bank holds about 35 containers, several at a weight under 3% and
+(in endless) ten pairs that differ only in the Twister item's rank - not
+duplicates, but trimming them is a change to the drops, not to the export.
+
+### Close for every player, not only the average one
+
+Economist: "now i want u to think even better on how to make the simulator
+run even better. and maybe run more runs. we need to make sure we will know
+that the resources the user gets will be some what close to what we wanted
+him to get."
+
+**What was measured first** (300 players a segment, the simulator against the
+robot on the play engine): the averages agreed within 1-2%. The problem was
+the spread between two players of the same segment - puzzles sd 17%, merge
+energy 32%, charms 15%, DR 23% on one test segment; about 4 players in 10
+within 15% on merge energy. More runs make an average steadier; they do not
+make one player closer to it. The spread came from which container a merge
+happened to roll.
+
+**Steady containers** (this app's own design, inside the economist's
+item-count rules; step 4 "Every merge of a rank drops the same items", on by
+default, `steadyDrops`). One container per merge rank: rank 6 always the one
+item of the reward under the tiles; the one-or-two rank one reward, with the
+Twister item in the share the rise gives; a two-item rank one reward and the
+Twister item; a three-item rank three rewards. Which reward and what size at
+which rank is chosen so each reward lands on its amount (energy first, then
+the reward that asks for most; the least-served reward takes the next
+place), and the rank values close what is left. The Twister item has one
+size per merge rank as well (an in-between size used to be two ranks mixed
+by weight - a coin toss at every merge). Single builds, 300 players each:
+coins, puzzles, merge energy and charms identical for every careful player
+in every segment (sd 0%), 100 of 100 within 15% on every reward at once,
+against 28 of 100 with the varied containers on the same segment. What still
+differs: generator luck (DR sd 2-5%) and the Twister (4-6%, from the
+one-or-two rank). Rejected: more containers with finer weights (still
+chance), and averaging over more runs (does not move a player).
+
+**Three places where the simulator was not the game a player plays**, found
+once the containers were steady and everything else agreed to the item:
+- *Leftovers were tapped as they lay.* The last merges of a run drop items
+  nobody has merged yet; the robot merges, then taps. Merge energy was 7%
+  under, in every run. Now merged first (`settlePhaseLeftovers`,
+  `mergeFirst`), a free item opening a semi-blocked one of its rank; the
+  player who taps when it pays leaves those ranks unmerged.
+- *Tiles opened next to the moved item's old cell too*
+  (`revealAroundMover: true`, the simulator's old default; the play screens
+  never did). 9% more coins in the heaviest-subsidy segment, two coin items
+  under tiles the play screen never opened. The default is now false
+  everywhere.
+- *With tiles opening only where a merge happens, where it happens matters.*
+  The simulated player merged wherever its scan found a pair; a design with
+  no merge drops and reward items under its tiles then handed out a third of
+  its subsidy. The careful player now merges two free items next to a locked
+  tile (`mergeWhereItOpens`), as a person does; the robot makes the same two
+  moves on the play engine (`careful`).
+After these a careful robot collects exactly what the simulator says, reward
+for reward, for the same DR, in every segment (verify-real-play section 12).
+
+**The player who merges without looking** (`mergeRng`, `carelessMerges`).
+On one build the heaviest-subsidy segment's robot paid 35-50% more DR and
+collected 5-15% more of every reward; the cause was free items merged with
+each other while a semi-blocked one of their rank waited - subsidy never
+used. The simulator has that player now (it lands on the robot's numbers)
+and step 7 shows the row. On other builds and segments it changes nothing:
+it depends on the board.
+
+**Validation** (step 7): 300 players (was 100) who each roll their own lucky
+drops (`luckRng`; the build still sizes on scheduled luck), "players within
+15%" per reward and for every reward at once (`nearShare`, `allNearShare`).
+
+**Also**: the credit loop's margin in Recompletion is 5% of the segment's
+demand (was 1.5%: under one energy item for a segment that spends 300 DR
+there, which left it "Can be improved" with nothing to improve). Checks whose
+fixtures no longer fitted were corrected, not loosened in meaning: a
+Recompletion list holding more than the chase (no DR spent to measure a
+credit against), "a segment that merges more gets smaller values" (now per
+amount asked - with steady containers a reward sits at a few ranks), a
+20-unit amount with round values (within half a rounding step, 25%).

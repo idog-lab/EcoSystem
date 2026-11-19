@@ -191,7 +191,9 @@ async function climb(page, top, start = 1) {
   await page.goto(`${BASE}?play&stage=${encodeStage([mainLadder])}`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(300)
   await climb(page, 11)
-  ok('a main-only link (the pre-RC format) still plays to its rank-12 finish', (await page.getByText(/the chain is complete/).isVisible()) && (await page.locator('[data-testid="rc-active"]').count()) === 0)
+  ok('a main-only link (the pre-RC format) still plays to its rank-12 finish', (await page.getByText(/the event is complete/).first().isVisible()) && (await page.locator('[data-testid="rc-active"]').count()) === 0)
+  // ...and ends there: the generator stops (it used to go on, every merge still dropping rewards).
+  ok('...where the stage ends: the generator has stopped', await page.locator('[data-tutorial="generate-button"]').isDisabled())
 
   ok('Play Stage: zero page errors', errors.length === 0)
   await browser.close()

@@ -36,6 +36,7 @@ import {
   withTypedRewardValues,
   typedRewardValues,
   scaledRewardValues,
+  DEFAULT_LEFTOVER_POLICY,
   withBuildRewardValues,
   REWARD_VALUE_FACTOR_MIN,
   REWARD_VALUE_FACTOR_MAX,
@@ -123,7 +124,7 @@ function clampPct(v) {
 // rc* overrides, reading the RC phase's own tallies - the RC list is never
 // scored as if it were a standalone event (it only exists after the main
 // chain, and a standalone run would stop at rank 12).
-function evaluatePhase({ phase, boards, mainBoards, config, runs, seed }) {
+export function evaluatePhase({ phase, boards, mainBoards, config, runs, seed }) {
   const groupsById = new Map(config.dropGroups.map((g) => [g.id, g]))
   if (phase === 'main') {
     const summary = validateConfigAcrossRuns(boards, {
@@ -203,6 +204,9 @@ export async function generateSmallRewardsConfiguration({
   // Per-board caps on generated reward items from an earlier pass of the
   // same build (see the take-back below), so a later pass starts from them.
   tileCapsStart = null,
+  // Rank values an earlier pass of the same build gave ({ type: ladder }):
+  // this pass starts from them, so the passes do not undo each other.
+  startLadders = null,
   noise = 0.15,
   evalRuns = SOLVER_EVAL_RUNS,
   evalSeed = SOLVER_EVAL_SEED,
@@ -237,8 +241,9 @@ export async function generateSmallRewardsConfiguration({
       rankValues[type] = { from: typed, to: values, factor: values[REWARD_MAX_RANK - 1] / top, paidBefore: null, limited: wanted < REWARD_VALUE_FACTOR_MIN - 1e-9, reason: 'smaller-than-a-prize' }
     }
   }
+  if (valuesByBuild && startLadders) rewardChainConfig = { ...rewardChainConfig, ...startLadders }
   const minDropRank = board0.minDropRank ?? MIN_DROP_RANK
-  const leftoverPolicy = board0.rewardLeftoverPolicy ?? 'forfeit'
+  const leftoverPolicy = board0.rewardLeftoverPolicy ?? DEFAULT_LEFTOVER_POLICY
   // The Twister item is put into the containers by the build when the list
   // says so and the Twister has rank values (rewardTargeting.js).
   const twisterOn = alwaysDrop && !!board0.twisterByBuild && rewardLadderIsConfigured(rewardChainConfig, TWISTER_TYPE)
@@ -399,6 +404,12 @@ export async function generateSmallRewardsConfiguration({
   // are the planned share for every segment alike, and they are not steered.
   const elasticType = hasSolo && fitCoins && tileType === COIN_TYPE ? COIN_TYPE : null
   const steered = (t) => t !== elasticType
+  // Steady containers (rewardTargeting.js): only when every reward that has an
+  // amount gets its rank values from the model - how OFTEN a reward drops no
+  // longer follows its amount, so its values have to. (Coins typed by hand
+  // with a coin amount asked are not the model's: then the containers are
+  // made as before.)
+  const steadyDrops = alwaysDrop && valuesByBuild && board0.steadyDrops !== false && hasSolo && !allSolo && (!((targets?.[COIN_TYPE] ?? 0) > 0) || fitCoins)
   const tileUnitsFor = (unitBudget) => {
     const out = zeroByType()
     for (const type of REWARD_TYPES) {
@@ -469,7 +480,7 @@ export async function generateSmallRewardsConfiguration({
       let built = dropsFixed
         ? { dropGroups: existingGroups, dropGroupsConfig: existingTables, generatedGroups: [], shortUnits: zeroByType(), eligibleMerges: null }
         : structure === 'always'
-          ? buildAlwaysDropConfiguration({ dropUnits, mergesByRank, dropGroups: existingGroups, dropGroupsConfig: existingTables, minDropRank, multiDropRank: multiDropRankOf(boards[0]), tripleDropRank: tripleDropRankOf(boards[0]), soloRank: hasSolo ? soloRank : null, focus: hasSolo && tileType ? { type: tileType, share: TILE_REWARD_FOCUS_SHARE, elastic: elasticType === tileType } : null, guaranteedTypes: tileTypes, twister: twisterFill })
+          ? buildAlwaysDropConfiguration({ dropUnits, mergesByRank, dropGroups: existingGroups, dropGroupsConfig: existingTables, minDropRank, multiDropRank: multiDropRankOf(boards[0]), tripleDropRank: tripleDropRankOf(boards[0]), soloRank: hasSolo ? soloRank : null, focus: hasSolo && tileType ? { type: tileType, share: TILE_REWARD_FOCUS_SHARE, elastic: elasticType === tileType } : null, guaranteedTypes: tileTypes, twister: twisterFill, steady: steadyDrops })
           : buildDropConfiguration({ dropUnits, mergesByRank, dropGroups: existingGroups, dropGroupsConfig: existingTables, minDropRank, structure })
       // Every eligible merge drops, so the drops have a floor: at least one
       // item per merge. When that floor is more than was asked of the drops,
@@ -817,6 +828,8 @@ export async function generateSmallRewardsConfiguration({
     soloRanks: built.soloRanks ?? null,
     oneItemOnly: !!built.maxItems,
     dropFocus: built.focus ?? null,
+    // Every merge of a rank drops the same items (rewardTargeting.js: "steady").
+    steadyDrops: !!built.steady,
     twisterMinShare: twisterFill?.minShare ?? null,
     twisterItemUnits: twisterFill?.itemUnits ?? null,
     // One item per merge and the rewards asked do not fit: the start rank

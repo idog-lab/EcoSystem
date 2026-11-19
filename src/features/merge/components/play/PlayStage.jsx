@@ -70,7 +70,9 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
   // the grand prize starts - and only then does the Recompletion board come
   // in, sliding down slowly (deferRcEntry; economist: "we merge and we cant
   // see the drop happening").
-  const rcOptions = rcBoards && rcBoards.length ? { rcBoards, deferRcEntry: true } : {}
+  // A stage with no Recompletion list ends at rank 12: the generator stops
+  // there (`endAtGoal`), what is left can still be merged and collected.
+  const rcOptions = rcBoards && rcBoards.length ? { rcBoards, deferRcEntry: true } : { endAtGoal: true }
   const [session, setSession] = useState(() => createPlaySession(boards, 0, rcOptions))
   // Thrown items, jumping drops and payouts - read off the session's own events.
   const fx = usePlayEffects(session)
@@ -636,7 +638,8 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
               )}
               {finished && (
                 <div className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
-                  <PartyPopper size={14} className="shrink-0" /> Rank {MAX_RANK} — the chain is complete!
+                  <PartyPopper size={14} className="shrink-0" />{' '}
+                  <span data-testid="stage-finished">Rank {MAX_RANK} — the event is complete! Merge and tap what is left to collect it.</span>
                 </div>
               )}
               <EndlessBanner session={session} mini />
@@ -703,8 +706,8 @@ export default function PlayStage({ boards, stageName, rcBoards, rcVariantLabel 
       {finished && (
         <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 text-amber-700">
           <PartyPopper size={18} className="shrink-0" />
-          <span className="text-sm font-semibold">
-            You reached rank {MAX_RANK} — the chain is complete!
+          <span className="text-sm font-semibold" data-testid="stage-finished">
+            You reached rank {MAX_RANK} — the event is complete! The generator has stopped: merge and tap the rewards still on the board to collect them.
           </span>
         </div>
       )}

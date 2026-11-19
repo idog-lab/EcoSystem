@@ -14,7 +14,7 @@ import {
 } from './mergeSimulation'
 import { currentTier, unlockedTiers, buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../core/generatorTier'
 import { DEFAULT_TARGET_EV, computeProbs, rollBonus } from '../core/luckyDrop'
-import { isMainItem, rewardPrizeAmount, rewardChainForNextPhase, emptyRewardTally, TWISTER_TYPE } from '../rewards/rewardChain'
+import { isMainItem, rewardPrizeAmount, rewardChainForNextPhase, emptyRewardTally, TWISTER_TYPE, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { MAX_RANK, RC_MAX_RANK } from '../core/ranks'
 import { MIN_DROP_RANK, multiDropRankOf, tripleDropRankOf, soloDropRankOf } from '../rewards/dropGroups'
 import { buildEndlessDrops } from '../rewards/endlessMode'
@@ -100,7 +100,7 @@ export function createPlaySession(boards, startIndex = 0, options = {}) {
     twisterSpinCost: boards[startIndex].twisterSpinCost ?? null,
     twisterSpinObjective: boards[startIndex].twisterSpinObjective ?? null,
     // Phase-end policy for unmerged reward items - see simulatePlaythrough.
-    leftoverPolicy: options.leftoverPolicy ?? boards[startIndex].rewardLeftoverPolicy ?? 'forfeit',
+    leftoverPolicy: options.leftoverPolicy ?? boards[startIndex].rewardLeftoverPolicy ?? DEFAULT_LEFTOVER_POLICY,
     leftoverForfeited: emptyRewardTally(),
     rewardChainConfig: options.rewardChainConfig ?? boards[startIndex].rewardChainConfig ?? null,
     dropGroupsConfig: options.dropGroupsConfig ?? boards[startIndex].dropGroupsConfig ?? null,
@@ -113,6 +113,14 @@ export function createPlaySession(boards, startIndex = 0, options = {}) {
     // play link - economist: "we merge and we cant see the drop happening").
     deferRcEntry: !!options.deferRcEntry,
     rcPending: false,
+    // `endAtGoal` (a shared play link): a stage with NO Recompletion list ends
+    // when rank 12 is held - the generator stops, like the event it stands for
+    // and like the simulator, which stops there too. What is on the board can
+    // still be merged and tapped. Without it the generator kept working after
+    // "the chain is complete", every merge kept dropping rewards, and a run
+    // on a normal-only link had no end (economist: "my friend did those amount
+    // in the normal only").
+    endAtGoal: !!options.endAtGoal,
     // RC-specific config overrides — stored at session creation so
     // maybeEnterRc can re-read them when the phase transitions, without
     // needing access to the original options object.
@@ -255,6 +263,7 @@ function maybeEnterEndless(session, { clean = false } = {}) {
     multiDropRank: multiDropRankOf(session.rcBoards?.[0]),
     tripleDropRank: tripleDropRankOf(session.rcBoards?.[0]),
     soloRank: soloDropRankOf(session.rcBoards?.[0]),
+    targetEv: session.targetEv,
   })
   session.phase = 'endless'
   session.endless = endless
@@ -373,8 +382,13 @@ export function secondGrandPrizeAwarded(session) {
   return session.reachedAt[RC_MAX_RANK] !== undefined
 }
 
-export function canSpendGenerator(session) {
-  if (session.rcPending) return false
+// A stage with no Recompletion that was asked to end at its goal, once rank
+// 12 is held (see `endAtGoal`).
+export function sessionEnded(session) {
+  return !!session.endAtGoal && session.phase === 'main' && !(session.rcBoards && session.rcBoards.length) && session.reachedAt[MAX_RANK] !== undefined
+}
+
+function boardHasFreeCell(session) {
   const { state } = session
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
@@ -382,6 +396,11 @@ export function canSpendGenerator(session) {
     }
   }
   return false
+}
+
+export function canSpendGenerator(session) {
+  if (session.rcPending || sessionEnded(session)) return false
+  return boardHasFreeCell(session)
 }
 
 // The highest generator tier currently unlocked - the same dynamic
@@ -546,7 +565,8 @@ export function collectRewardItem(session, cell) {
 }
 
 export function canPlaceFromInventory(session, index) {
-  return index >= 0 && index < session.inventory.length && canSpendGenerator(session)
+  // (Still possible after the stage ended: it is the player's own item.)
+  return index >= 0 && index < session.inventory.length && !session.rcPending && boardHasFreeCell(session)
 }
 
 // Places inventory item `index` onto a free cell, picked the same way the

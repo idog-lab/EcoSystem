@@ -12,6 +12,7 @@ import {
   ENDLESS_DROP_RANK_SHIFT,
   ENDLESS_DROP_VALUE_MULTIPLIER,
   ENDLESS_COIN_ENERGY_SHARE,
+  ENDLESS_ENERGY_PAYBACK_MAX,
 } from '../../src/features/merge/lib/rewards/endlessMode.js'
 import {
   createPlaySession,
@@ -66,7 +67,10 @@ console.log('--- 1. The three rules: one rank lower, more per drop, mostly coins
   check('ranks below the start rank drop nothing', endless.dropGroupsConfig.filter((t) => t.rank < endless.minDropRank).every((t) => t.entries.length === 0))
   check(`an average drop carries ${ENDLESS_DROP_VALUE_MULTIPLIER}x the units it did (${sum(before.units).toFixed(3)} -> ${sum(after.units).toFixed(3)})`, near(sum(after.units), sum(before.units) * ENDLESS_DROP_VALUE_MULTIPLIER, 0.02))
   const coinEnergyUnits = (after.units.coins + after.units.energy) / sum(after.units)
-  check(`coins and merge energy are ${Math.round(ENDLESS_COIN_ENERGY_SHARE * 100)}% of the units (${(coinEnergyUnits * 100).toFixed(1)}%), split evenly`, near(coinEnergyUnits, ENDLESS_COIN_ENERGY_SHARE, 0.01) && near(after.units.coins, after.units.energy, 0.01))
+  // (They used to be split evenly. Merge energy is now held to what cannot pay
+  // for itself - ENDLESS_ENERGY_PAYBACK_MAX - and coins take what it gives up.)
+  check(`coins and merge energy are ${Math.round(ENDLESS_COIN_ENERGY_SHARE * 100)}% of the units (${(coinEnergyUnits * 100).toFixed(1)}%): merge energy as much as cannot pay for itself (${after.units.energy.toFixed(2)} units a drop), coins the rest (${after.units.coins.toFixed(2)})`, near(coinEnergyUnits, ENDLESS_COIN_ENERGY_SHARE, 0.01) && after.units.coins > after.units.energy && endless.energyHeld === true)
+  check(`merge energy pays back at most ${Math.round(ENDLESS_ENERGY_PAYBACK_MAX * 100)} free taps per 100 DR of generator output (${endless.energyBackPer100Dr.toFixed(1)}); as it was asked for, it would have paid back more than 100 and endless would never have needed DR`, endless.energyBackPer100Dr <= ENDLESS_ENERGY_PAYBACK_MAX * 100 + 0.5 && endless.energyBackPer100Dr > ENDLESS_ENERGY_PAYBACK_MAX * 100 * 0.85 && endless.energyUnitsAsked > endless.unitsPerDrop.energy * 1.5)
   const info = describeEndlessDrops(endless, rewardChainConfig, { targetEv: 1.1 })
   check(`most dropped ITEMS are coins or merge energy (${Math.round(info.coinEnergyShare * 100)}%)`, info.coinEnergyShare > 0.5)
   check('the other resources keep the proportions they had (puzzles 2 : charms 1)', near(after.units.puzzles / after.units.charms, before.units.puzzles / before.units.charms, 0.05))
@@ -83,7 +87,9 @@ console.log('--- 2. Edge cases ---')
   const noCoins = createBoard('x').rewardChainConfig
   const e1 = buildEndlessDrops({ ...builtDrops(6), rewardChainConfig: noCoins })
   const a1 = averageDrop(e1.dropGroupsConfig, e1.dropGroups, e1.minDropRank)
-  check('coins with no rank values are left out; merge energy takes the whole priority share', a1.units.coins === 0 && near(a1.units.energy / sum(a1.units), ENDLESS_COIN_ENERGY_SHARE, 0.01))
+  // (Merge energy would take the whole priority share - but it is held to what cannot pay for itself, and the other rewards take what it gives up.)
+  const b1 = averageDrop(builtDrops(6).dropGroupsConfig, builtDrops(6).dropGroups, 6)
+  check(`coins with no rank values are left out; merge energy is held to its limit and the other rewards take the rest, so a drop still carries ${ENDLESS_DROP_VALUE_MULTIPLIER}x (${sum(a1.units).toFixed(2)} units, ${a1.units.energy.toFixed(2)} of them merge energy)`, a1.units.coins === 0 && e1.energyHeld === true && e1.energyBackPer100Dr <= ENDLESS_ENERGY_PAYBACK_MAX * 100 + 0.5 && near(sum(a1.units), sum(b1.units) * ENDLESS_DROP_VALUE_MULTIPLIER, 0.05) && a1.units.puzzles > 0 && a1.units.charms > 0)
   // No rank values at all: endless still starts, with nothing to drop.
   const blank = Object.fromEntries(Object.entries(rewardChainConfig).map(([t, ladder]) => [t, ladder.map((r) => ({ ...r, prizeAmount: 0 }))]))
   const e2 = buildEndlessDrops({ ...builtDrops(6), rewardChainConfig: blank })

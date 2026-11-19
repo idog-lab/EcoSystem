@@ -128,6 +128,116 @@ function twisterTrack(twister) {
   if (late.length) parts.push(`${late.map((r) => `${r.name} (${r.spinsMedian} of ${r.twists})`).join(', ')} ${late.length === 1 ? 'does' : 'do'} not get them all`)
   return { ok: false, text: `Not on track yet: ${parts.join('; ')}. The other ${asked.length - off.length} ${asked.length - off.length === 1 ? 'segment is' : 'segments are'} on track.` }
 }
+// THE SAME EVENT, PLAYED THREE WAYS. What a player collects depends on what
+// they do with a reward item - merge it on, or tap it to collect it - and the
+// build sizes the rewards for the first. The other two are played as well so
+// the economist sees, before a link is sent, what a friend who taps would end
+// up with (economist: "he ended up with crazy rewards from the small rewards").
+const PLAY_STYLE_LABEL = {
+  merge: { name: 'Merges every reward item', note: 'the player the build sizes for' },
+  careless: { name: 'Merges without looking', note: 'merges free items with each other while a semi-blocked one of their rank waits' },
+  best: { name: 'Taps an item when that pays more than merging', note: 'the most a player can make of the same drops' },
+  all: { name: 'Taps every reward item as it lands', note: 'never merges a reward' },
+}
+function PlayStylesPanel({ v, segmentName, phase, goTo }) {
+  const targeted = v.resources.filter((r) => r.target > 0).map((r) => r.type)
+  const merge = v.styles.find((st) => st.id === 'merge')
+  const best = v.styles.find((st) => st.id === 'best')
+  const all = v.styles.find((st) => st.id === 'all')
+  const pctOf = (style, type) => {
+    const r = style.resources.find((x) => x.type === type)
+    return r && r.target > 0 ? (r.mean / r.target) * 100 : null
+  }
+  const most = (style) => Math.max(0, ...targeted.map((t) => pctOf(style, t) ?? 0))
+  const tolerance = (phase === 'rc' ? 25 : 15) + 100
+  const over = (style) => !!style && !style.sameAsMerge && most(style) > Math.max(tolerance, most(merge) + 10)
+  const tapNames = [...new Set((v.tapPays ?? []).map((x) => x.type))].map((type) => `${REWARD_TARGET_LABELS[type]} (rank ${v.tapPays.filter((x) => x.type === type).map((x) => x.rank).join(' and ')})`)
+  const moreDr = all && merge.drSpent > 0 ? all.drSpent / merge.drSpent : 1
+  const careless = v.styles.find((st) => st.id === 'careless')
+  const carelessDr = careless && merge.drSpent > 0 ? careless.drSpent / merge.drSpent : 1
+  const carelessMore = careless ? Math.max(0, ...targeted.map((t) => (pctOf(careless, t) ?? 0) - (pctOf(merge, t) ?? 0))) : 0
+  // The status is about the second player: can a tap beat a merge? (The third
+  // gets more for another reason - they spend more DR - said below the table.)
+  const anyOver = over(best)
+  return (
+    <Panel
+      title={`The same event, played by different players: ${segmentName}`}
+      subtitle={`What a player ends up with depends on how they play: whether they open the semi-blocked items first, and whether they merge a reward item on or tap it. The build sizes the rewards for a careful player who merges; the others are played on ${v.styleRuns} to ${Math.max(v.styleRuns, 100)} simulated players each.`}
+      tag={<StatusChip kind={anyOver ? 'review' : 'validated'}>{anyOver ? 'Tapping pays more' : 'Merging pays best'}</StatusChip>}
+    >
+      <table className="w-full text-sm tabular-nums" data-testid="play-styles">
+        <thead>
+          <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <th className="py-1 pr-3">Player</th>
+            {targeted.map((t) => (
+              <th key={t} className="py-1 pr-3">
+                {REWARD_TARGET_LABELS[t]}
+              </th>
+            ))}
+            <th className="py-1 pr-3">DR spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {v.styles.map((style) => (
+            <tr key={style.id} className="border-t border-slate-100 align-top" data-style={style.id} data-same={style.sameAsMerge ? 'yes' : 'no'}>
+              <td className="py-1 pr-3">
+                <div className="font-semibold text-slate-700">{PLAY_STYLE_LABEL[style.id].name}</div>
+                <div className="text-[11px] text-slate-500">{style.sameAsMerge ? 'with these rank values a tap never pays more than a merge: the same as the row above' : PLAY_STYLE_LABEL[style.id].note}</div>
+              </td>
+              {targeted.map((t) => {
+                const p = pctOf(style, t)
+                const r = style.resources.find((x) => x.type === t)
+                const high = style.id !== 'merge' && !style.sameAsMerge && p != null && p > Math.max(tolerance, (pctOf(merge, t) ?? 0) + 10)
+                return (
+                  <td key={t} className="py-1 pr-3" data-reward={t}>
+                    <span className={`font-semibold ${high ? 'text-amber-700' : 'text-slate-700'}`} data-field="pct">
+                      {p == null ? '-' : `${Math.round(p)}%`}
+                    </span>{' '}
+                    <span className="text-xs text-slate-500" data-field="amount">
+                      {formatRewardAmount(t, r?.mean ?? 0)}
+                    </span>
+                  </td>
+                )
+              })}
+              <td className="py-1 pr-3" data-field="dr">
+                {dr(style.drSpent)}
+                {style.id !== 'merge' && merge.drSpent > 0 && style.drSpent > merge.drSpent * 1.25 && <span className="ml-1 text-xs text-amber-700">{(style.drSpent / merge.drSpent).toFixed(1)}×</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[11px] text-slate-500">Each number is what that player collects, as a share of the amount you asked for. Checked against a robot playing the real play screen.</p>
+      {tapNames.length > 0 && (
+        <div className="mt-2 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800" data-testid="play-styles-tap">
+          <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+          <span className="flex-1">
+            With these rank values a tap pays more than a merge for {tapNames.join(', ')}: the item is worth more per piece there than a rank 4 is. A player who notices gets the second row. Let the build give
+            the rank values (step 4: &quot;The build may change a reward&apos;s rank values&quot;) - its values always reward merging - or fix them there yourself, and the first two rows become the same.{' '}
+            {goTo && (
+              <LinkButton className="text-xs" onClick={() => goTo('rewards')}>
+                Go to step 4
+              </LinkButton>
+            )}
+          </span>
+        </div>
+      )}
+      {careless && (carelessDr > 1.1 || carelessMore > 5) && (
+        <p className="mt-2 text-xs text-slate-600" data-testid="play-styles-careless">
+          The player who merges without looking spends about {carelessDr.toFixed(1)}× the DR and collects up to {Math.round(carelessMore)} points more of a reward: an item still semi-blocked when the top rank is
+          made is subsidy that was never used, so they pay for it in DR and merge more on the way. It shows most in a segment that gets a lot of subsidy. Real players fall between the first two rows.
+        </p>
+      )}
+      {all && moreDr > 1.25 && (
+        <p className="mt-2 text-xs text-slate-600" data-testid="play-styles-dr">
+          The player who taps everything spends about {moreDr.toFixed(1)}× the DR: a reward under a tile only opens when a matching item is merged into it, so their board never clears and the next boards, with their
+          subsidy, never arrive. In the game that costs them DR. On a shared play link taps are free, so nothing stops them - that is how a run on a link can end with far more than the amounts above.
+        </p>
+      )}
+    </Panel>
+  )
+}
+
 const PACE_LABEL = { 'on-track': 'On track', early: 'Early', late: 'Short' }
 const PACE_CHIP = { 'on-track': 'validated', early: 'review', late: 'infeasible' }
 
@@ -793,15 +903,16 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
               )}
             </div>
           )}
-          {Object.keys(shown.shared?.rankValues ?? {}).length > 0 && (
+          {Object.keys(shownSeg?.rankValues ?? {}).length > 0 && (
             <div className="mt-3 rounded-2xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900" data-testid="rank-values-note">
-              <span className="font-semibold">Rank values the build changed.</span> The drop rules stayed exactly as you set them. With them, these rewards could not reach
-              their amount at the values you typed, so the build changed their four rank values (the same for every segment):
+              <span className="font-semibold">Rank values the build gave {shownSeg.name}.</span> The drop rules stayed exactly as you set them. The build gives every segment its own
+              four rank values for each reward - round amounts, each rank worth more than the items it is made of, so merging always pays - sized so this segment&apos;s average lands on
+              its amount:
               <ul className="mt-1 list-disc pl-4">
-                {Object.entries(shown.shared.rankValues).map(([type, v]) => (
+                {Object.entries(shownSeg.rankValues).map(([type, v]) => (
                   <li key={type} data-rank-values={type}>
-                    <span className="font-semibold">{REWARD_TYPE_LABELS[type]}</span>: {v.from.join(' / ')} became {v.to.join(' / ')}{' '}
-                    {v.paidBefore == null ? '(the amount asked is smaller than one top prize at your values).' : `(at your values the same drops paid ${formatRewardAmount(type, v.paidBefore)}).`}{v.limited ? ' That is the most the build changes values by, and it is still not enough - see the segment below.' : ''}
+                    <span className="font-semibold">{REWARD_TYPE_LABELS[type]}</span>: <span data-field="to">{v.to.join(' / ')}</span> (you typed {v.from.join(' / ')}
+                    {v.reason === 'smaller-than-a-prize' ? '; the amount asked is smaller than one top prize at those values' : ''}).{v.limited ? ' That is the most the build changes values by, and it is still not enough - see the segment below.' : ''}
                   </li>
                 ))}
               </ul>
@@ -922,8 +1033,8 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
                 ? `, at rank ${shown.twister.sizing.rank} or ${shown.twister.sizing.rank + 1}`
                 : `, at rank ${shown.twister.sizing.rank}`}
               {shown.twister.sizing.rounds > 0
-                ? shown.twister.sizing.steady && shown.twister.sizing.sizedForCollects > 0
-                  ? ` - the items were made bigger so that every segment's typical player finishes at least ${shown.twister.sizing.minCollects} Twister items${shown.twister.sizing.collectsMin != null ? ` (the fewest now: ${Math.round(shown.twister.sizing.collectsMin)})` : ''}. With one or two, all the twists arrive in one or two jumps ("Keep every segment's Twister steady", step 4).`
+                ? shown.twister.sizing.steady
+                  ? ` - the items were made bigger so that every segment's Twister DR arrives in enough steps for its typical player to get the last twist near the end${shown.twister.sizing.collectsMin != null ? ` (the fewest finished Twister items in a segment now: ${Math.round(shown.twister.sizing.collectsMin)})` : ''}. With one or two, all the twists arrive in one or two jumps ("Keep every segment's Twister steady", step 4).`
                   : ' - the items were made bigger, because otherwise the typical player of one segment would not have finished a single Twister item by the time twists are counted.'
                 : '.'}{' '}
               You can see it in the containers above.
@@ -952,7 +1063,7 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
           )}
           {shown.twister.sizing?.needsRebuild && (
             <p className="mt-1 text-xs text-amber-700" data-testid="twister-needs-rebuild">
-              The twists you typed since this build need more Twister DR than its drops give. Build again and the build raises the Twister drops to fit.
+              The twists you typed since this build do not fit the Twister it sized (its items and values were made for the twists it was given). Build again and the build sizes the Twister for these twists.
             </p>
           )}
           <p className="mt-2 text-[11px] text-slate-500">
@@ -1257,7 +1368,7 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
       {v && draftSeg && (
         <Panel
           title={`Seeded validation: ${draftSeg.name}`}
-          subtitle={`${validation.runs} simulated players, seed ${validation.seed} - an independent run, not the one the build scored itself on.`}
+          subtitle={`${validation.runs} simulated players, each rolling their own lucky drops like a real one (seed ${validation.seed}) - an independent run, not the one the build scored itself on.`}
           tag={<StatusChip kind={v.allWithinTolerance ? 'validated' : 'review'}>{v.allWithinTolerance ? 'Simulation validated' : 'Validated - off target'}</StatusChip>}
         >
           <table className="w-full text-sm tabular-nums" data-testid="validation-table">
@@ -1268,6 +1379,7 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
                 <th className="py-1 pr-3">Build estimate</th>
                 <th className="py-1 pr-3">Validated average</th>
                 <th className="py-1 pr-3">Range (p10 – p90)</th>
+                <th className="py-1 pr-3">Players within {Math.round((v.margin ?? (phase === 'rc' ? 0.25 : 0.15)) * 100)}%</th>
               </tr>
             </thead>
             <tbody>
@@ -1287,11 +1399,25 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
                     <td className="py-1 pr-3 text-slate-500">
                       {formatRewardAmount(r.type, r.p10)} – {formatRewardAmount(r.type, r.p90)}
                     </td>
+                    <td className={`py-1 pr-3 font-semibold ${r.nearShare == null ? 'text-slate-400' : r.nearShare >= 0.9 ? 'text-emerald-700' : r.nearShare >= 0.6 ? 'text-slate-700' : 'text-amber-700'}`} data-cell="near">
+                      {r.nearShare == null ? '-' : `${Math.round(r.nearShare * 100)} of 100`}
+                    </td>
                   </tr>
                 ))}
             </tbody>
           </table>
           {v.resources.every((r) => !(r.target > 0)) && <p className="text-sm text-slate-500">No reward targets to validate for this segment.</p>}
+          {v.allNearShare != null && (
+            <p className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" data-testid="validation-closeness">
+              <span className="font-semibold" data-field="all-near">
+                {Math.round(v.allNearShare * 100)} of 100 players
+              </span>{' '}
+              end within {Math.round((v.margin ?? 0.15) * 100)}% of the amount asked on every reward at once. The average says where the middle player lands; this says how many players are near it.
+              {draft?.shared?.steadyDrops
+                ? ' Every merge of a rank drops the same items in this build, so what still differs between two players is their luck with the generator.'
+                : ' The containers of this build are picked at random at each merge, so two players can end far apart - step 4 has "Every merge of a rank drops the same items".'}
+            </p>
+          )}
           <p className="mt-2 text-xs text-slate-500">
             {phase === 'rc' ? `${pct(v.entryRate * 100)} of players reached Recompletion; ` : ''}
             {pct(v.completionRate * 100)} finished the phase. Average player spend {dr(v.drSpent.mean)}. Energy collected {Math.round(v.energyMean)} - that implies a credit of{' '}
@@ -1299,6 +1425,8 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
           </p>
         </Panel>
       )}
+
+      {v && draftSeg && (v.styles?.length ?? 0) > 1 && <PlayStylesPanel v={v} segmentName={draftSeg.name} phase={phase} goTo={goTo} />}
 
       <Panel title="Twister spin costs" subtitle="Optional. If you typed twists in step 4, the build has already priced them and Apply sets the prices. The Twister tool is for a closer look." tag={<SharedTag />}>
         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600" data-testid="finalize-twister">

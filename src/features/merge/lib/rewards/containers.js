@@ -97,6 +97,49 @@ export function containersOfBoards(boards, phase = 'main') {
   return modelContainers({ dropGroups: board.dropGroups ?? [], dropGroupsConfig: board.dropGroupsConfig ?? [], minDropRank: board.minDropRank ?? MIN_DROP_RANK, phase })
 }
 
+// ONE EVENT: the normal list and Recompletion happen one after the other, so
+// the Ops "Small Rewards Bank" and "Small Reward Weights" of an event run to
+// merge tier 14 (economist: "the small rewards should hold a drop for the
+// rank13 and 14 merge"). Tiers 2 to 12 are the normal list's own; tiers 13
+// and 14 can only be made in Recompletion, so they are what the Recompletion
+// list drops there (the normal list's own rows for them when there is no
+// Recompletion list to play). A Recompletion container that the normal
+// list does not have is added after the normal ones (ContA, ContB, ... carry
+// on); one that holds exactly the same items is the same container.
+// Rows carry `weightsByKey` (container key -> weight).
+export function containersOfEvent(boards, recompletionBoards = []) {
+  const main = containersOfBoards(boards, 'main')
+  const rc0 = recompletionBoards?.[0]
+  // A Recompletion list that is played (it has drops, or boards with items
+  // under their tiles) is the source - also when it drops nothing, which is
+  // then exactly what tiers 13 and 14 say (NoDrop). Only with no such list do
+  // the normal list's own rows for those tiers stand in.
+  const rcPlays = !!rc0 && ((rc0.dropGroups ?? []).length > 0 || recompletionBoards.some((b) => (b?.blockedQueue?.length ?? 0) > 0))
+  const source = rcPlays ? rc0 : boards?.[0]
+  const top = source ? modelContainers({ dropGroups: source.dropGroups ?? [], dropGroupsConfig: source.dropGroupsConfig ?? [], minDropRank: source.minDropRank ?? MIN_DROP_RANK, phase: 'rc' }) : { containers: [], rows: [] }
+  const containers = main.containers.map((c) => ({ ...c }))
+  const keyBySyntax = new Map(containers.map((c) => [c.syntax, c.key]))
+  const keyOfMainId = new Map(main.containers.map((c) => [c.id, c.key]))
+  const rows = main.rows.map((row) => ({ ...row, weightsByKey: Object.fromEntries(Object.entries(row.weights).map(([id, w]) => [keyOfMainId.get(id), w])) }))
+  const topById = new Map(top.containers.map((c) => [c.id, c]))
+  for (const row of top.rows.filter((r) => r.tier > MAX_RANK)) {
+    const weightsByKey = {}
+    for (const [id, weight] of Object.entries(row.weights)) {
+      const c = topById.get(id)
+      if (!c) continue
+      if (!keyBySyntax.has(c.syntax)) {
+        const key = containerKey(containers.length)
+        containers.push({ ...c, key, fromRecompletion: true })
+        keyBySyntax.set(c.syntax, key)
+      }
+      const key = keyBySyntax.get(c.syntax)
+      weightsByKey[key] = (weightsByKey[key] ?? 0) + weight
+    }
+    rows.push({ ...row, weightsByKey })
+  }
+  return { containers, rows, startRank: main.startRank, topTiersFrom: source === rc0 ? 'rc' : 'main' }
+}
+
 // Runs of neighbouring tiers that share exactly the same weights, for a
 // compact display ("ranks 6 to 12"). Each run: { from, to, row }.
 export function groupContainerRows(rows) {

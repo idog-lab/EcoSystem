@@ -5,7 +5,7 @@
 import { simulatePlaythrough } from '../simulation/mergeSimulation'
 import { MAX_RANK, RC_MAX_RANK } from '../core/ranks'
 import { MIN_DROP_RANK } from './dropGroups'
-import { REWARD_TYPES, ALL_REWARD_TYPES, REWARD_MAX_RANK, rewardPrizeAmount, roundRewardAmount } from './rewardChain'
+import { REWARD_TYPES, ALL_REWARD_TYPES, REWARD_MAX_RANK, rewardPrizeAmount, roundRewardAmount, DEFAULT_LEFTOVER_POLICY } from './rewardChain'
 
 // "Deduct 80% of expected collectible reward ENERGY from the main-chain
 // subsidy... apply CC before the deduction: effective subsidy = base subsidy
@@ -47,7 +47,7 @@ export function computeEffectiveSubsidy(baseSubsidy, ccPercent, expectedCollecti
 // real, configured prize amounts.
 const UNITS_PER_COLLECT = 2 ** (REWARD_MAX_RANK - 1)
 
-export function payoutForUnits(units, rewardChainConfig, type, leftoverPolicy = 'forfeit') {
+export function payoutForUnits(units, rewardChainConfig, type, leftoverPolicy = DEFAULT_LEFTOVER_POLICY) {
   const whole = Math.floor(units / UNITS_PER_COLLECT)
   let payout = whole * rewardPrizeAmount(rewardChainConfig, type, REWARD_MAX_RANK)
   if (leftoverPolicy === 'collect') {
@@ -65,7 +65,7 @@ export function payoutForUnits(units, rewardChainConfig, type, leftoverPolicy = 
 // between two steps of the configured prize ladder - `exact` is false and
 // `payout` is the closest feasible result, which the workflow reports as a
 // limitation of the ladder rather than papering over.
-export function closestUnitsForTarget(target, rewardChainConfig, type, leftoverPolicy = 'forfeit') {
+export function closestUnitsForTarget(target, rewardChainConfig, type, leftoverPolicy = DEFAULT_LEFTOVER_POLICY) {
   if (!(target > 0)) return { units: 0, payout: 0, exact: true }
   const prize4 = rewardPrizeAmount(rewardChainConfig, type, REWARD_MAX_RANK)
   if (!(prize4 > 0)) return { units: 0, payout: 0, exact: false, noPrize: true }
@@ -234,6 +234,21 @@ export function validateConfigAcrossRuns(
     rcDropGroupsById,
     rcMinDropRank,
     rcLeftoverPolicy,
+    // How the simulated players take the small rewards ('merge' | 'best' |
+    // 'all' - mergeSimulation.js: findTapCollectCell). A tapping player can
+    // stay on one board for ever, so such runs get a longer leash.
+    collectPolicy = 'merge',
+    maxSteps = undefined,
+    // Every simulated player rolls their own lucky drops, like a real one
+    // (mergeSimulation.js: options.luckRng). Off by default: an average is
+    // steadier when all players have the same luck.
+    randomLuck = false,
+    // The players merge without looking (mergeSimulation.js: options.mergeRng).
+    carelessMerges = false,
+    // Also return every player's own amounts ({ main, rc, whole }: per
+    // resource, one number a player; and drSpent), for "how many players
+    // land near the amount asked".
+    keepSamples = false,
   } = {},
 ) {
   const rng = mulberry32(seed)
@@ -276,6 +291,10 @@ export function validateConfigAcrossRuns(
       rcDropGroupsById,
       rcMinDropRank,
       rcLeftoverPolicy,
+      collectPolicy,
+      ...(maxSteps ? { maxSteps } : {}),
+      ...(randomLuck ? { luckRng: rng } : {}),
+      ...(carelessMerges ? { mergeRng: rng } : {}),
     })
     for (const type of ALL_REWARD_TYPES) {
       whole[type].push(result.collected[type] ?? 0)
@@ -311,6 +330,7 @@ export function validateConfigAcrossRuns(
     payoutsRcPhase: rcBoards ? summarizeMap(rc) : null,
     payoutsMainPhaseBySource: { tile: summarizeMap(mainTile), drop: summarizeMap(mainDrop) },
     payoutsRcPhaseBySource: rcBoards ? { tile: summarizeMap(rcTile), drop: summarizeMap(rcDrop) } : null,
+    ...(keepSamples ? { samples: { whole, main, rc: rcBoards ? rc : null, drSpent: drSpentSamples } } : {}),
     leftoverForfeited: summarizeMap(forfeited),
     subsidyReached: Object.fromEntries(
       Object.entries(delivery).map(([phase, d]) => [phase, { share: d.shares.length ? d.shares.reduce((s, v) => s + v, 0) / d.shares.length : null, stoppedOn: Array.from(d.stoppedOn, (n) => n ?? 0) }]),

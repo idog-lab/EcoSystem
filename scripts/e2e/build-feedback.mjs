@@ -35,7 +35,7 @@ function blankBoard(name, index, budget) {
   b.minDropRank = 9
   return b
 }
-const lists = (b2) => ({ boards: [blankBoard('Board 1', 0, 150), blankBoard('Board 2', 1, b2)], recompletionBoards: [blankBoard('Board 1', 0, 150), blankBoard('Board 2', 1, 300)] })
+const lists = (b2) => ({ boards: [blankBoard('Board 1', 0, 150), blankBoard('Board 2', 1, b2)], recompletionBoards: [blankBoard('Board 1', 0, 300), blankBoard('Board 2', 1, 4500)] })
 
 const { browser, page, errors } = await launch({
   save: { segments: [{ name: 'Base', ...lists(600) }, { name: 'Bigger', ...lists(800), segmentFactor: 1.15 }, { name: 'Biggest', ...lists(900), segmentFactor: 1.25 }] },
@@ -202,7 +202,7 @@ ok('...and is not called out of date', (await page.getByTestId('build-needs-rebu
 await step(page, 'finalize').click()
 await page.waitForTimeout(200)
 const whole = page.getByTestId('finalize-whole-event')
-ok('step 5 shows both phases and one apply for the whole event', /Normal: built, not applied/.test(await whole.innerText()) && /Recompletion: built, not applied/.test(await whole.innerText()) && (await page.getByTestId('finalize-apply-all').innerText()).includes('Normal + Recompletion'))
+ok(`step 5 shows both phases and one apply for the whole event ("${(await whole.innerText()).replace(/\s+/g, ' ').slice(0, 90)}")`, /Normal: built, not applied/.test(await whole.innerText()) && /Recompletion: built, not applied/.test(await whole.innerText()) && (await page.getByTestId('finalize-apply-all').innerText()).includes('Normal + Recompletion'))
 await shot(page, 'f3-finalize')
 await page.getByTestId('finalize-apply-all').click()
 await page.waitForTimeout(800)
@@ -221,10 +221,14 @@ await page.waitForTimeout(400)
 const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), SAVE_KEY)
 const coinsOf = (seg, list = 'boards') => saved.segments[seg][list][0].rewardChainConfig.coins.map((r) => r.prizeAmount)
 ok('saved: every segment has its own coin values', [0, 1, 2].every((i) => coinsOf(i).every((v) => v > 0)) && coinsOf(2)[3] !== coinsOf(0)[3])
-ok('saved: Recompletion has no coin target here, so its coin ranks are left for a later build', coinsOf(0, 'recompletionBoards').every((v) => v === 0))
+// (One table, one set of values for the whole event: Recompletion plays the normal event's, for the same segment.)
+ok('saved: Recompletion carries the same rank values as its normal event, coins included, in every segment', [0, 1, 2].every((i) => JSON.stringify(saved.segments[i].recompletionBoards[0].rewardChainConfig) === JSON.stringify(saved.segments[i].boards[0].rewardChainConfig)) && coinsOf(0, 'recompletionBoards').every((v) => v > 0))
+ok('saved: ...and the same merge drops, for every merge the normal event makes', [0, 1, 2].every((i) => JSON.stringify(saved.segments[i].recompletionBoards[0].dropGroupsConfig.slice(0, 12)) === JSON.stringify(saved.segments[i].boards[0].dropGroupsConfig.slice(0, 12)) && saved.segments[i].recompletionBoards[0].minDropRank === saved.segments[i].boards[0].minDropRank))
 const puzzle4 = (seg) => saved.segments[seg].boards[0].rewardChainConfig.puzzles[3]
 // (The build may change a reward's rank values to reach its amount: what was typed is kept beside the value in force.)
-ok(`saved: the other reward definitions are still one shared set (puzzle rank 4: ${puzzle4(0).prizeAmount}, typed ${puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount})`, JSON.stringify(saved.segments[2].boards[0].rewardChainConfig.puzzles) === JSON.stringify(saved.segments[0].boards[0].rewardChainConfig.puzzles) && (puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount) === 65)
+const puzzlesOf = (seg) => saved.segments[seg].boards[0].rewardChainConfig.puzzles
+// (Every segment has its own values now - round ones that reward merging - and the typed value is kept as the definition for all.)
+ok(`saved: every segment has its own puzzle values, round and rewarding merging, with the typed definition kept (${[0, 1, 2].map((i) => puzzlesOf(i).map((r) => r.prizeAmount).join('/')).join(' | ')}; typed rank 4: ${puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount})`, [0, 1, 2].every((i) => { const v = puzzlesOf(i).map((r) => r.prizeAmount); return v.every((x) => Number.isInteger(x) && (x < 10 || x % 5 === 0)) && v[1] >= 2 * v[0] && v[2] >= 2 * v[1] && v[3] > 2 * v[2] && (puzzlesOf(i)[3].typed?.prizeAmount ?? v[3]) === 65 }))
 ok('saved: the puzzle item syntax follows the value in force, and the typed one is kept', puzzle4(0).syntax === `[dynamic(dr-puzzle:${puzzle4(0).prizeAmount})]` && (puzzle4(0).typed?.syntax ?? puzzle4(0).syntax) === '[dynamic(dr-puzzle:65)]')
 ok('saved: the milestone reward is on every segment', saved.segments.slice(0, 3).every((s) => s.boards[0].rewardRanks.includes(5) && s.boards[0].rewardSyntax[5] === 'coins:50'))
 ok('saved: both phases are built for every segment', [0, 1, 2].every((i) => saved.segments[i].boards.every((b) => b.blockedQueue.length > 0) && saved.segments[i].recompletionBoards.every((b) => b.blockedQueue.length > 0)))
@@ -243,12 +247,12 @@ ok('saved: both phases are built for every segment', [0, 1, 2].every((i) => save
   const head = await page.locator('table thead th').evaluateAll((els) => els.map((e) => e.innerText.trim()))
   const body = await page.locator('table tbody tr').evaluateAll((els) => els.map((tr) => [...tr.querySelectorAll('td')].map((td) => Number(td.innerText.trim()))))
   ok(`Syntax, Small Reward Weights: ${head.join(' | ')}`, /merge tier/i.test(head[0]) && /nodrop/i.test(head.at(-1)) && head.length === bankRows.length + 2)
-  ok('...merge tiers 2 to 12; below the drop start rank NoDrop only, from it every merge drops', body.length === 11 && body[0][0] === 2 && body.at(-1)[0] === 12 && body[0].at(-1) === 1000 && body[0].slice(1, -1).every((v) => v === 0) && body.at(-1).at(-1) === 0 && body.at(-1).slice(1, -1).reduce((s, v) => s + v, 0) === 1000)
-  await page.getByRole('button', { name: 'RC Small Rewards Bank', exact: true }).click()
-  await page.waitForTimeout(300)
-  // Recompletion has no reward targets in this journey, so nothing drops there - and the sheet says so
-  // instead of showing an old hand-typed table.
-  ok('Syntax: Recompletion has its own containers sheet - empty here, and it says why', (await page.locator('table tbody tr').count()) === 0 && /No containers yet/.test(await page.getByTestId('containers-source').innerText()))
+  // (The sheet runs to merge tier 14 now: 13 and 14 are what Recompletion drops there - nothing, in this journey.)
+  const tier12 = body.find((r) => r[0] === 12)
+  ok('...merge tiers 2 to 14; below the drop start rank NoDrop only, from it every merge of the normal event drops', body.length === 13 && body[0][0] === 2 && body.at(-1)[0] === 14 && body[0].at(-1) === 1000 && body[0].slice(1, -1).every((v) => v === 0) && tier12.at(-1) === 0 && tier12.slice(1, -1).reduce((s, v) => s + v, 0) === 1000)
+  ok('...and tiers 13 and 14 - the merges only Recompletion makes - drop too: 1000 in all, no NoDrop', body.slice(-2).every((r) => r.at(-1) === 0 && r.slice(1, -1).reduce((a, v) => a + v, 0) === 1000))
+  // One bank and one weights table for the whole event: Recompletion has no sheets of its own.
+  ok('Syntax: there is no Recompletion containers sheet - the game has one table for both', (await page.getByRole('button', { name: /^RC Small/ }).count()) === 0)
   await page.locator('header').getByRole('button', { name: 'Build event', exact: true }).click()
   await page.waitForTimeout(300)
 }
@@ -306,7 +310,11 @@ await browser.close()
 
   // 20 asked, when one rank-4 item pays 75: most players would get nothing
   // -> reported, with fixes. It does not block: the build is usable.
+  // (With leftovers lost - the older rule, still selectable in step 4. Collected,
+  // as they are by default, a small amount is payable in the smaller items.)
   await step(page, 'rewards').click()
+  await page.locator('[data-field="leftover-policy"]').selectOption('forfeit')
+  await page.waitForTimeout(200)
   await set(page.locator('[data-target="energy"]'), 20)
   await step(page, 'build').click()
   await page.waitForTimeout(200)
@@ -314,7 +322,7 @@ await browser.close()
   // By default the build may change rank values: it makes merge energy's smaller, so 20 is one whole prize, and says so.
   {
     const note = (await page.getByTestId('rank-values-note').innerText()).replace(/\s+/g, ' ')
-    ok(`20 asked when rank 4 pays 75: the build keeps the rules and makes the rank values smaller ("${note.slice(0, 150)}")`, note.includes('Merge Energy: 5 / 15 / 35 / 75 became 1 / 4 / 9 / 20') && (await page.locator('[data-cause="coarse-ladder"]').count()) === 0 && /Ready/.test(await rowText()))
+    ok(`20 asked when rank 4 pays 75: the build keeps the rules and makes the rank values smaller ("${note.slice(0, 150)}")`, /Merge Energy: \d+ \/ \d+ \/ \d+ \/ (10|15|20|25) \(you typed 5 \/ 15 \/ 35 \/ 75/.test(note) && (await page.locator('[data-cause="coarse-ladder"]').count()) === 0 && /Ready/.test(await rowText()))
     await step(page, 'rewards').click()
     await page.waitForTimeout(200)
     ok('step 4 still shows the values as typed, and says what the build changed them to', (await page.locator('[data-definition="energy"]').innerText()).includes('5 / 15 / 35 / 75') && (await page.locator('[data-field="rank-values-by-build"]').isChecked()))

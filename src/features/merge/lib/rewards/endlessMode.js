@@ -35,7 +35,8 @@
 // THE THREE NUMBERS ARE THIS APP'S CHOICE. The economist gave the direction,
 // not the amounts; they are named constants here so they are easy to find
 // and change, and the play screens show what they produce.
-import { REWARD_TYPES, TWISTER_TYPE, REWARD_MAX_RANK, rewardPrizeAmount, rewardChainForNextPhase } from './rewardChain'
+import { REWARD_TYPES, TWISTER_TYPE, REWARD_MAX_RANK, rewardPrizeAmount, rewardChainForNextPhase, bestUnitValue } from './rewardChain'
+import { DEFAULT_TARGET_EV } from '../core/luckyDrop'
 import { MIN_DROP_RANK, multiDropRankOf, tripleDropRankOf, soloDropRankOf, TWISTER_FILL_MIN_SHARE, TWISTER_SINGLE_ITEM_SHARE } from './dropGroups'
 import { RC_MAX_RANK } from '../core/ranks'
 import { buildAlwaysDropConfiguration, DROP_TABLE_TOTAL_WEIGHT } from './rewardTargeting'
@@ -45,6 +46,19 @@ export const ENDLESS_DROP_VALUE_MULTIPLIER = 1.5
 export const ENDLESS_COIN_ENERGY_SHARE = 0.8
 export const ENDLESS_PRIORITY_TYPES = ['coins', 'energy']
 export const ENDLESS_MIN_UNITS_PER_DROP = 1
+// MERGE ENERGY MAY NEVER PAY FOR ITSELF. One merge energy is one free tap, and
+// in endless every tap leads to merges that drop more merge energy. With 40%
+// of 1.5x drops as merge energy that loop gave back MORE taps than it used:
+// a player who reached endless never needed DR again and the rewards never
+// stopped (found by playing a shared stage: 45 DR spent, 28,000 free taps,
+// 44,000 merge energy and 4,300 puzzles collected - economist: "he ended up
+// with crazy rewards from the small rewards"). So the merge energy in the
+// endless drops is held to what pays back at most this share of the taps:
+// 0.5 = for every 100 taps (paid or free) about 50 free taps come back, so
+// 100 DR buys about 200 taps and no more. What is taken off the merge energy
+// goes to coins, so a drop still carries 1.5x and is still mostly coins and
+// merge energy. This app's own number, like the three above.
+export const ENDLESS_ENERGY_PAYBACK_MAX = 0.5
 // A merge always makes at least a rank 2, so the start rank never goes lower.
 const LOWEST_MERGE_RESULT = 2
 
@@ -96,7 +110,30 @@ export function averageDrop(dropGroupsConfig, dropGroups, fromRank, countGroup =
 // The endless drops, derived from the drops in force when rank 14 is
 // reached. Returns { dropGroups, dropGroupsConfig, minDropRank } ready for
 // the play engine, plus what they were derived from (for display).
-export function buildEndlessDrops({ dropGroups = [], dropGroupsConfig = [], minDropRank = MIN_DROP_RANK, rewardChainConfig = null, multiDropRank = null, tripleDropRank = null, soloRank = null } = {}) {
+// Merge energy paid back per DR of generator output by these drops: a DR of
+// output is `targetEv` DR of item value, an item of rank r is worth 2^(r-1)
+// DR and making one takes one merge, so a DR is about targetEv / 2^(r-1)
+// merges that make rank r - each paying what that rank's table holds of
+// merge energy, at the best a unit of it pays.
+export function energyBackPerDr({ dropGroups = [], dropGroupsConfig = [], minDropRank = MIN_DROP_RANK }, rewardChainConfig, targetEv = DEFAULT_TARGET_EV) {
+  const byId = new Map(dropGroups.map((g) => [g.id, g]))
+  const unitValue = bestUnitValue(rewardChainConfig, 'energy')
+  let back = 0
+  for (let rank = minDropRank; rank <= RC_MAX_RANK; rank++) {
+    const table = dropGroupsConfig?.[rank - 1]
+    const total = tableTotal(table)
+    if (!table || total <= 0) continue
+    let units = 0
+    for (const e of table.entries) {
+      const itemRank = byId.get(e.groupId)?.items?.energy
+      if (itemRank != null && e.weight > 0) units += (e.weight / total) * unitsOf(itemRank)
+    }
+    back += (targetEv / 2 ** (rank - 1)) * units * unitValue
+  }
+  return back
+}
+
+export function buildEndlessDrops({ dropGroups = [], dropGroupsConfig = [], minDropRank = MIN_DROP_RANK, rewardChainConfig = null, multiDropRank = null, tripleDropRank = null, soloRank = null, targetEv = DEFAULT_TARGET_EV } = {}) {
   const baseStartRank = minDropRank ?? MIN_DROP_RANK
   const startRank = Math.max(LOWEST_MERGE_RESULT, baseStartRank - ENDLESS_DROP_RANK_SHIFT)
   const groups = dropGroups ?? []
@@ -156,7 +193,26 @@ export function buildEndlessDrops({ dropGroups = [], dropGroupsConfig = [], minD
   // The "at least two items from rank N" rule carries on in endless as it is,
   // and the single-item rank moves down with the start rank (the first rank
   // that drops stays the single-item one).
-  const built = buildAlwaysDropConfiguration({ unitsPerDrop, dropGroups: keptGroups, dropGroupsConfig: tables, minDropRank: startRank, multiDropRank, tripleDropRank, twister, soloRank: Number.isFinite(soloRank) ? soloRank - ENDLESS_DROP_RANK_SHIFT : null })
+  const make = () => buildAlwaysDropConfiguration({ unitsPerDrop, dropGroups: keptGroups, dropGroupsConfig: tables, minDropRank: startRank, multiDropRank, tripleDropRank, twister, soloRank: Number.isFinite(soloRank) ? soloRank - ENDLESS_DROP_RANK_SHIFT : null })
+  let built = make()
+  // Merge energy is held to what can never pay for itself
+  // (ENDLESS_ENERGY_PAYBACK_MAX); what is taken off it goes to coins.
+  const energyUnitsAsked = unitsPerDrop.energy
+  const backOf = () => energyBackPerDr({ dropGroups: built.dropGroups, dropGroupsConfig: built.dropGroupsConfig, minDropRank: startRank }, rewardChainConfig, targetEv)
+  for (let round = 0; round < 6 && unitsPerDrop.energy > 0; round++) {
+    const back = backOf()
+    if (!(back > ENDLESS_ENERGY_PAYBACK_MAX + 1e-6)) break
+    const next = tidy(unitsPerDrop.energy * (ENDLESS_ENERGY_PAYBACK_MAX / back) * 0.98)
+    const moved = unitsPerDrop.energy - next
+    unitsPerDrop.energy = next
+    // To coins; with no coin values, to the other rewards in the proportions
+    // they already have (so a drop still carries what it should).
+    const takers = payable.includes('coins') ? ['coins'] : others.filter((t) => unitsPerDrop[t] > 0)
+    const takersTotal = takers.reduce((s, t) => s + unitsPerDrop[t], 0)
+    for (const t of takers) unitsPerDrop[t] = tidy(unitsPerDrop[t] + (takersTotal > 0 ? (moved * unitsPerDrop[t]) / takersTotal : moved / takers.length))
+    built = make()
+  }
+  const energyBack = backOf()
   // A container whose weight rounded to nothing can never drop: leave it out.
   const live = new Set(built.dropGroupsConfig.flatMap((t) => t.entries.filter((e) => e.weight > 0).map((e) => e.groupId)))
   return {
@@ -165,6 +221,12 @@ export function buildEndlessDrops({ dropGroups = [], dropGroupsConfig = [], minD
     minDropRank: startRank,
     baseMinDropRank: baseStartRank,
     unitsPerDrop,
+    // Merge energy back per 100 DR of generator output, and whether it was
+    // held down to stay under the limit (what was asked before, in units).
+    energyBackPer100Dr: energyBack * 100,
+    energyHeld: unitsPerDrop.energy < energyUnitsAsked - 1e-9,
+    energyUnitsAsked,
+    targetEv,
     baseUnitsPerDrop: base.units,
     types: [...priority, ...others],
     hasDrops: priority.length + others.length > 0,
@@ -181,8 +243,10 @@ export function endlessOfDesign(mainBoards, rcBoards) {
   const rc = rcBoards?.[0]
   if (!rc) return null
   const rewardChainConfig = rewardChainForNextPhase(mainBoards?.[0]?.rewardChainConfig ?? null, rc.rewardChainConfig ?? null)
-  const endless = buildEndlessDrops({ dropGroups: rc.dropGroups ?? [], dropGroupsConfig: rc.dropGroupsConfig ?? [], minDropRank: rc.minDropRank ?? undefined, rewardChainConfig, multiDropRank: multiDropRankOf(rc), tripleDropRank: tripleDropRankOf(rc), soloRank: soloDropRankOf(rc) })
-  return { ...endless, rewardChainConfig, targetEv: rc.targetEv ?? 1, builtFromDrops: (rc.dropGroups ?? []).length > 0 }
+  // (The lucky-drop EV a session plays Recompletion with - playSession.js.)
+  const targetEv = rc.targetEv ?? DEFAULT_TARGET_EV
+  const endless = buildEndlessDrops({ dropGroups: rc.dropGroups ?? [], dropGroupsConfig: rc.dropGroupsConfig ?? [], minDropRank: rc.minDropRank ?? undefined, rewardChainConfig, multiDropRank: multiDropRankOf(rc), tripleDropRank: tripleDropRankOf(rc), soloRank: soloDropRankOf(rc), targetEv })
+  return { ...endless, rewardChainConfig, targetEv, builtFromDrops: (rc.dropGroups ?? []).length > 0 }
 }
 
 // What the endless drops come to, in the terms an economist reads:
@@ -197,8 +261,9 @@ export function endlessOfDesign(mainBoards, rcBoards) {
 // output is `targetEv` DR of item value (lucky drops are open in endless),
 // an item of rank r is worth 2^(r-1) DR, and making one takes one merge - so
 // a DR of output is about targetEv / 2^(r-1) merges that make rank r. One
-// merge energy funds one x1 tap, so `energyPer100Dr` of 100 or more means
-// endless play pays for itself.
+// merge energy funds one x1 tap, so `energyPer100Dr` of 100 or more would
+// mean endless play pays for itself - which buildEndlessDrops no longer lets
+// happen (ENDLESS_ENERGY_PAYBACK_MAX).
 export function describeEndlessDrops(endless, rewardChainConfig, { targetEv = 1 } = {}) {
   // An average over the drops a player gets: a merge that makes rank r
   // happens about half as often as one that makes rank r - 1.
@@ -217,6 +282,6 @@ export function describeEndlessDrops(endless, rewardChainConfig, { targetEv = 1 
     itemsPerDrop: allItems,
     coinEnergyShare: allItems > 0 ? priorityItems / allItems : 0,
     mergesPer100Dr: mergesPerDr * 100,
-    energyPer100Dr: mergesPerDr * 100 * perDrop.energy.payout,
+    energyPer100Dr: energyBackPerDr(endless, rewardChainConfig, targetEv) * 100,
   }
 }

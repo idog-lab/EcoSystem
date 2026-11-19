@@ -1,6 +1,6 @@
 import { DEFAULT_TARGET_EV } from './luckyDrop'
 import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from './generatorTier'
-import { createRewardChainConfig } from '../rewards/rewardChain'
+import { createRewardChainConfig, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { createDropGroupsConfig, DEFAULT_MIN_DROP_RANK } from '../rewards/dropGroups'
 import { createSmallRewardsBankConfig, createSmallRewardWeightsConfig } from '../rewards/smallRewardsBank'
 import { RC_MAX_RANK } from './ranks'
@@ -216,6 +216,10 @@ export function createBoard(name, { rows = 5, cols = 8 } = {}) {
     // may make them bigger (rank 3 at most) so every segment's typical player
     // finishes a few Twister items. Shared per list.
     twisterSteady: null,
+    // "Every merge of a rank drops the same items" (step 4): null/true = the
+    // build makes steady containers (rewardTargeting.js), false = the varied
+    // ones of before. One shared value per list.
+    steadyDrops: null,
     // V2: reward items this board's blocked queue carries alongside its
     // main-chain subsidy items - a durable, per-board authored/solver-written
     // config ({type, rank} entries, rewardChain.js's four resource types),
@@ -233,10 +237,10 @@ export function createBoard(name, { rows = 5, cols = 8 } = {}) {
     // forcedSemiRanks, which does sync). See placement.js for precedence.
     rewardSemiItems: [],
     // V2: what a phase's leftover unmerged reward items pay when the phase
-    // ends - 'forfeit' (nothing; the default, nothing is assumed to pay out
-    // automatically) or 'collect' (the player hand-collects each at its
-    // current rank). One shared value per list, read by both engines.
-    rewardLeftoverPolicy: 'forfeit',
+    // ends - 'collect' (the default: the player taps each one and is paid its
+    // own rank's value - rewardChain.js: DEFAULT_LEFTOVER_POLICY) or 'forfeit'
+    // (nothing). One shared value per list, read by both engines.
+    rewardLeftoverPolicy: DEFAULT_LEFTOVER_POLICY,
     // Twister widget. twisterSpinCost is the DR cost of one spin for THIS
     // segment and THIS list (main / RC A / RC B each have their own) - the
     // segment-specific balancing lever, one shared value per list, never

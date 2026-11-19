@@ -93,6 +93,8 @@ await page.waitForTimeout(500)
   const link = (await box.count()) === 1 ? await page.getByTestId('share-link').inputValue() : ''
   const decoded = link ? decodeStage(new URL(link).searchParams.get('stage')) : null
   ok('a link is made for the built normal event', !!decoded && decoded.boards.length === 2 && decoded.boards.every((b) => b.blockedQueue.length > 0))
+  // A chat app ends a link at a "-" or "_", so the link has none after the address.
+  ok(`the link is letters and digits only after the address - nothing a chat app can break it at (${link.length} characters, "${link.slice(0, 52)}...")`, /^https:\/\/idoggk\.github\.io\/Merge\/\?play&stage=[0-9A-Za-z]+$/.test(link))
   ok('...without the Recompletion boards, which have tiles and nothing under them', !!decoded && !(decoded.rcBoards?.length > 0))
   ok('...and it says so, and what to do', (await page.getByText(/The link plays the normal event only: Recompletion Board 1, 2 has tiles but nothing under them/).count()) === 1)
 }

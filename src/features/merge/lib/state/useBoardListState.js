@@ -68,7 +68,8 @@ export function useBoardListState({ boards: initialBoards, presets: initialPrese
       tileRewardType: boards[0]?.tileRewardType ?? null,
       twisterByBuild: boards[0]?.twisterByBuild ?? null,
       twisterSteady: boards[0]?.twisterSteady ?? null,
-      rewardLeftoverPolicy: boards[0]?.rewardLeftoverPolicy ?? 'forfeit',
+      steadyDrops: boards[0]?.steadyDrops ?? null,
+      rewardLeftoverPolicy: boards[0]?.rewardLeftoverPolicy ?? 'collect',
       twisterSpinCost: boards[0]?.twisterSpinCost ?? null,
       twisterSpinObjective: boards[0]?.twisterSpinObjective ?? null,
     }

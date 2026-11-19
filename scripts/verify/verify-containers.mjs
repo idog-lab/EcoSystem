@@ -111,8 +111,9 @@ console.log('--- 4. The sheets ---')
   const sheetNames = (wb) => wb.worksheets.map((w) => w.name)
   const wb = buildWorkbook(boards, rc)
   const names = sheetNames(wb)
-  check('the workbook keeps the reference tabs in order, then adds the two Recompletion tabs', names.indexOf('Small Rewards') < names.indexOf('Small Rewards Bank') && names.indexOf('Small Reward Weights') + 1 === names.indexOf('RC Small Rewards Bank') && names.indexOf('RC Small Rewards Bank') + 1 === names.indexOf('RC Small Reward Weights'))
-  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('RC Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.at(-1) === 'V2 Endless')
+  // (One bank and one weights table for the normal event and Recompletion: there are no "RC" container tabs any more.)
+  check('the workbook keeps the reference tabs in order, with no Recompletion container tabs', names.indexOf('Small Rewards') < names.indexOf('Small Rewards Bank') && names.indexOf('Small Rewards Bank') + 1 === names.indexOf('Small Reward Weights') && !names.some((n) => /^RC Small/.test(n)))
+  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.at(-1) === 'V2 Endless')
   check('no tab name is over Excel\'s 31 characters', names.every((n) => n.length <= 31))
   const read = (name) => {
     const ws = wb.getWorksheet(name)
@@ -120,17 +121,19 @@ console.log('--- 4. The sheets ---')
     ws.eachRow((row) => out.push(row.values.slice(1)))
     return out
   }
-  check('the workbook\'s Small Rewards Bank holds the model\'s containers', read('Small Rewards Bank').slice(1).every((r, i) => r[0] === containers[i].key && r[1] === containers[i].syntax))
-  const rcBank = read('RC Small Rewards Bank')
-  check(`Recompletion has its own containers (${rcBank.slice(1).map((r) => r.join('=')).join(', ')})`, rcBank.length >= 2 && rcBank.slice(1).every((r) => !/puzzle|charm/.test(r[1])))
-  check('...and its weights start at its own drop rank (tier 4) and run to 14', read('RC Small Reward Weights').length === 14 && read('RC Small Reward Weights')[2].at(-1) === NO_DROP_ONLY_WEIGHT && read('RC Small Reward Weights')[3].at(-1) === 0)
+  // (The event's bank: the normal containers first, then any only the rank 13 and 14 merges drop - section 6.)
+  check('the workbook\'s Small Rewards Bank starts with the model\'s containers', containers.every((c, i) => read('Small Rewards Bank')[i + 1][0] === c.key && read('Small Rewards Bank')[i + 1][1] === c.syntax) && read('Small Rewards Bank').length - 1 >= containers.length)
+  const rcBank = [['Key', 'Syntax'], ...buildSmallRewardsBankSheet(rc, { phase: 'rc' }).rows.map((r) => r.cells)]
+  check(`a Recompletion list's own containers can still be read off it (${rcBank.slice(1).map((r) => r.join('=')).join(', ')})`, rcBank.length >= 2 && rcBank.slice(1).every((r) => !/puzzle|charm/.test(r[1])))
+  const rcWeights = buildSmallRewardWeightsSheet(rc, { phase: 'rc' }).rows.map((r) => r.cells)
+  check('...and its weights start at its own drop rank (tier 4) and run to 14', rcWeights.length === 13 && rcWeights[1].at(-1) === NO_DROP_ONLY_WEIGHT && rcWeights[2].at(-1) === 0)
 
   const values = buildAllSheetsAsValueRows(boards, rc)
-  check('the Google Sheets export carries the same container sheets, endless included', ['Small Rewards Bank', 'Small Reward Weights', 'RC Small Rewards Bank', 'RC Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => values.some((v) => v.title === t)) && values.find((v) => v.title === 'Small Rewards Bank').rows[1][0] === 'ContA')
+  check('the Google Sheets export carries the same container sheets, endless included', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => values.some((v) => v.title === t)) && !values.some((v) => /^RC Small/.test(v.title)) && values.find((v) => v.title === 'Small Rewards Bank').rows[1][0] === 'ContA')
   const segments = [{ name: 'Segment 1', boards, recompletionBoards: rc }, { name: 'Segment 2', boards, recompletionBoards: rc }]
   const combined = sheetNames(buildAllSegmentsWorkbook(segments))
-  check('the combined workbook has them once (containers are shared by every segment)', ['Small Rewards Bank', 'Small Reward Weights', 'RC Small Rewards Bank', 'RC Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => combined.filter((n) => n === t).length === 1) && combined.every((n) => n.length <= 31))
-  check('...and so does the combined Google Sheets export', buildAllSegmentsSheetsAsValueRows(segments).filter((v) => /Small Reward/.test(v.title)).length === 7)
+  check('the combined workbook has them once (containers are shared by every segment), and each segment its own Small Rewards', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => combined.filter((n) => n === t).length === 1) && combined.includes('S1 Small Rewards') && combined.includes('S2 Small Rewards') && !combined.includes('Small Rewards') && combined.every((n) => n.length <= 31))
+  check('...and so does the combined Google Sheets export', buildAllSegmentsSheetsAsValueRows(segments).filter((v) => /Small Reward/.test(v.title)).length === 6)
 }
 
 console.log('--- 4b. From a chosen rank, every drop holds two or more items ---')
@@ -448,6 +451,138 @@ console.log('--- 5. Endless mode\'s containers, for Ops ---')
   check('the endless rules sheet states when it starts and where drops start', value('Starts when') === 14 && value('Merge drops start at rank (endless)') === 5 && value('Merge drops start at rank (Recompletion)') === 6 && value('Containers') === bank.rows.length)
   check('...and marks the two amounts as this tool\'s own', rules.rows.filter((r) => /not a confirmed game value/.test(r.cells[2])).length === 2)
   check('a design with no Recompletion list has no endless mode, and says so', buildEndlessBankSheet(main, []).rows.length === 0 && buildEndlessWeightsSheet(main, []).rows.length === 0 && buildV2EndlessSheet(main, []).rows[0].cells[1] === 'none')
+}
+
+console.log('--- 6. One event: the normal list and Recompletion in the same sheets ---')
+{
+  // Economist: "the generator weight should add the new rank 13 and 14 ... the
+  // small rewards should hold a drop for the rank13 and 14 merge ... the blocked
+  // queue, now we need to merge the normal and the RC one after another, because
+  // they happen one after another in the same event ... in the item ladder we
+  // need to hold the ladders also together."
+  const { buildGeneratorWeightsSheet, buildBlockedQueueSheet, buildItemLadderSheet, buildSmallRewardsSheet } = await import('../../src/features/merge/lib/export/eventSheets.js')
+  const { containersOfEvent } = await import('../../src/features/merge/lib/rewards/containers.js')
+  const main = builtList(6)
+  main[0].blockedQueue = [1, 2, 3]
+  main[0].rewardRanks = [5, 12]
+  main[0].rewardSyntax = { 5: 'coins:100', 12: 'grand-prize' }
+  // Recompletion: its own drops (different amounts), its own lucky drops, its own milestone rewards.
+  const rc = builtList(6, { coins: 20, puzzles: 90, energy: 10, charms: 60 })
+  rc[0].blockedQueue = [3, 4]
+  rc[0].targetEv = 1.3
+  rc[0].rewardRanks = [13, 14]
+  rc[0].rewardSyntax = { 13: 'thirteen', 14: 'second-grand-prize' }
+
+  // Generator Weights.
+  const gw = buildGeneratorWeightsSheet(main, rc)
+  const ranks = [...new Set(gw.rows.map((r) => r.cells[0]))]
+  check(`Generator Weights runs to rank 14 (ranks ${ranks[0]} to ${ranks.at(-1)}, ${gw.rows.length} rows)`, ranks.join(',') === '1,2,3,4,5,6,7,8,9,10,11,12,13,14')
+  const rowsOf = (rank) => gw.rows.filter((r) => r.cells[0] === rank)
+  check('ranks 13 and 14 have a row for every multiplier (x1, x2, x4), like rank 12', [12, 13, 14].every((rank) => rowsOf(rank).map((r) => r.cells[1]).join(',') === '1,2,4'))
+  check(`the columns run to T14 (${gw.columns.slice(-3).join(', ')}) and every row is that wide`, gw.columns.length === 16 && gw.columns[2] === 'T1 weight' && gw.columns.at(-1) === 'T14 weight' && gw.rows.every((r) => r.cells.length === 16))
+  check('...with nothing ever in T13 or T14 (the generator never makes them)', gw.rows.every((r) => r.cells[14] === 0 && r.cells[15] === 0))
+  check('every row still adds up to 1000 (the rank-1 row carries its normal weight only)', gw.rows.every((r) => r.cells[0] === 1 || r.cells.slice(2).reduce((a, v) => a + v, 0) === 1000))
+  check(`ranks 1 to 12 are written with the normal list's lucky drops, 13 and 14 with Recompletion's own (${rowsOf(12)[0].cells.slice(2, 5).join('/')} and ${rowsOf(13)[0].cells.slice(2, 5).join('/')})`, rowsOf(12)[0].cells[2] === 1000 && rowsOf(13)[0].cells[2] < 1000 && JSON.stringify(rowsOf(13).map((r) => r.cells.slice(1))) === JSON.stringify(rowsOf(14).map((r) => r.cells.slice(1))))
+  const alone = buildGeneratorWeightsSheet(main)
+  check('with no Recompletion list the two ranks are still there, written with the normal list\'s settings', alone.rows.filter((r) => r.cells[0] >= 13).length === 6 && alone.rows.filter((r) => r.cells[0] === 13)[0].cells[2] === 1000)
+
+  // Blocked Queue.
+  const queue = buildBlockedQueueSheet(main, rc)
+  check(`Blocked Queue holds the normal entries, then Recompletion's, numbered straight on (${queue.rows.map((r) => `${r.cells[0]}:${r.cells[2]}`).join(' ')})`, queue.rows.map((r) => r.cells[2]).join(',') === '1,2,3,3,4' && queue.rows.map((r) => r.cells[0]).join(',') === '1,2,3,4,5' && queue.rows.every((r) => r.cells[0] === r.cells[1] && r.cells[3] === 1 && r.cells[4] === 1))
+  check('one list on its own is still just that list', buildBlockedQueueSheet(main).rows.length === 3 && buildBlockedQueueSheet(rc).rows.length === 2)
+
+  // Item Ladder.
+  const ladder = buildItemLadderSheet(main, rc)
+  check(`Item Ladder is one ladder of 14 tiers (${ladder.rows.length} rows, last asset ${ladder.rows.at(-1).cells[1]})`, ladder.rows.length === 14 && ladder.rows.map((r) => r.cells[0]).join(',') === '1,2,3,4,5,6,7,8,9,10,11,12,13,14' && ladder.rows.every((r) => r.cells[1] === `item-t${r.cells[0]}`))
+  check('tiers 1 to 12 carry the normal list\'s milestone rewards, 13 and 14 Recompletion\'s', ladder.rows[4].cells[2] === 'coins:100' && ladder.rows[11].cells[2] === 'grand-prize' && ladder.rows[12].cells[2] === 'thirteen' && ladder.rows[13].cells[2] === 'second-grand-prize' && ladder.rows[0].cells[2] === '')
+  check('a ladder asked for one list alone still ends at rank 12', buildItemLadderSheet(main).rows.length === 12)
+
+  // Small Rewards Bank and Weights.
+  const event = containersOfEvent(main, rc)
+  const mainOnly = containersOfBoards(main, 'main')
+  const rcOnly = containersOfBoards(rc, 'rc')
+  const weights = buildSmallRewardWeightsSheet(main, { recompletionBoards: rc })
+  const bank = buildSmallRewardsBankSheet(main, { recompletionBoards: rc })
+  check(`Small Reward Weights runs over merge tiers 2 to 14 (${weights.rows.length} rows)`, weights.rows.map((r) => r.cells[0]).join(',') === '2,3,4,5,6,7,8,9,10,11,12,13,14')
+  check('tiers 13 and 14 drop: every weight a whole number, each row 1000 in all, no NoDrop', weights.rows.slice(-2).every((r) => r.cells.at(-1) === 0 && r.cells.slice(1).reduce((a, v) => a + v, 0) === 1000 && r.cells.every(Number.isInteger)))
+  check('tiers 2 to 12 are exactly the normal list\'s own rows', mainOnly.rows.every((row, i) => mainOnly.containers.every((c) => (row.weights[c.id] ?? 0) === weights.rows[i].cells[1 + event.containers.findIndex((x) => x.key === c.key)]) && row.noDrop === weights.rows[i].cells.at(-1)))
+  const syntaxWeights = (model, tier, byKey) => Object.fromEntries(model.containers.map((c) => [c.syntax, byKey ? (model.rows.find((r) => r.tier === tier).weightsByKey[c.key] ?? 0) : (model.rows.find((r) => r.tier === tier).weights[c.id] ?? 0)]).filter(([, w]) => w > 0))
+  check('tiers 13 and 14 are what Recompletion drops there, container for container', [13, 14].every((tier) => JSON.stringify(Object.entries(syntaxWeights(event, tier, true)).sort()) === JSON.stringify(Object.entries(syntaxWeights(rcOnly, tier, false)).sort())))
+  check(`the bank lists the normal containers first, then the ones only ranks 13 and 14 drop (${mainOnly.containers.length} + ${event.containers.length - mainOnly.containers.length})`, bank.rows.length === event.containers.length && event.containers.slice(0, mainOnly.containers.length).every((c, i) => c.key === mainOnly.containers[i].key && c.syntax === mainOnly.containers[i].syntax) && event.containers.length >= mainOnly.containers.length)
+  check('...every container a different drop, keys running on (ContA, ContB, ...)', new Set(bank.rows.map((r) => r.cells[1])).size === bank.rows.length && bank.rows.every((r, i) => r.cells[0] === containerKey(i)) && weights.columns.length === bank.rows.length + 2)
+  // A Recompletion list that is played but drops nothing: tiers 13 and 14 say exactly that.
+  const quietRc = [Object.assign(createBoard('RC 1'), { blockedQueue: [3, 3], dropGroups: [], dropGroupsConfig: createDropGroupsConfig(RC_MAX_RANK) })]
+  const quiet = buildSmallRewardWeightsSheet(main, { recompletionBoards: quietRc })
+  check('a Recompletion list that is played but has no merge drops: tiers 13 and 14 are NoDrop only, and no container is added', quiet.rows.length === 13 && quiet.rows.slice(-2).every((r) => r.cells.at(-1) === NO_DROP_ONLY_WEIGHT && r.cells.slice(1, -1).every((v) => v === 0)) && quiet.columns.length === mainOnly.containers.length + 2)
+  check('with no Recompletion list at all, tiers 13 and 14 are the normal list\'s own rows for them',buildSmallRewardWeightsSheet(main, { recompletionBoards: [] }).rows.length === 13 && buildSmallRewardWeightsSheet(main, { recompletionBoards: [] }).rows.at(-1).cells.slice(1).reduce((a, v) => a + v, 0) === 1000)
+  check('asked for one list alone, the sheets are as they were (tiers 2 to 12, and 2 to 14 for Recompletion)', buildSmallRewardWeightsSheet(main).rows.length === 11 && buildSmallRewardWeightsSheet(rc, { phase: 'rc' }).rows.length === 13)
+  // The Twister keys are listed when either list's containers carry the item.
+  const twRc = JSON.parse(JSON.stringify(rc))
+  twRc[0].dropGroups[0].items = { ...twRc[0].dropGroups[0].items, [TWISTER_TYPE]: 1 }
+  check('Small Rewards lists the Twister keys when only the Recompletion containers carry the item', buildSmallRewardsSheet(main, rc).rows.length === 16 && buildSmallRewardsSheet(main, twRc).rows.length === 20)
+
+  // The workbooks.
+  const tabs = buildWorkbook(main, rc).worksheets.map((w) => w.name)
+  check(`the workbook has one Blocked Queue and one Item Ladder - no separate Recompletion queue (${tabs.slice(0, 10).join(', ')})`, tabs.slice(0, 10).join('|') === 'Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights' && !tabs.includes('Recompletion Blocked Queue'))
+  const wb = buildWorkbook(main, rc)
+  check('...and its sheets hold both lists', wb.getWorksheet('Blocked Queue').rowCount === 6 && wb.getWorksheet('Item Ladder').rowCount === 15 && wb.getWorksheet('Small Reward Weights').rowCount === 14 && wb.getWorksheet('Generator Weights').columnCount === 16)
+  const values = buildAllSheetsAsValueRows(main, rc)
+  check('the Google Sheets export has the same tabs with the same rows', values.map((x) => x.title).join('|') === tabs.join('|') && values.find((x) => x.title === 'Blocked Queue').rows.length === 6 && values.find((x) => x.title === 'Item Ladder').rows.length === 15)
+  const segs = [{ name: 'A', boards: main, recompletionBoards: rc }, { name: 'B', boards: main, recompletionBoards: rc }]
+  const allTabs = buildAllSegmentsWorkbook(segs).worksheets.map((w) => w.name)
+  check(`the all-segments workbook: one Blocked Queue and one Item Ladder per segment, no RC copies (${allTabs.filter((n) => n.startsWith('S1 ')).join(', ')})`, allTabs.includes('S1 Blocked Queue') && allTabs.includes('S2 Item Ladder') && allTabs.includes('S1 RC Board Layouts') && !allTabs.some((n) => /RC Blocked Queue|RC Item Ladder/.test(n)))
+  const allValues = buildAllSegmentsSheetsAsValueRows(segs)
+  check('...the same in its Google Sheets form, with ranks 13 and 14 in the shared Generator Weights - written once for all segments', allValues.map((x) => x.title).join('|') === allTabs.join('|') && allValues.find((x) => x.title === 'Generator Weights').rows.filter((r) => r[1] === 14).length === 3 && allValues.find((x) => x.title === 'S2 Blocked Queue').rows.length === 6)
+}
+
+console.log('--- 7. Nothing is written twice on a page ---')
+{
+  // Economist: "in alot of pages we got many duplicants of think we dont need. go over the
+  // output and check which we duplicate alot in the same page without any need for that."
+  const { buildCombinedEventDataSheet, buildCombinedMultipliersSheet, buildCombinedGeneratorWeightsSheet, buildGeneratorWeightsSheet, buildEventDataSheet, buildV2RewardChainSheet, buildV2DropGroupsSheet, ALL_SEGMENTS_LABEL } = await import('../../src/features/merge/lib/export/eventSheets.js')
+  const { boardsToSyntax, boardsSuggestionsToSyntax } = await import('../../src/features/merge/lib/export/boardSyntax.js')
+  const { encodeReward } = await import('../../src/features/merge/lib/rewards/rewardChain.js')
+  const main = builtList(6)
+  const rc = builtList(6)
+  const eight = Array.from({ length: 8 }, (_, i) => ({ name: `Segment ${i + 1}`, boards: main, recompletionBoards: rc }))
+
+  // The all-segments pages: what every segment shares, once.
+  const gw = buildCombinedGeneratorWeightsSheet(eight)
+  const one = buildGeneratorWeightsSheet(main, rc)
+  check(`Generator Weights for eight segments that share their lucky drops is ${gw.rows.length} rows, not ${8 * one.rows.length}: each row once, for "${ALL_SEGMENTS_LABEL}"`, gw.rows.length === one.rows.length && gw.columns[0] === 'Segment' && gw.rows.every((r, i) => r.cells[0] === ALL_SEGMENTS_LABEL && JSON.stringify(r.cells.slice(1)) === JSON.stringify(one.rows[i].cells)))
+  check('...Event Data and Multipliers the same way', buildCombinedEventDataSheet(eight).rows.length === buildEventDataSheet(main).rows.length && buildCombinedEventDataSheet(eight).rows.every((r) => r.cells[0] === ALL_SEGMENTS_LABEL) && buildCombinedMultipliersSheet(eight).rows.length === 3)
+  // A value that is one segment's own is still written for each segment - in its place.
+  const tutorial = eight.map((seg, i) => (i === 2 ? { ...seg, boards: seg.boards.map((b, k) => (k === 0 ? { ...b, onboardingDrBudget: 45 } : b)) } : seg))
+  const ed = buildCombinedEventDataSheet(tutorial).rows.map((r) => r.cells)
+  const own = ed.filter((r) => r[1] === 'TutorialDrAmount')
+  check(`a row that differs between segments is written per segment, where it belongs (TutorialDrAmount: ${own.map((r) => `${r[0]}=${r[2] === '' ? 'blank' : r[2]}`).join(' ')}); every other row stays once`, own.length === 8 && own.map((r) => r[0]).join() === 'S1,S2,S3,S4,S5,S6,S7,S8' && own[2][2] === 45 && ed.filter((r) => r[1] !== 'TutorialDrAmount').every((r) => r[0] === ALL_SEGMENTS_LABEL) && ed.length === buildEventDataSheet(main).rows.length + 7)
+  // Segments that do not even have the same rows keep their own blocks.
+  const otherTiers = eight.map((seg, i) => (i === 1 ? { ...seg, boards: seg.boards.map((b) => ({ ...b, tier2UnlockRank: 4 })) } : seg))
+  const mixed = buildCombinedGeneratorWeightsSheet(otherTiers).rows.map((r) => r.cells[0])
+  check('segments whose multipliers unlock at different ranks (different rows altogether) keep a block each', new Set(mixed).size === 8 && !mixed.includes(ALL_SEGMENTS_LABEL))
+  const allTabs = buildAllSegmentsWorkbook(eight).worksheets.map((w) => w.name)
+  check('the all-segments workbook has the one drop table once ("V2 Drop Groups"), not once per segment', allTabs.filter((n) => /V2 Drop Groups/.test(n)).join() === 'V2 Drop Groups')
+
+  // The V2 pages: the normal event and Recompletion hold the same thing once.
+  const chainRows = buildV2RewardChainSheet(main, rc).rows.map((r) => r.cells)
+  check(`V2 Reward Chain lists the event's rank values once, as "${chainRows[0][0]}" (${chainRows.length} rows, not ${2 * chainRows.length})`, chainRows.every((r) => r[0] === 'Main + RC') && new Set(chainRows.map((r) => r[3])).size === chainRows.length)
+  const differ = rc.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, puzzles: b.rewardChainConfig.puzzles.map((r) => ({ ...r, prizeAmount: r.prizeAmount + 1 })) } }))
+  check('...and a Recompletion list that really differs is still listed on its own', new Set(buildV2RewardChainSheet(main, differ).rows.map((r) => r.cells[0])).size === 2)
+  const drops = buildV2DropGroupsSheet(main, rc).rows.map((r) => r.cells)
+  const ranksOf = (label) => [...new Set(drops.filter((r) => r[0] === label).map((r) => r[1]))].join()
+  check(`V2 Drop Groups lists each rank once: the ranks the normal event makes as "Main + RC" (${ranksOf('Main + RC')}), the two only Recompletion makes as "RC" (${ranksOf('RC')})`, ranksOf('Main + RC') === '6,7,8,9,10,11,12' && ranksOf('RC') === '13,14' && !drops.some((r) => r[0] === 'Main'))
+  check('...with no "(no drop)" line where a merge always drops, and no group at weight 0', !drops.some((r) => r[3] === 0))
+  check('...and the normal event alone stops at rank 12', [...new Set(buildV2DropGroupsSheet(main, []).rows.map((r) => r.cells[1]))].join() === '6,7,8,9,10,11,12')
+
+  // The two plain-text views.
+  const boards = [0, 1, 2].map((i) => ({ ...createBoard(`Board ${i + 1}`), targetEv: 1.1, rewardRanks: [5, 12], semiPlacements: [{ row: 0, col: 0, rank: 2 }], blockedQueue: [1, encodeReward('coins', 1), 3] }))
+  const text = boardsToSyntax(boards)
+  check('the Normal view says the list\'s lucky-drop EV and rank rewards once, at the top, not under every board', (text.match(/REWARDS:/g) ?? []).length === 1 && (text.match(/targetEv=/g) ?? []).length === 1 && text.startsWith('ALL BOARDS: targetEv=1.1 REWARDS: R5,R12') && (text.match(/^BOARD /gm) ?? []).length === 3)
+  check('...and writes a reward item by its key, not by an internal number', /QUEUE: R1,coin-r1,R3/.test(text) && !/R100\d/.test(text))
+  const cc = boardsSuggestionsToSyntax(boards)
+  check('the CC view says the two lucky-drop bumps once, not under every board', (cc.match(/EV \+8%/g) ?? []).length === 1 && (cc.match(/EV \+12%/g) ?? []).length === 1 && (cc.match(/QUEUE \+30%/g) ?? []).length === 3)
+  const odd = boards.map((b, i) => (i === 1 ? { ...b, targetEv: 1.4 } : b))
+  check('a list whose boards really differ keeps the value on each board', (boardsToSyntax(odd).match(/targetEv=/g) ?? []).length === 3 && !boardsToSyntax(odd).startsWith('ALL BOARDS'))
 }
 
 console.log(failures === 0 ? `\nALL ${count} CONTAINER CHECKS PASSED` : `\n${failures} OF ${count} CONTAINER CHECKS FAILED`)

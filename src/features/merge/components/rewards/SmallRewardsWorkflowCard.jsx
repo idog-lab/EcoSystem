@@ -79,7 +79,7 @@ export default function SmallRewardsWorkflowCard({
   const allocation = segment?.sourceAllocation?.[phase] ?? {}
   const derivedTargets = !isBaseSegment && baseTargets ? effectiveRewardTargets(baseTargets, segment?.segmentFactor ?? 1) : null
   const effectiveTargets = isBaseSegment ? effectiveRewardTargets(targets, 1) : derivedTargets
-  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'forfeit'
+  const leftoverPolicy = board0?.rewardLeftoverPolicy ?? 'collect'
   // Drop odds are one shared configuration, owned by the base segment: every
   // other segment solves with the drops fixed and only its tiles moving.
   const dropsFixed = !isBaseSegment

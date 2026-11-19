@@ -218,7 +218,38 @@ function sizeBundle(need, merges, mass) {
 // item carries on average (1 = rank 1; 3 = ranks 2 and 3 mixed) - see
 // resizeTwisterDrops. A Twister rule written by hand (`twisterRule` groups)
 // is replaced; any other hand-made group that carries a Twister item is kept.
-export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, mergesByRank, dropGroups = [], dropGroupsConfig = [], minDropRank = MIN_DROP_RANK, multiDropRank = null, tripleDropRank = null, guaranteedTypes = null, twister = null, maxItems = null, soloRank = null, focus = null } = {}) {
+//
+// `steady` - STEADY CONTAINERS: every merge of a rank drops the SAME items.
+// Economist: "we need to make sure we will know that the resources the user
+// gets will be some what close to what we wanted him to get". Measured with
+// 300 simulated players (and a robot on the real play engine, which agrees
+// with the simulator to 1-2%): the AVERAGES were right, but one player was
+// not near them. Each merge rolled one of 5 to 8 containers, a reward sat in
+// only some of them, and it got 15 to 40 items a phase - so a single player's
+// puzzles moved by 17%, merge energy by 32%, and (merge energy being free
+// taps) the DR they spent by 23%. Only 4 players in 10 landed within 15% of
+// the merge energy asked.
+// With steady containers nothing about WHICH reward drops is left to chance:
+//   - the first dropping rank (one item): always a rank-1 item of the reward
+//     under the tiles (it used to be 60% of them);
+//   - a rank that drops one or two items: one reward in every drop, and the
+//     Twister item as the second one in the share the rise gives;
+//   - a two-item rank: one reward and the Twister item in every drop (two
+//     rewards when the build does not place the Twister);
+//   - a three-item rank: three rewards in every drop (the Twister item or the
+//     filler where there are fewer rewards).
+// Which reward sits where: the one with the least so far, merge energy first
+// (it decides how much is played). How big an item is: one rank per reward
+// and merge rank, chosen so the reward's units come to what was asked. The
+// same prototype put 98-99% of players within 15% on puzzles, merge energy
+// and charms, and brought the DR spread from 23% to about 10%.
+// What it takes: the amounts are no longer steered by how OFTEN a reward
+// drops - so it is only used when every reward's rank values are the model's
+// to give (they land each segment on its amount). Otherwise, with a group or
+// table kept by hand, or with too few different rewards to fill a rank, the
+// containers are made as before. This app's own design, switched off in step
+// 4 ("Every merge of a rank drops the same items").
+export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, mergesByRank, dropGroups = [], dropGroupsConfig = [], minDropRank = MIN_DROP_RANK, multiDropRank = null, tripleDropRank = null, guaranteedTypes = null, twister = null, maxItems = null, soloRank = null, focus = null, steady = false } = {}) {
   // SINGLE-ITEM RANKS - see the block further down. `soloRank`: merges that
   // make this rank or a lower one drop ONE item; every higher rank keeps the
   // containers with several items. `maxItems: 1`: every rank does.
@@ -717,7 +748,7 @@ export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, m
   const firstMulti = multiRanks[0] ?? null
   const multiDropShort = !allSolo && multiFrom != null && (types.length + (twisterOn ? 1 : 0) + (filler ? 1 : 0) < 2 || multiSetFor(Math.max(multiFrom, firstMulti ?? multiFrom)).some((g) => Object.keys(g.items).length < 2))
 
-  const nextTables = dropGroupsConfig.map((table) => {
+  let nextTables = dropGroupsConfig.map((table) => {
     if (!table) return table
     if (table.locked) return table
     if (!writableRanks.includes(table.rank)) return { ...table, entries: table.entries.filter((e) => keptIds.has(e.groupId)) }
@@ -749,7 +780,146 @@ export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, m
       allGenerated.push(g)
     }
   }
-  const nextGroups = [...keptGroups, ...allGenerated.map(({ p: _p, ...g }) => g)]
+  let nextGroups = [...keptGroups, ...allGenerated.map(({ p: _p, ...g }) => g)]
+
+  // STEADY CONTAINERS (see the note above this function).
+  let steadyPlan = null
+  const steadyRewards = REWARD_TYPES.filter((t) => need0[t] > 0 && t !== elasticType)
+  const steadyKinds = steadyRewards.length + (elasticType ? 1 : 0) + (twisterOn ? 1 : 0)
+  if (steady && !perDropGiven && keptGroups.length === 0 && !dropGroupsConfig.some((t) => t?.locked) && startRank != null && soloRanks.length === 1 && multiRanks.length > 0 && multiFrom != null && tripleFrom != null && steadyRewards.length >= 1 && steadyKinds >= 3) {
+    // Merge energy first, then the reward that asks for most.
+    const order = [...steadyRewards].sort((a, b) => (b === 'energy') - (a === 'energy') || need0[b] - need0[a])
+    const soloType = focus?.type && (steadyRewards.includes(focus.type) || elasticType === focus.type) ? focus.type : (elasticType ?? order[0])
+    const got = Object.fromEntries(order.map((t) => [t, 0]))
+    const leastServed = (count, taken = []) =>
+      order
+        .filter((t) => !taken.includes(t))
+        .sort((a, b) => got[a] - got[b] || order.indexOf(a) - order.indexOf(b))
+        .slice(0, count)
+    // What each rank's drops hold: `always` in every drop, `extra` in `extraShare` of them.
+    const layoutOf = new Map()
+    let twoItemRanks = 0
+    for (const r of multiRanks) {
+      let always = []
+      let extra = null
+      let extraShare = 0
+      if (r < multiFrom) {
+        always = leastServed(1)
+        extraShare = generatedShareAt(r)
+        extra = twisterOn ? TWISTER_TYPE : (elasticType ?? [...order].reverse().find((t) => !always.includes(t)) ?? null)
+      } else if (r < tripleFrom) {
+        twoItemRanks += 1
+        // The Twister item sits in every two-item drop: the economist's worry
+        // about the Twister is its pace, and an item that is always there
+        // (and not in a quarter of the drops, at random) arrives evenly.
+        const twisterHere = twisterOn
+        always = leastServed(twisterHere ? 1 : 2)
+        if (twisterHere) always.push(TWISTER_TYPE)
+        if (always.length < 2 && elasticType) always.push(elasticType)
+        if (always.length < 2 && twisterOn && !always.includes(TWISTER_TYPE)) always.push(TWISTER_TYPE)
+      } else {
+        always = leastServed(3)
+        if (always.length < 3 && twisterOn) always.push(TWISTER_TYPE)
+        if (always.length < 3 && elasticType) always.push(elasticType)
+      }
+      const merges = slotsAt(r)
+      for (const t of always) if (t in got) got[t] += merges
+      if (extra && extra in got) got[extra] += merges * extraShare
+      layoutOf.set(r, { always, extra: extraShare > 1e-9 ? extra : null, extraShare })
+    }
+    // The item each reward drops at each rank: one rank per reward and merge
+    // rank (1 to 3), walking its ranks from the busiest down and keeping what
+    // has been given as close as it can to its share of what was asked.
+    const sizeOf = new Map()
+    for (const t of order) {
+      const places = multiRanks
+        .map((r) => ({ r, weight: slotsAt(r) * (layoutOf.get(r).always.includes(t) ? 1 : layoutOf.get(r).extra === t ? layoutOf.get(r).extraShare : 0) }))
+        .filter((p) => layoutOf.get(p.r).always.includes(t) || layoutOf.get(p.r).extra === t)
+        .sort((a, b) => b.weight - a.weight)
+      const total = places.reduce((sum, p) => sum + p.weight, 0)
+      const asked = Math.max(0, need0[t] - (soloType === t ? slotsAt(startRank) : 0))
+      let doneWeight = 0
+      let doneUnits = 0
+      for (const p of places) {
+        const wanted = total > 0 ? (asked * (doneWeight + p.weight)) / total : 0
+        let best = 1
+        for (const units of [2, unitsOf(SQUEEZED_TOP_RANK)]) if (Math.abs(doneUnits + p.weight * units - wanted) < Math.abs(doneUnits + p.weight * best - wanted) - 1e-9) best = units
+        sizeOf.set(`${t}|${p.r}`, Math.round(Math.log2(best)) + 1)
+        doneWeight += p.weight
+        doneUnits += p.weight * best
+      }
+    }
+    const itemRankOf = (t, r) => (t === elasticType ? 1 : (sizeOf.get(`${t}|${r}`) ?? 1))
+    // THE TWISTER ITEM, ONE RANK PER MERGE RANK. Its size is asked as an
+    // average (twister.itemUnits, e.g. 1.5 = half rank 1, half rank 2). Mixed
+    // inside one rank's drops that is a coin toss at every merge; here the
+    // bigger item goes to whole merge ranks instead - the set of them whose
+    // share of the Twister drops is closest to the share asked, the higher
+    // merge ranks first - so two players get the same Twister items too.
+    const twisterPlaces = multiRanks
+      .map((r) => ({ r, weight: slotsAt(r) * (layoutOf.get(r).always.includes(TWISTER_TYPE) ? 1 : layoutOf.get(r).extra === TWISTER_TYPE ? layoutOf.get(r).extraShare : 0) }))
+      .filter((p) => p.weight > 1e-9)
+      .sort((a, b) => b.r - a.r)
+    const twisterBigAt = new Set()
+    if (twisterMix.higher > 0 && twisterPlaces.length > 0 && twisterPlaces.length <= 12) {
+      const total = twisterPlaces.reduce((sum, p) => sum + p.weight, 0)
+      let bestMask = 0
+      let bestGap = Infinity
+      for (let mask = 0; mask < 1 << twisterPlaces.length; mask++) {
+        let weight = 0
+        for (let k = 0; k < twisterPlaces.length; k++) if (mask & (1 << k)) weight += twisterPlaces[k].weight
+        const gap = Math.abs(weight / total - twisterMix.higher)
+        // (places are sorted from the highest merge rank: a lower mask with
+        // the same gap holds the higher ranks.)
+        if (gap < bestGap - 1e-9) {
+          bestGap = gap
+          bestMask = mask
+        }
+      }
+      twisterPlaces.forEach((p, k) => bestMask & (1 << k) && twisterBigAt.add(p.r))
+    }
+    const twisterRankAt = (r) => Math.min(REWARD_MAX_RANK, twisterMix.rank + (twisterBigAt.has(r) ? 1 : 0))
+    const made = new Map()
+    const idOf = (items) => {
+      const id = uniqueId(groupId(items))
+      if (!made.has(id)) made.set(id, { id, name: groupName(items), items, auto: true })
+      return id
+    }
+    // [items, share of the rank's drops].
+    const rowsOf = new Map([[startRank, [[{ [soloType]: 1 }, 1]]]])
+    for (const r of multiRanks) {
+      const { always, extra, extraShare } = layoutOf.get(r)
+      const base = {}
+      for (const t of always) if (t !== TWISTER_TYPE) base[t] = itemRankOf(t, r)
+      const twisterAlways = always.includes(TWISTER_TYPE)
+      const variants = []
+      const add = (items, share, withTwister) => {
+        if (!(share > 1e-9) || Object.keys(items).length + (withTwister ? 1 : 0) === 0) return
+        variants.push([withTwister ? { ...items, [TWISTER_TYPE]: twisterRankAt(r) } : items, share])
+      }
+      if (extra) {
+        add(base, 1 - extraShare, twisterAlways)
+        if (extra === TWISTER_TYPE) add(base, extraShare, true)
+        else add({ ...base, [extra]: itemRankOf(extra, r) }, extraShare, twisterAlways)
+      } else add(base, 1, twisterAlways)
+      rowsOf.set(r, variants.filter(([, share]) => share > 1e-9))
+    }
+    nextTables = nextTables.map((table) => {
+      const variants = rowsOf.get(table?.rank)
+      if (!variants || variants.length === 0) return table
+      const exact = variants.map(([, share]) => share * DROP_TABLE_TOTAL_WEIGHT)
+      const weights = exact.map(Math.floor)
+      let left = DROP_TABLE_TOTAL_WEIGHT - weights.reduce((sum, w) => sum + w, 0)
+      const byRemainder = exact.map((v, i) => [v - Math.floor(v), i]).sort((x, y) => y[0] - x[0])
+      for (let k = 0; left > 0 && byRemainder.length > 0; k++, left--) weights[byRemainder[k % byRemainder.length][1]] += 1
+      return { ...table, entries: variants.map(([items], i) => ({ groupId: idOf(items), weight: weights[i] })).filter((e) => e.weight > 0), noDropWeight: 0 }
+    })
+    nextGroups = [...made.values()]
+    steadyPlan = {
+      generatedGroups: (nextTables[startRank - 1]?.entries ?? []).map((e) => ({ ...made.get(e.groupId), p: e.weight / DROP_TABLE_TOTAL_WEIGHT })),
+      focus: { type: soloType, rank: startRank, share: 1, elastic: elasticType === soloType },
+    }
+  }
   // When one item per merge is already more than was wanted, the drops pay
   // more than asked. The start rank is NOT moved; the rank from which the
   // drops would fit is only reported, so it can be offered as a choice.
@@ -785,6 +955,9 @@ export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, m
     // Three items take three different rewards (the Twister item counts).
     tripleDropShort: !allSolo && tripleFrom != null && (types.length + (twisterOn ? 1 : 0) + (filler ? 1 : 0) < 3 || multiSetFor(Math.max(tripleFrom, firstMulti ?? tripleFrom)).some((g) => Object.keys(g.items).length < 3)),
     twisterFill: twisterOn,
+    // Steady containers were made (every merge of a rank drops the same items).
+    steady: !!steadyPlan,
+    ...(steadyPlan ? { generatedGroups: steadyPlan.generatedGroups, focus: steadyPlan.focus, multiDropShort: false, tripleDropShort: false, floorExceedsWanted: false, fittingStartRank: null } : {}),
   }
 }
 
@@ -817,7 +990,16 @@ export function singleItemStartRankThatFits({ needUnits, mergesByRank, startRank
 // Twister items of a rank merge at once, so even one in every drop leaves at
 // most three on the board.) Hand-made groups and locked tables are untouched.
 // Always applied to the build's own output, never to an already resized one.
-export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = {}, { itemUnits = 1, minShare = 0 } = {}) {
+//   steady     (steady containers) an in-between size is not two ranks mixed
+//              inside one merge rank's drops - a coin toss at every merge -
+//              but whole merge ranks with the bigger item: the set of them
+//              whose share of the Twister drops is closest to the share
+//              asked, the higher merge ranks first. How many merges a rank
+//              gets is not known here, so each rank counts half the one
+//              below it (what the chain gives when nothing is subsidised);
+//              the size is a knob the build turns and measures again, so
+//              that is close enough.
+export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = {}, { itemUnits = 1, minShare = 0, steady = false } = {}) {
   const mix = twisterRankMix(itemUnits)
   const share = Math.min(1, Math.max(0, minShare))
   const byId = new Map(dropGroups.map((g) => [g.id, g]))
@@ -835,7 +1017,8 @@ export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = 
     if (!made.has(id)) made.set(id, { id, name: groupName(items), items, auto: true })
     return id
   }
-  const tables = dropGroupsConfig.map((table) => {
+  const pending = [] // steady: { index, pooled } - the Twister containers of each table, ranked afterwards
+  const tables = dropGroupsConfig.map((table, index) => {
     if (!table || table.locked) return table
     const rest = [] // entries that are not ours to change
     const plain = [] // generated, no Twister item: { entry, group }
@@ -882,6 +1065,10 @@ export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = 
       if (p.entry.weight - gone > 0) entries.push({ ...p.entry, weight: p.entry.weight - gone })
       pool(p.group.items, gone)
     }
+    if (steady) {
+      pending.push({ index, pooled: [...pooled.values()], total: all })
+      return { ...table, entries }
+    }
     for (const { others, weight } of pooled.values()) {
       const high = Math.round(weight * mix.higher)
       if (weight - high > 0) entries.push({ groupId: variant(others, mix.rank), weight: weight - high })
@@ -889,6 +1076,36 @@ export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = 
     }
     return { ...table, entries }
   })
+  if (steady) {
+    // Which merge ranks get the bigger item.
+    const places = pending
+      .map((p) => ({ ...p, rank: tables[p.index].rank ?? p.index + 1 }))
+      .map((p) => ({ ...p, mass: (p.total > 0 ? p.pooled.reduce((sum, x) => sum + x.weight, 0) / p.total : 0) * 2 ** -p.rank }))
+      .filter((p) => p.mass > 0)
+      .sort((a, b) => b.rank - a.rank)
+    const big = new Set()
+    if (mix.higher > 0 && places.length > 0 && places.length <= 14) {
+      const totalMass = places.reduce((sum, p) => sum + p.mass, 0)
+      let bestMask = 0
+      let bestGap = Infinity
+      for (let mask = 0; mask < 1 << places.length; mask++) {
+        let mass = 0
+        for (let k = 0; k < places.length; k++) if (mask & (1 << k)) mass += places[k].mass
+        const gap = Math.abs(mass / totalMass - mix.higher)
+        if (gap < bestGap - 1e-9) {
+          bestGap = gap
+          bestMask = mask
+        }
+      }
+      places.forEach((p, k) => bestMask & (1 << k) && big.add(p.index))
+    }
+    for (const p of pending) {
+      const rank = Math.min(REWARD_MAX_RANK, mix.rank + (big.has(p.index) ? 1 : 0))
+      const entries = [...tables[p.index].entries]
+      for (const { others, weight } of p.pooled) if (weight > 0) entries.push({ groupId: variant(others, rank), weight })
+      tables[p.index] = { ...tables[p.index], entries }
+    }
+  }
   // Containers no table uses any more are dropped from the list.
   const used = new Set(tables.flatMap((t) => (t?.entries ?? []).map((e) => e.groupId)))
   const groups = [...kept.filter((g) => !g.auto || used.has(g.id) || lockedRefs.has(g.id)), ...made.values()]
