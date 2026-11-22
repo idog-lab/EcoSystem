@@ -16,10 +16,6 @@ import {
   buildEndlessBankSheet,
   buildEndlessWeightsSheet,
   buildV2EndlessSheet,
-  buildV2RewardChainSheet,
-  buildV2DropGroupsSheet,
-  buildV2EconomySheet,
-  buildV2TwisterSheet,
   buildBoardLayoutsSheet,
   boardLayoutsSheetToTsv,
   sheetToTsv,
@@ -50,11 +46,11 @@ const VIEWS = [
   { id: 'small-reward-weights', label: 'Small Reward Weights' },
   { id: 'endless-small-rewards-bank', label: 'Endless Small Rewards Bank' },
   { id: 'endless-small-reward-weights', label: 'Endless Small Reward Weights' },
-  { id: 'v2-reward-chain', label: 'V2 Reward Chain' },
-  { id: 'v2-drop-groups', label: 'V2 Drop Groups' },
-  { id: 'v2-economy', label: 'V2 Economy' },
-  { id: 'v2-twister', label: 'V2 Twister' },
-  { id: 'v2-endless', label: 'V2 Endless' },
+  // Only the pages of the economist's example, plus endless mode's three
+  // (kept by the economist). "V2 Reward Chain", "V2 Drop Groups", "V2 Economy"
+  // and "V2 Twister" were removed (economist: "remove the reward chain, drop
+  // groups, twister, and economy"), and no page is named "V2" any more.
+  { id: 'endless', label: 'Endless' },
 ]
 
 const DESCRIPTIONS = {
@@ -75,7 +71,7 @@ const DESCRIPTIONS = {
   'recompletion-board-layouts':
     'Same shape as Board Layouts, but for the separate Recompletion board list (the "Recompletion" tab) — the board(s) a player cycles through after reaching the event\'s Last Tier.',
   'small-rewards':
-    'The real Ops "Small Rewards" sheet — one row per reward-chain key (coin/dr/puzzle/charm, rank 1-4), driven by the Rewards (V2) tab\'s own reward-chain config (syntax, Asset ID, prize). Seeded with the economist\'s real reference values, fully editable from there. The dr-twister rows (when the drops carry Twister items) are written as [dynamic(dr-twister:value)] unless a syntax was typed in the Twister tool - "dr-twister" is this tool\'s own name, NOT a confirmed Ops one.',
+    'The real Ops "Small Rewards" sheet — one row per reward-chain key (coin/dr/puzzle/charm, rank 1-4), driven by the Rewards tab\'s own reward-chain config (syntax, Asset ID, prize). Seeded with the economist\'s real reference values, fully editable from there. The dr-twister rows (when the drops carry Twister items) are written as [dynamic(dr-twister:value)] unless a syntax was typed in the Twister tool - "dr-twister" is this tool\'s own name, NOT a confirmed Ops one.',
   'small-rewards-bank':
     'The Ops "Small Rewards Bank" sheet — the containers a merge can drop in the normal event, followed by any container only the rank 13 and 14 merges drop. Each container is one drop the model built and plays (Build event), named ContA, ContB, ... and written in the Small Rewards keys above (coin-r1+dr-r1 = a coin rank 1 and a merge energy rank 1 dropping together). Every container is a different drop.',
   'small-reward-weights':
@@ -84,16 +80,8 @@ const DESCRIPTIONS = {
     'The containers endless mode drops (after rank 14), in the same shape as Small Rewards Bank. Worked out from the Recompletion containers: one rank lower, more per drop, mostly coins and merge energy. Not in the Ops reference.',
   'endless-small-reward-weights':
     'The weight of each endless container per merge tier (2 to 14), plus NoDrop, in the same shape as Small Reward Weights. Not in the Ops reference.',
-  'v2-endless':
-    "V2 internal model, NOT a verified Ops sheet — the rules endless mode runs on: when it starts, where its drops start, and the two amounts behind its containers. The setting names are this app's own, and the two amounts are this tool's starting numbers, not confirmed game values.",
-  'v2-reward-chain':
-    "V2 internal model, NOT a verified Ops sheet — the reward definitions: every resource and rank with the key a queue or layout cell references it by, its configured item syntax, asset and prize. The normal event and Recompletion play the same rank values, so they are listed once (List: Main + RC); a list that really differs is listed on its own. The Key column is how reward items are written in Blocked Queue and Board Layouts cells; that production expects those keys there is NOT confirmed by any Ops reference — this sheet exists so the key → syntax mapping can be checked.",
-  'v2-drop-groups':
-    "V2 internal model, NOT a verified Ops sheet — the event's one drop table: for each resulting main-chain rank from the drop start rank up, one row per group with its weight and which resource+rank each group bundles. A merge drops the same in the normal event and in Recompletion, so each rank is listed once (Main + RC); ranks 13 and 14 are the two only Recompletion makes (RC). Drop odds are one shared configuration across segments. Pending confirmation of the real V2 production mapping.",
-  'v2-twister':
-    'V2 internal model, NOT a verified Ops sheet — the Twister widget settings that are NOT part of the shared definitions. "Runtime - segment-specific" is this segment\'s DR cost per spin for each list (Main / RC A / RC B); "Runtime - shared" is the optional widget length; "Design metadata - not runtime" records the checkpoint, target spins and simulation settings the cost was derived from and configures nothing in the game. The shared Twister rank ladder is in V2 Reward Chain and its drop odds in V2 Drop Groups. No production contract for Twister has been confirmed.',
-  'v2-economy':
-    "V2 internal model, NOT a verified Ops sheet — per-board economy settings across all three lists (Main / RC A / RC B): blocked value, CC %, the merge-drop start rank, the leftover policy, and the reward items placed under blocked tiles and on semi-blocked tiles. Pending confirmation of the real V2 production mapping.",
+  endless:
+    "Not in the Ops reference — the rules endless mode runs on: when it starts, where its drops start, and the two amounts behind its containers. The setting names are this app's own, and the two amounts are this tool's starting numbers, not confirmed game values.",
 }
 
 // Sheets share one flat shape ({ columns, rows }) so this table is generic
@@ -180,16 +168,8 @@ export default function SyntaxPage({
       ? buildEndlessBankSheet(boards, recompletionBoards)
       : view === 'endless-small-reward-weights'
         ? buildEndlessWeightsSheet(boards, recompletionBoards)
-        : view === 'v2-endless'
+        : view === 'endless'
           ? buildV2EndlessSheet(boards, recompletionBoards)
-          : view === 'v2-twister'
-          ? buildV2TwisterSheet(boards, recompletionBoards, [], twisterOptions)
-          : view === 'v2-economy'
-          ? buildV2EconomySheet(boards, recompletionBoards)
-          : view === 'v2-reward-chain'
-            ? buildV2RewardChainSheet(boards, recompletionBoards)
-            : view === 'v2-drop-groups'
-              ? buildV2DropGroupsSheet(boards, recompletionBoards)
           : (SHEET_BUILDERS[view]?.(boards, recompletionBoards) ?? null)
   const boardLayouts =
     view === 'board-layouts'
@@ -421,8 +401,8 @@ export default function SyntaxPage({
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
             Reward items in this sheet are written with their Small Rewards key (for example <span className="font-mono">dr-r3</span>,{' '}
             <span className="font-mono">S:coin-r2</span>). The rest of this sheet matches the verified Ops reference; how production expects a
-            reward item to be written in a queue or layout cell is not confirmed yet. The V2 Reward Chain tab lists each key against its configured
-            item syntax.
+            reward item to be written in a queue or layout cell is not confirmed yet. The Small Rewards page lists each key with its syntax and
+            asset.
           </p>
         )}
       {boardLayouts ? (

@@ -10,7 +10,7 @@ import { buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RA
 import { computeProbs, DEFAULT_TARGET_EV, MIN_TARGET_EV, MAX_TARGET_EV } from '../../lib/core/luckyDrop'
 import { regenerateBoard, suggestBoardValuesForEffortTarget } from '../../lib/simulation/effortTargeting'
 import { simulatePlaythrough } from '../../lib/simulation/mergeSimulation'
-import { buildSimulationRows, RANKS } from '../../lib/simulation/simulationRows'
+import { buildSimulationRows, buildClimbRows, RANKS, RC_RANKS } from '../../lib/simulation/simulationRows'
 import { decodeReward, REWARD_TYPE_LABELS } from '../../lib/rewards/rewardChain'
 
 // The parts of the board editor that are not a board's own tiles, as steps of
@@ -439,6 +439,61 @@ export function BuiltBoards({ boards }) {
   )
 }
 
+// Recompletion's effort: what the player pays in Recompletion, rank by rank,
+// from rank 1 to 14 - the DR paid since Recompletion began when they first
+// MAKE an item of each rank there (by a merge or from the generator). What
+// they carry in from the normal event, the rank 12 among them, is not made
+// there, so the second rank 12 - and then 13 and 14 - show what they cost.
+function BuiltRcEffort({ result }) {
+  const rc = result.rcEffort
+  if (!rc) {
+    return (
+      <p className="text-sm text-amber-700" data-testid="built-effort" data-phase="rc">
+        In this playthrough the player never reaches rank {MAX_RANK}, so Recompletion never begins and has no effort to show.
+      </p>
+    )
+  }
+  const stats = result.rcPhase
+  const top = RC_RANKS.at(-1)
+  const rows = buildClimbRows(rc, RC_RANKS)
+  const aside = rows.filter((row) => row.aside).map((row) => row.rank)
+  return (
+    <div data-testid="built-effort" data-phase="rc">
+      <p className="mb-3 text-xs text-slate-500" data-note>
+        Counted from the moment Recompletion begins: for each rank, the DR the player has paid in Recompletion when they first make an item of it there - by a merge or
+        from the generator. The rank {MAX_RANK} they bring from the normal event does not count, so rank {MAX_RANK} here is the second one they make. A rank&apos;s cost is
+        what was paid since the last rank climbed to before it.{aside.length > 0 ? ` Rank${aside.length === 1 ? '' : 's'} ${aside.join(', ')} ${aside.length === 1 ? 'was' : 'were'} first made after a higher rank, so ${aside.length === 1 ? 'it is' : 'they are'} not part of the climb and ${aside.length === 1 ? 'has' : 'have'} no cost.` : ''}
+      </p>
+      <div className="mb-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Player spends in Recompletion</div>
+          <div className="font-display font-semibold text-slate-700 tabular-nums" data-cell="dr-spent">{dr(rc.drSpent)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Subsidy that reaches them</div>
+          <div className="font-display font-semibold text-slate-700 tabular-nums">{stats ? `${dr(stats.subsidyDelivered)} of ${dr(stats.subsidyConfigured)}` : '—'}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Boards reached</div>
+          <div className="font-display font-semibold text-slate-700 tabular-nums">{stats ? `${stats.boardsReached} of ${stats.boardsTotal}` : '—'}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Rank {top}</div>
+          <div className="font-display font-semibold text-slate-700" data-cell="rc-top">{rc.reachedAt[top] !== undefined ? `at ${dr(rc.reachedAt[top])}` : 'not reached'}</div>
+        </div>
+      </div>
+      <EffortDistributionChart
+        result={rc}
+        rows={rows}
+        ranks={RC_RANKS}
+        title="Effort distribution - Recompletion"
+        subtitle={`${CHART_CAPTION} - in Recompletion only`}
+        footnote="DR, +DR and Taps use a log scale; % effort is linear and adds up to 100% at rank 14. A dash is a rank never made, or one that is not part of the climb. Hover any bar for its exact value."
+      />
+    </div>
+  )
+}
+
 // The effort distribution of a built segment: one deterministic playthrough
 // of exactly the boards the build produced.
 export function BuiltEffort({ boards, mainBoards = null, cacheKey }) {
@@ -454,6 +509,10 @@ export function BuiltEffort({ boards, mainBoards = null, cacheKey }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey])
   if (!result) return null
+  // Recompletion: its own climb, counted from the moment it begins (economist:
+  // "i want to be able to see the effort distribution on the RC also"). The
+  // whole run's chart showed only ranks 1-12, all reached in the normal event.
+  if (mainBoards) return <BuiltRcEffort result={result} />
   return (
     <div data-testid="built-effort">
       <div className="mb-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

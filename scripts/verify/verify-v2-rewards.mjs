@@ -406,7 +406,8 @@ console.log('--- 14. Ops export: V2 sheets build without error and append to the
   ].join('|'))
   check('there are no Recompletion container tabs: one bank and one weights table for the whole event', !sheetNames.some((n) => /^RC Small/.test(n)))
   check('endless mode\'s containers follow', sheetNames[10] === 'Endless Small Rewards Bank' && sheetNames[11] === 'Endless Small Reward Weights')
-  check('workbook appends the V2 sheets at the end', sheetNames[12] === 'V2 Reward Chain' && sheetNames[13] === 'V2 Drop Groups' && sheetNames.at(-1) === 'V2 Endless')
+  // (Economist: "remove the reward chain, drop groups, twister, and economy" and "remove the naming of V2".)
+  check(`then the endless rules, last; no reward chain, drop groups, Twister or economy page, and no page named V2 (${sheetNames.slice(10).join(', ')})`, sheetNames.length === 13 && sheetNames[12] === 'Endless' && !sheetNames.some((n) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(n)))
   check('no "Recompletion B" tab exists any more', sheetNames.every((n) => !/ B$/.test(n)))
   const queueSheet = workbook.worksheets.find((ws) => ws.name === 'Blocked Queue')
   check('the Blocked Queue carries the Recompletion list\'s own entries after the normal ones', queueSheet.rowCount - 1 === board.blockedQueue.length + 3 && !sheetNames.includes('Recompletion Blocked Queue'))
@@ -468,7 +469,7 @@ console.log('--- 16. Real Ops reference data: Small Rewards / Bank / Weights are
   check('Small Reward Weights seeds the reference pattern (ContB:1, NoDrop:2) for tiers 2-12', weights.slice(0, 11).every((r) => r.weights.ContB === 1 && r.noDropWeight === 2))
 
   const sheet = buildSmallRewardsSheet([board])
-  check('buildSmallRewardsSheet is board-driven (16 rows, real key/syntax/asset)', sheet.rows.length === 16 && sheet.rows[0].cells[0] === 'coin-r1' && sheet.rows[0].cells[2] === 'merge-config-coin-v2')
+  check('buildSmallRewardsSheet is board-driven (16 rows, real key/syntax/asset)', sheet.rows.length === 16 && sheet.rows[0].cells[0] === 'coin-r1' && sheet.rows[0].cells[2] === 'merge-config-coin-v3')
 
   board.smallRewardsBankConfig = bank
   board.smallRewardWeightsConfig = weights
@@ -756,19 +757,15 @@ console.log('--- 22. Exports: V2 sheets reach the combined workbook/Sheets with 
 
   const combined = buildAllSegmentsWorkbook(segs)
   const tabNames = combined.worksheets.map((ws) => ws.name)
-  // (The drop table is one table for every segment, so it is one tab: "V2 Drop Groups", not one per segment.)
-  check('combined workbook has per-segment V2 tabs, and the one drop table once', ['S1 V2 Reward Chain', 'S1 V2 Economy', 'S2 V2 Economy', 'V2 Drop Groups'].every((n) => tabNames.includes(n)) && !tabNames.some((n) => /^S\d+ V2 Drop Groups$/.test(n)))
+  // (The reward chain, drop groups and economy pages were removed by the economist.)
+  check('the combined workbook has no reward chain, economy or drop groups page, and none named V2', !tabNames.some((n) => /V2|Reward Chain|Drop Groups|Economy|Twister/.test(n)) && tabNames.includes('S1 Small Rewards') && tabNames.includes('Endless'))
   check('all combined tab names fit Excel 31-char cap', tabNames.every((n) => n.length <= 31))
 
   const valueSheets = buildAllSegmentsSheetsAsValueRows(segs)
   const valueTitles = valueSheets.map((s) => s.title)
-  check('combined Google Sheets rows mirror the same V2 tabs (parity)', ['S1 V2 Reward Chain', 'V2 Drop Groups', 'S1 V2 Economy', 'S2 V2 Reward Chain'].every((n) => valueTitles.includes(n)) && JSON.stringify(valueTitles) === JSON.stringify(tabNames))
-  const econValues = valueSheets.find((s) => s.title === 'S2 V2 Economy').rows
-  check('Sheets V2 Economy values match the workbook builder', econValues[1][3] === 20 && econValues[1][4] === 7)
-
-  // The per-segment workbook gained V2 Economy too.
+  check('the combined Google Sheets export has the same pages as the workbook', JSON.stringify(valueTitles) === JSON.stringify(tabNames))
   const perSeg = buildWorkbook(segs[0].boards, segs[0].recompletionBoards)
-  check('per-segment workbook includes V2 Economy', perSeg.worksheets.some((ws) => ws.name === 'V2 Economy'))
+  check('the per-segment workbook has no economy page either', !perSeg.worksheets.some((ws) => /Economy/.test(ws.name)))
 }
 
 console.log('--- 23. A play session created with NO options (shared ?play stage) still uses the boards\' own reward config ---')

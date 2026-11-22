@@ -146,46 +146,51 @@ const REFERENCE_REWARD_CHAIN_SEED = {
   // is an economy decision this app does not make up. Only the asset id,
   // which did not change, is carried over.
   coins: [
-    { syntax: '', asset: 'merge-config-coin-v2', prizeAmount: 0 },
-    { syntax: '', asset: 'merge-config-coin-v2', prizeAmount: 0 },
-    { syntax: '', asset: 'merge-config-coin-v2', prizeAmount: 0 },
-    { syntax: '', asset: 'merge-config-coin-v2', prizeAmount: 0 },
+    { syntax: '', asset: 'merge-config-coin-v3', prizeAmount: 0 },
+    { syntax: '', asset: 'merge-config-coin-v3', prizeAmount: 0 },
+    { syntax: '', asset: 'merge-config-coin-v3', prizeAmount: 0 },
+    { syntax: '', asset: 'merge-config-coin-v3', prizeAmount: 0 },
   ],
   energy: [
-    { syntax: '[dynamic(dr-merge:5)]', asset: 'merge-config-dr-v2', prizeAmount: 5 },
-    { syntax: '[dynamic(dr-merge:15)]', asset: 'merge-config-dr-v2', prizeAmount: 15 },
-    { syntax: '[dynamic(dr-merge:35)]', asset: 'merge-config-dr-v2', prizeAmount: 35 },
-    { syntax: '[dynamic(dr-merge:75)]', asset: 'merge-config-dr-v2', prizeAmount: 75 },
+    { syntax: '[dynamic(dr-merge:5)]', asset: 'merge-config-dr-v3', prizeAmount: 5 },
+    { syntax: '[dynamic(dr-merge:15)]', asset: 'merge-config-dr-v3', prizeAmount: 15 },
+    { syntax: '[dynamic(dr-merge:35)]', asset: 'merge-config-dr-v3', prizeAmount: 35 },
+    { syntax: '[dynamic(dr-merge:75)]', asset: 'merge-config-dr-v3', prizeAmount: 75 },
   ],
   puzzles: [
-    { syntax: '[dynamic(dr-puzzle:5)]', asset: 'merge-config-puzzle-v2', prizeAmount: 5 },
-    { syntax: '[dynamic(dr-puzzle:15)]', asset: 'merge-config-puzzle-v2', prizeAmount: 15 },
-    { syntax: '[dynamic(dr-puzzle:15)]', asset: 'merge-config-puzzle-v2', prizeAmount: 15 },
-    { syntax: '[dynamic(dr-puzzle:40)]', asset: 'merge-config-puzzle-v2', prizeAmount: 40 },
+    { syntax: '[dynamic(dr-puzzle:5)]', asset: 'merge-config-puzzle-v3', prizeAmount: 5 },
+    { syntax: '[dynamic(dr-puzzle:15)]', asset: 'merge-config-puzzle-v3', prizeAmount: 15 },
+    { syntax: '[dynamic(dr-puzzle:15)]', asset: 'merge-config-puzzle-v3', prizeAmount: 15 },
+    { syntax: '[dynamic(dr-puzzle:40)]', asset: 'merge-config-puzzle-v3', prizeAmount: 40 },
   ],
   charms: [
-    { syntax: '[dynamic(dr-mf-charm:5)]', asset: 'merge-config-mfcharm-v2', prizeAmount: 5 },
+    { syntax: '[dynamic(dr-mf-charm:5)]', asset: 'merge-config-mfcharm-v3', prizeAmount: 5 },
     // One item pays ONE resource (economist: "the syntax of the items should
     // only give 1 resource"); their example sheet has charm-r2 as 10 charms.
     // It was seeded from an older reference as
     // 'free_undo:1+[dynamic(dr-mf-charm:4)]+free_entry:1'.
-    { syntax: '[dynamic(dr-mf-charm:10)]', asset: 'merge-config-mfcharm-v2', prizeAmount: 10 },
-    { syntax: '[dynamic(dr-mf-charm:30)]', asset: 'merge-config-mfcharm-v2', prizeAmount: 30 },
-    { syntax: '[dynamic(dr-mf-charm:40)]', asset: 'merge-config-mfcharm-v2', prizeAmount: 40 },
+    { syntax: '[dynamic(dr-mf-charm:10)]', asset: 'merge-config-mfcharm-v3', prizeAmount: 10 },
+    { syntax: '[dynamic(dr-mf-charm:30)]', asset: 'merge-config-mfcharm-v3', prizeAmount: 30 },
+    { syntax: '[dynamic(dr-mf-charm:40)]', asset: 'merge-config-mfcharm-v3', prizeAmount: 40 },
   ],
 }
 
 // The whole reward-chain config: one ladder per REWARD_TYPES entry, seeded
 // with the real Ops reference by default.
-// Twister starts BLANK (no syntax, no asset, zero DR per rank): no Ops
+// Twister starts with no syntax and zero DR per rank (its asset is the one
+// the economist gave, TWISTER_ASSET below): no Ops
 // reference for it exists here, and neither its item syntax nor its DR
 // values are this app's to invent. The economist enters them in the Twister
 // tab; until then Twister items are worth nothing and the Twister workflow
 // says it is not configured.
+// The Twister's asset, given by the economist (a picture of their sheet:
+// "we are missing the assets of the twister" - merge-config-twister-v3 on
+// all four ranks). Its syntax and values stay the build's / the economist's.
+export const TWISTER_ASSET = 'merge-config-twister-v3'
 export function createRewardChainConfig() {
   const config = {}
   for (const type of REWARD_TYPES) config[type] = createRewardTypeConfig(REFERENCE_REWARD_CHAIN_SEED[type])
-  config[TWISTER_TYPE] = createRewardTypeConfig()
+  config[TWISTER_TYPE] = createRewardTypeConfig(Array.from({ length: REWARD_MAX_RANK }, () => ({ asset: TWISTER_ASSET })))
   return config
 }
 
@@ -208,8 +213,22 @@ export function ensureRewardChainConfig(config) {
     if (next === config) next = { ...config }
     next.charms = next.charms.map((r, i) => (i === 1 ? { ...r, syntax: '[dynamic(dr-mf-charm:10)]', prizeAmount: 10 } : r))
   }
+  // A Twister rank saved with no asset (before it was given) gets it; an asset typed is kept.
+  if ((next[TWISTER_TYPE] ?? []).some((r) => !String(r?.asset ?? '').trim())) {
+    if (next === config) next = { ...config }
+    next[TWISTER_TYPE] = next[TWISTER_TYPE].map((r) => (String(r?.asset ?? '').trim() ? r : { ...r, asset: TWISTER_ASSET }))
+  }
+  // THE ASSETS ARE V3 (economist: "all should ve v3"). An asset saved as one of
+  // the old v2 names becomes its v3 name; any other asset typed is kept.
+  for (const type of ALL_REWARD_TYPES) {
+    if (!(next[type] ?? []).some((r) => OLD_V2_ASSETS.has(r?.asset))) continue
+    if (next === config) next = { ...config }
+    next[type] = next[type].map((r) => (OLD_V2_ASSETS.has(r?.asset) ? { ...r, asset: r.asset.replace(/-v2$/, '-v3') } : r))
+  }
   return next
 }
+
+const OLD_V2_ASSETS = new Set(['coin', 'dr', 'puzzle', 'mfcharm', 'twister'].map((name) => `merge-config-${name}-v2`))
 
 const OLD_CHARM_R2_SEED = { syntax: 'free_undo:1+[dynamic(dr-mf-charm:4)]+free_entry:1', prizeAmount: 4 }
 

@@ -100,14 +100,11 @@ console.log('--- 1. Syntax: the normal list and Recompletion in the same sheets 
   ok(`Small Rewards carries the round values the build gave (puzzle ${[1, 2, 3, 4].map((k) => valueOf(`puzzle-r${k}`)).join('/')}, charm ${[1, 2, 3, 4].map((k) => valueOf(`charm-r${k}`)).join('/')})`, ['puzzle', 'charm', 'dr'].every((key) => valueOf(`${key}-r2`) >= 2 * valueOf(`${key}-r1`) && valueOf(`${key}-r3`) >= 2 * valueOf(`${key}-r2`) && valueOf(`${key}-r4`) > 2 * valueOf(`${key}-r3`) && (valueOf(`${key}-r4`) % 5 === 0 || valueOf(`${key}-r4`) < 10)))
   await shot(page, 'syntax-small-rewards')
 
-  // Nothing is written twice on a page (economist: "in alot of pages we got many duplicants of think we dont need").
-  await view('V2 Reward Chain')
-  const chainRows = await rows()
-  ok(`V2 Reward Chain lists every rank value once, for the normal event and Recompletion together (${chainRows.length} rows, List "${chainRows[0][0]}")`, chainRows.length === 20 && chainRows.every((r) => r[0] === 'Main + RC') && new Set(chainRows.map((r) => r[3])).size === 20)
-  await view('V2 Drop Groups')
-  const dropRows = await rows()
-  const ranksUnder = (label) => [...new Set(dropRows.filter((r) => r[0] === label).map((r) => r[1]))].join(',')
-  ok(`V2 Drop Groups lists each rank once: ranks ${ranksUnder('Main + RC')} for both, ${ranksUnder('RC')} for Recompletion alone`, ranksUnder('Main + RC') === '6,7,8,9,10,11,12' && ranksUnder('RC') === '13,14' && !dropRows.some((r) => r[0] === 'Main') && !dropRows.some((r) => r[3] === '0'))
+  // Only the economist's pages and the endless ones; none named V2 (economist: "remove the reward chain,
+  // drop groups, twister, and economy" and "remove the naming of V2").
+  const pageNames = await page.getByTestId('syntax-view').locator('option').allInnerTexts()
+  ok(`the Syntax tab lists only the economist's pages and the endless ones, none named V2 (${pageNames.join(', ')})`, pageNames.join('|') === 'Normal|CC|Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless')
+  ok('Small Rewards carries the asset of each reward', ['coin', 'dr', 'puzzle', 'charm'].every((key) => /merge-config-/.test(values.find((r) => r[0] === `${key}-r1`)?.[2] ?? '')))
   await view('Normal')
   const normalText = await page.locator('pre').first().innerText()
   ok('the Normal view says what the whole list shares once, at the top, and writes reward items by their key', normalText.startsWith('ALL BOARDS: targetEv=') && (normalText.match(/REWARDS:/g) ?? []).length === 1 && (normalText.match(/targetEv=/g) ?? []).length === 1 && /coin-r1/.test(normalText) && !/R100\d/.test(normalText))
@@ -131,7 +128,7 @@ console.log('--- 1. Syntax: the normal list and Recompletion in the same sheets 
   ok(`the all-segments workbook writes the generator weights once for all eight segments (${gwAll.length} rows, Segment "${gwAll[0][0]}")`, gwAll.length === 27 && gwAll.every((r) => r[0] === 'All'))
   ok('...Event Data and Multipliers too', sheetRows('Event Data').length === 14 && sheetRows('Event Data').every((r) => r[0] === 'All') && sheetRows('Multipliers').length === 3)
   const tabNames = combined.worksheets.map((w) => w.name)
-  ok('...and the one drop table as one tab, with each segment\'s own Small Rewards', tabNames.filter((n) => /V2 Drop Groups/.test(n)).join() === 'V2 Drop Groups' && tabNames.includes('S1 Small Rewards') && tabNames.includes('S8 Small Rewards') && !tabNames.some((n) => /^RC Small|RC Blocked|RC Item/.test(n)))
+  ok(`...each segment's own Small Rewards, and no page the economist removed or named V2 (${tabNames.length} pages)`, !tabNames.some((n) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(n)) && tabNames.includes('Endless') && tabNames.includes('S1 Small Rewards') && tabNames.includes('S8 Small Rewards') && !tabNames.some((n) => /^RC Small|RC Blocked|RC Item/.test(n)))
 }
 
 console.log('--- 2. Step 6 and 7: round values, how close each player lands, and the same event played by different players ---')

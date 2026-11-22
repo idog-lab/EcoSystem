@@ -312,6 +312,21 @@ console.log('--- 7c. A Recompletion board never holds a rank 1 or 2, whatever it
   check(`a Recompletion list whose own lowest rank is still 1 is built with nothing below rank 3 on any board - under tiles, semi-blocked or fixed cell (lowest rank a board: ${lowest.join(', ')})`, rawRc[0].rcBoards.every((b) => b.minRank === 1 && b.listPhase === 'rc') && rcBoards.flat().every((b) => mainRanks(b).length > 0 && mainRanks(b).every((v) => v >= 3)))
   check('...and the floor is read the same everywhere: a Recompletion board\'s lowest rank is 3 or its own, whichever is higher', boardMinRank(rawRc[0].rcBoards[1], 1) === 3 && boardMinRank({ ...rawRc[0].rcBoards[1], minRank: 5 }, 1) === 5 && boardMinRank(raw[0].mainBoards[0], 0) === 1)
   check(`Recompletion's Board 1 still lands on its 300 DR, and each phase's spend is counted from its own start (${rcDraft.segments.map((seg) => `${Math.round(seg.demandFit.paid.mean)} of ${seg.demandFit.configured}`).join('; ')})`, rcDraft.segments.every((seg) => seg.perBoard[0].mainSum === 300 && seg.demandFit.paid.mean >= 0 && seg.demandFit.steps.initial > 0))
+
+  // RECOMPLETION'S OWN EFFORT (economist: "i want to be able to see the effort distribution on the RC also").
+  const { buildClimbRows, buildSimulationRows, RC_RANKS } = await import('../../src/features/merge/lib/simulation/simulationRows.js')
+  const runs = mains.map((main, i) => simulatePlaythrough(main, { dropMode: 'expected', rcBoards: rcBoards[i] }))
+  const climbs = runs.map((run) => buildClimbRows(run.rcEffort, RC_RANKS))
+  const paid = (rows) => rows.reduce((sum, row) => sum + (row.drDelta ?? 0), 0)
+  check(`the simulator measures Recompletion from its own start: what is paid there, and the paid DR when each rank is first made there (${runs.map((run) => `${run.rcEffort?.drSpent} DR, rank 14 at ${run.rcEffort?.reachedAt[14]}`).join('; ')})`, runs.every((run) => run.rcEntered && run.rcEffort && run.rcEffort.drSpent === run.drSpentRcPhase && run.rcEffort.reachedAt[14] === run.rcEffort.drSpent && Object.values(run.rcEffort.reachedAt).every((v) => v >= 0 && v <= run.rcEffort.drSpent)))
+  check('...without touching the whole run\'s own record: rank 12 is reached the moment Recompletion begins, and ranks 13 and 14 are only in Recompletion\'s', runs.every((run) => run.reachedAt[12] === run.drSpentMainPhase && run.reachedAt[14] === run.drSpent && buildSimulationRows(run).length === 12))
+  check(`the climb never goes backwards and adds up to all that is paid in Recompletion (${climbs.map((rows) => rows.filter((row) => row.drDelta != null).map((row) => `${row.rank}:+${row.drDelta}`).join(' ')).join(' | ')})`, climbs.every((rows, i) => rows.length === 14 && rows.every((row) => row.drDelta == null || row.drDelta >= 0) && rows.every((row) => row.tapsDelta == null || row.tapsDelta >= 0) && paid(rows) === runs[i].rcEffort.drSpent && Math.abs(rows.reduce((sum, row) => sum + (row.pctOfEffort ?? 0), 0) - 100) < 1e-6))
+  // The two ways ranks come out of order, on plain numbers: a rank skipped (opened from a tile, merged into),
+  // and a rank first made after a higher one (a small generator tap late on).
+  const made = { reachedAt: { 1: 140, 2: 140, 3: 4, 4: 4, 5: 8, 11: 52, 13: 140, 14: 1176 }, tapsAt: { 1: 36, 2: 37, 3: 1, 4: 1, 5: 2, 11: 13, 13: 36, 14: 535 }, drSpent: 1176 }
+  const rows = Object.fromEntries(buildClimbRows(made, RC_RANKS).map((row) => [row.rank, row]))
+  check('a rank that was skipped does not send the next one back to zero (rank 13 after rank 11, rank 12 never made: +88, not +140)', rows[12].dr === undefined && rows[12].drDelta === null && !rows[12].aside && rows[13].drDelta === 88 && rows[14].drDelta === 1036)
+  check('a rank first made after a higher one is shown with its moment and no cost, and takes nothing from the ranks of the climb (ranks 1 and 2 at 140; rank 3 +4, not -136)', rows[1].aside && rows[2].aside && rows[1].dr === 140 && rows[1].drDelta === null && rows[3].drDelta === 4 && rows[4].drDelta === 0 && rows[5].drDelta === 4 && Object.values(rows).reduce((sum, row) => sum + (row.drDelta ?? 0), 0) === 1176)
 }
 
 console.log('--- 8. Each segment\'s Twister values and price reach the export ---')

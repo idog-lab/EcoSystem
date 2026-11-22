@@ -202,6 +202,19 @@ await page.getByTestId('build-scope').getByRole('button', { name: 'Recompletion'
 await page.waitForTimeout(300)
 ok('Recompletion is in use together with the Normal build it was made on', (await page.getByTestId('rc-on-main-draft').count()) === 0 && (await page.locator('[data-testid="build-scope"] [data-status="applied"]').count()) === 1)
 ok('...and is not called out of date', (await page.getByTestId('build-needs-rebuild').count()) === 0)
+// Recompletion's own effort distribution (economist: "i want to be able to see the effort distribution on the RC also").
+{
+  const rcEffort = page.locator('[data-testid="built-effort"][data-phase="rc"]')
+  await rcEffort.waitFor({ state: 'visible', timeout: 30000 }).catch(() => null)
+  const text = (await rcEffort.count()) ? (await rcEffort.innerText()).replace(/\s+/g, ' ') : ''
+  const spent = num((await rcEffort.locator('[data-cell="dr-spent"]').count()) ? await rcEffort.locator('[data-cell="dr-spent"]').innerText() : '')
+  const top = (await rcEffort.locator('[data-cell="rc-top"]').count()) ? (await rcEffort.locator('[data-cell="rc-top"]').innerText()).trim() : 'no rank 14 figure'
+  // (Only the bars of the "% effort" row: their hover reads "Rank N: X%".)
+  const pcts = (await rcEffort.locator('[title]').evaluateAll((els) => els.map((e) => e.title))).filter((t) => /^Rank \d+: -?[\d.]+%$/.test(t)).map((t) => parseFloat(t.split(': ')[1]))
+  const total = pcts.reduce((s, p) => s + p, 0)
+  ok(`Recompletion shows its own effort distribution, ranks 1 to 14, counted from its start (spends ${spent} DR; rank 14 ${top}; shares add up to ${Math.round(total)}%)`, spent > 0 && /Effort distribution - Recompletion/i.test(text) && /^at [\d,]+ DR$/.test(top) && (await rcEffort.locator('[title^="Rank 14"]').count()) >= 4 && Math.abs(total - 100) <= 2)
+  await shot(page, 'f3-rc-effort')
+}
 
 // ---- Step 7: the whole event is in use ----
 await step(page, 'finalize').click()

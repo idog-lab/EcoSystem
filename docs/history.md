@@ -7478,3 +7478,63 @@ wrote them as `[dynamic(dr-twister:N)]`. The reward chain now uses the same
 (`dr-twister` is still this app's own, unverified name). The amounts in the
 "Prize amount" column were always there; nothing in the economy changed.
 Held by verify-containers and twister-workflow.
+
+## Recompletion's effort chart; only the economist's pages in the output
+
+Economist: "i want to be able to see the effort distribution on the RC also.
+and in the output. we got alot of pages that werent given to u by me in the
+example u can remove them. and remove the naming of V2 from the pages in the
+output."
+
+**Recompletion's effort.** Step 4's chart for a Recompletion build played the
+normal event and Recompletion together and drew ranks 1-12 only: every one of
+them was reached in the normal event, so Recompletion's climb (a second rank
+12, then 13 and 14) never showed, and the shares were of the whole run. The
+simulator now also records, from the moment Recompletion begins, the paid DR
+when the player first MAKES an item of each rank there - by a merge or from
+the generator (`rcEffort`). What is only seen does not count: items carried
+in from the normal event (the rank 12 among them) and items on the board
+(`recordSeen`, used by every board scan). The chart draws ranks 1-14 with
+Recompletion's spend, the subsidy that reaches the player and the boards
+reached in Recompletion, and rank 14's cost. On a small hand-made stage the
+second rank 12 sat under a tile and was merged into, never made, so rank 13
+was counted from zero and the shares came to 150%. On a real build (single
+build) a late generator tap made rank 1 after rank 11 existed, and the chart
+showed rank 3 at "-136 DR, -12%". So Recompletion's chart is read as a climb
+(`buildClimbRows`): a rank is part of it when no higher rank was made before
+it, and costs what was paid since the last rank of the climb - never
+negative, 100% at rank 14. A rank made after a higher one is shown with its
+moment and no cost; the step says which. The normal chart is unchanged.
+Nothing the simulated player does changed: `reachedAt` is recorded exactly as
+before. Held by verify-twister-cadence (section 7c) and build-feedback.
+
+**The output.** Asked which pages stay (the price of a twist was only on "V2
+Twister"), the economist answered: "remove the V2. u can keep the endless
+ones. but, remove the reward chain, drop groups, twister, and economy. in the
+small rewards page is where we should see the asset", and to keep the
+Segments page of the all-segments export. So: V2 Reward Chain, V2 Drop
+Groups, V2 Economy and V2 Twister are gone from the Syntax tab, both
+workbooks and both Google Sheets exports; "V2 Endless" is "Endless". The
+price of a twist is no longer exported (said in CLAUDE.md's open questions).
+Small Rewards already carries each reward's asset; the Twister rows have none
+(none was ever given). The "Rewards (V2)" advanced tool keeps its name: it is
+a tool, not an output page.
+
+## The Twister's asset
+
+Economist, with a picture of their sheet: "we are missing the assets of the
+twister" - the four Twister rows of Small Rewards with the asset
+`merge-config-twister-v2`. It is now the Twister's asset on all four ranks
+(`TWISTER_ASSET` in rewardChain.js): a new project has it, and a project saved
+without it gets it when opened (`ensureRewardChainConfig`); an asset typed by
+hand is kept. (The note above, "the Twister rows have none", is history.) The
+same picture shows the charm asset as `merge-config-mfcharm-v3`, where this
+app's seed has `merge-config-mfcharm-v2`: asked, not changed.
+Held by verify-containers and verify-twister.
+
+**All assets are v3.** Asked whether the charm asset should be v3 as in the
+picture, the economist answered: "all should ve v3". Every reward's asset is
+now v3 - merge-config-coin-v3, -dr-v3, -puzzle-v3, -mfcharm-v3, -twister-v3
+(the reference example still says v2; the economist's answer wins). A project
+saved with the v2 names opens with v3 (`ensureRewardChainConfig`,
+`OLD_V2_ASSETS`); any other asset typed is kept.

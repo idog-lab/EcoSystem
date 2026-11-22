@@ -648,6 +648,21 @@ and know what to do next without reading documentation"):
   same playthrough the step 4 chart shows. (Judged on the main chain alone it
   looked close while the chart showed rank 12 at 77% against 65% asked.)
   That section itself can only judge the main chain: the drops do not exist yet.
+- **Recompletion has its own effort chart** (economist: "i want to be able to
+  see the effort distribution on the RC also"). In the Recompletion phase the
+  step 4 chart ("Effort distribution of this build") draws ranks 1 to 14,
+  counted from the moment Recompletion begins: for each rank, the paid DR when
+  the player first MAKES an item of it there, by a merge or from the generator
+  (`rcEffort` in the simulator's result; `recordSeen` marks items only seen -
+  carried in from the normal event, or on the board - which do not count). So
+  rank 12 is the second one made, and 13 and 14 show what they cost. The chart
+  reads it as a **climb** (`buildClimbRows`, this app's own reading): a rank
+  is part of the climb when no higher rank was made before it, and costs what
+  was paid since the last rank of the climb - never negative, adding up to
+  100% at rank 14. A rank first made after a higher one (a late generator
+  tap) is `aside`: its moment shown, no cost; a rank skipped (opened from a
+  tile, merged into) has nothing. The normal chart is unchanged. A
+  measurement only; nothing the simulated player does changed.
 - **A change of the build's rules marks older builds "Out of date"**
   (`BUILD_RULES_VERSION`, the `rules` part of a build's inputs): nothing that
   was applied is altered on its own; the economist is told why and builds
@@ -686,12 +701,27 @@ The tab shows one sheet at a time, picked in a dropdown (`syntax-view`), and
 has one pair of export buttons with a switch for what they hold: the segment
 shown, or all segments (`syntax-scope`). No board list beside it.
 
-Per-segment workbook / Google Sheet in the reference tab order (Event Data,
-Multipliers, Board Layouts, Recompletion Board Layouts, Generator Weights,
-Blocked Queue, Item Ladder, Small Rewards, Small Rewards Bank, Small Reward
-Weights, Endless container tabs, V2 tabs), plus combined all-segment exports
-(there each segment has its own "S{n} Small Rewards": the values are per
-segment; Bank and Weights are one table for all). **The normal list and Recompletion are one event** (economist: "they
+**Only the economist's pages, and none named "V2"** (economist: "we got alot
+of pages that werent given to u by me in the example u can remove them ... u
+can keep the endless ones. but, remove the reward chain, drop groups, twister,
+and economy ... remove the naming of V2"). Per-segment workbook / Google
+Sheet, in the reference tab order: Event Data, Multipliers, Board Layouts,
+Recompletion Board Layouts, Generator Weights, Blocked Queue, Item Ladder,
+Small Rewards, Small Rewards Bank, Small Reward Weights, then Endless Small
+Rewards Bank, Endless Small Reward Weights and **Endless** (endless mode's
+rules; it was "V2 Endless"). The combined all-segment export has the same,
+behind a **Segments** page (S1 = the segment's name; kept, the economist
+asked), each segment with its own "S{n} Board Layouts / Blocked Queue / RC
+Board Layouts / Item Ladder / Small Rewards" (the values are per segment;
+Bank and Weights are one table for all). **Removed: V2 Reward Chain, V2 Drop
+Groups, V2 Economy, V2 Twister** - so **the price of a twist is not in the
+output** (it was only on "V2 Twister"; it is on screen and travels in a stage
+link). The assets are on Small Rewards (economist: "in the small rewards page
+is where we should see the asset"); the Twister's is `merge-config-twister-v3`
+on all four ranks (`TWISTER_ASSET`; economist, with a picture of their sheet:
+"we are missing the assets of the twister"), filled in on opening a project
+saved without it, an asset typed kept. The builders of the removed pages are kept in
+eventSheets.js: the engine checks read the model through them. **The normal list and Recompletion are one event** (economist: "they
 happen one after another in the same event"): Generator Weights runs to rank
 14 (ranks 13-14 with the Recompletion list's own EV and unlock ranks; columns
 T1-T14), the **Blocked Queue** holds the normal entries and then
@@ -707,9 +737,7 @@ numbers").
 many duplicants of think we dont need"): in the all-segments export a row of
 Event Data, Multipliers or Generator Weights that is the same for every
 segment is written once with "All" in the Segment column (`combineSegments`;
-per segment only where it differs), and the one drop table is one "V2 Drop
-Groups" tab; V2 Reward Chain and V2 Drop Groups list the event once ("Main +
-RC", with ranks 13-14 as "RC") and no zero "(no drop)" lines; the Normal and
+per segment only where it differs); the Normal and
 CC text views say what a list shares (lucky-drop EV, rank rewards, the EV
 bumps) once at the top and write reward items by key. What still repeats is
 the reference format itself and stays: one Generator Weights row per rank and
@@ -719,16 +747,13 @@ transcribe headers and values literally (typos included where the reference
 has them), never use merged cells, keep row order. `exceljs` for styling;
 Google Sheets via a browser OAuth token, values only, `RAW` input. The
 economist's live reference spreadsheet is the authority on format. Reward
-keys in queue/layout cells and every V2 / Twister / Endless tab are
-unverified and labelled so. The Twister rows of Small Rewards and of V2
-Reward Chain are written `[dynamic(dr-twister:value)]` when no syntax was
-typed (`twisterSyntaxFor` - V2 Reward Chain left them blank until the
-economist saw it: "we are missing in the config the twister value in the
-reward chain";
+keys in queue/layout cells and the Endless pages are
+unverified and labelled so. The Twister rows of Small Rewards are written
+`[dynamic(dr-twister:value)]` when no syntax was typed (`twisterSyntaxFor`;
 `dr-twister` is our own name), and a typed one-amount syntax follows the
 values the build sizes (`syntaxWithAmount`). Open questions on the Small Rewards sheets
-(literal coins vs allowance, which extra tabs belong) were asked and not yet
-answered.
+(literal coins vs allowance) were asked and not yet answered; which extra
+tabs belong was answered (above).
 
 ## Play surfaces
 
@@ -812,7 +837,8 @@ older second Recompletion list is kept for explicit recovery).
 
 ## Open questions (do not resolve silently)
 
-- Production Ops mapping for reward keys and the V2 / Twister / Endless tabs.
+- Production Ops mapping for reward keys and the Endless pages; where Ops
+  gets the price of a twist now that "V2 Twister" is no longer exported.
 - Twister spin outcomes, widget length, balance across the main -> RC boundary.
 - Bigger Twister items at ranks 7 to 9 (`bigger79`, see Twister): measured to
   give more, smaller chances to spin with the same timing; rank 5 untouched.

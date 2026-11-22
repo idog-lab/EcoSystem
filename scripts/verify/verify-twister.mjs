@@ -103,7 +103,7 @@ check('Twister is NOT one of the four source-allocated resources', !REWARD_TYPES
 check('Twister is labelled distinctly from merge energy', REWARD_TYPE_LABELS.twister === 'Twister DR' && REWARD_TYPE_LABELS.energy === 'Merge Energy' && smallRewardKey(TWISTER_TYPE, 2) === 'dr-twister-r2' && smallRewardKey('energy', 2) === 'dr-r2')
 {
   const fresh = createRewardChainConfig()
-  check('a fresh Twister ladder is blank - no syntax, asset or value is invented', fresh.twister.every((r) => r.syntax === '' && r.asset === '' && r.prizeAmount === 0) && !twisterIsConfigured(fresh))
+  check('a fresh Twister ladder has no syntax or value invented; its asset is the one the economist gave (merge-config-twister-v3)', fresh.twister.every((r) => r.syntax === '' && r.asset === 'merge-config-twister-v3' && r.prizeAmount === 0) && !twisterIsConfigured(fresh))
   const { twister: _t, ...legacy } = createRewardChainConfig()
   legacy.coins[2].prizeAmount = 4242
   const ensured = ensureRewardChainConfig(legacy)
@@ -503,20 +503,20 @@ console.log('--- 13. Sharing and exports ---')
   check('...or as starting-board content', buildBoardLayoutsSheet(dirty).sections[0].rows.flat().every((cell) => !String(cell).includes('twister')))
 
   const single = buildAllSheetsAsValueRows(chain, rcA, '', [], { twisterPlan: plan, segmentIndex: 0 })
-  check('the per-segment Google Sheets payload includes V2 Twister and is valid', single.some((s) => s.title === 'V2 Twister') && validateSheetsPayload(single).length === 0)
+  // (Economist: "remove the reward chain, drop groups, twister, and economy". The Twister page's builder
+  // is still read above; the output no longer carries it - so the price of a twist is not exported.)
+  check('the per-segment Google Sheets payload has no Twister page any more, and is valid', !single.some((s) => /Twister/.test(s.title)) && validateSheetsPayload(single).length === 0)
   const segs = [
     { name: 'One', boards: chain, recompletionBoards: rcA },
     { name: 'Two', boards: chain.map((b) => ({ ...b, twisterSpinCost: 21 })), recompletionBoards: rcA },
   ]
   const combined = buildAllSegmentsSheetsAsValueRows(segs, { twisterPlan: plan })
-  const combinedTwister = combined.find((s) => s.title === 'V2 Twister').rows
-  check('the combined payload has one V2 Twister tab with every segment\'s own cost', combinedTwister.some((r) => r[1] === 'S1' && r[2] === 'Main' && r[4] === 7) && combinedTwister.some((r) => r[1] === 'S2' && r[2] === 'Main' && r[4] === 21))
-  check('...the shared rule and design metadata once, and the per-segment override', combinedTwister.filter((r) => r[0] === 'Runtime - shared across segments').length === 2 && combinedTwister.some((r) => r[0] === 'Design metadata - not runtime' && r[1] === 'S2' && r[4] === 9))
+  check('the combined payload has no Twister page either', !combined.some((s) => /Twister/.test(s.title)))
   check('the combined payload is valid for Sheets', validateSheetsPayload(combined).length === 0)
   const wb = buildWorkbook(chain, rcA, [], { twisterPlan: plan, segmentIndex: 0 })
   const all = buildAllSegmentsWorkbook(segs, { twisterPlan: plan })
-  check('both workbooks carry a V2 Twister tab', !!wb.getWorksheet('V2 Twister') && !!all.getWorksheet('V2 Twister') && all.worksheets.every((w) => w.name.length <= 31))
-  check('the verified Ops sheets keep their order ahead of the V2 tabs', wb.worksheets[0].name === 'Event Data' && wb.worksheets[wb.worksheets.length - 2].name === 'V2 Twister' && wb.worksheets[wb.worksheets.length - 1].name === 'V2 Endless')
+  check('neither workbook carries a Twister page or a page named V2', !wb.worksheets.some((w) => /Twister|V2/.test(w.name)) && !all.worksheets.some((w) => /Twister|V2/.test(w.name)) && all.worksheets.every((w) => w.name.length <= 31))
+  check('the Ops pages keep their order, the endless rules last', wb.worksheets[0].name === 'Event Data' && wb.worksheets[wb.worksheets.length - 1].name === 'Endless')
 }
 
 console.log(failures === 0 ? `\nALL ${count} TWISTER CHECKS PASSED` : `\n${failures} OF ${count} TWISTER CHECK(S) FAILED`)

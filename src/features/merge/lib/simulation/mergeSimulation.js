@@ -1261,14 +1261,30 @@ export function simulatePlaythrough(boards, options = {}) {
   let energySpent = 0 // V2: generator actions funded by collected energy, not DR (see the main loop)
   const reachedAt = {}
   const tapsAt = {}
-  const recordRank = (rank) => {
+  // RECOMPLETION'S OWN EFFORT (economist: "i want to be able to see the effort
+  // distribution on the RC also"). `reachedAt` is the whole run's: every rank
+  // up to 12 was reached in the normal event, so Recompletion's climb never
+  // showed. `rcReachedAt` is the paid DR since Recompletion began at the moment
+  // the player first MAKES an item of each rank there - by a merge or from the
+  // generator. Items carried in from the normal event (the rank 12 among
+  // them) are only seen, not made, so they do not count (`recordSeen`). A
+  // measurement only: nothing the player does depends on it.
+  const rcReachedAt = {}
+  const rcTapsAt = {}
+  let rcStart = null
+  const recordRank = (rank, seen = false) => {
     if (!isMainItem(rank)) return // reward items (V2) never count as "reached"
     if (reachedAt[rank] === undefined) {
       reachedAt[rank] = drSpent
       tapsAt[rank] = taps
       log?.({ type: 'reached', rank })
     }
+    if (!seen && rcStart && rcReachedAt[rank] === undefined) {
+      rcReachedAt[rank] = drSpent - rcStart.dr
+      rcTapsAt[rank] = taps - rcStart.taps
+    }
   }
+  const recordSeen = (rank) => recordRank(rank, true)
 
   // Reward collection (V2) - a flat tally per resource type, credited by
   // performMerge's auto-collect-at-rank-4, collectReward (manual, see the
@@ -1415,7 +1431,7 @@ export function simulatePlaythrough(boards, options = {}) {
         // starts stuck (see buildInitialState), so in practice this is a
         // no-op today; kept as an explicit guard rather than an assumption,
         // matching recordAllOccupied's own rule below.
-        if (!state.stuck[r][c]) recordRank(state.itemAt[r][c])
+        if (!state.stuck[r][c]) recordSeen(state.itemAt[r][c])
       }
     }
   }
@@ -1430,7 +1446,7 @@ export function simulatePlaythrough(boards, options = {}) {
   let nextBoardIndex = advanceBoards(state, activeBoards, startIndex + 1, inventory, (waveBoard, rows, overflow) =>
     log?.({ type: 'board-push', name: waveBoard.name, rows, overflow }),
   )
-  recordAllOccupied(state, recordRank)
+  recordAllOccupied(state, recordSeen)
 
   const rcBoards = options.rcBoards ?? null
   let phase = 'main'
@@ -1530,6 +1546,7 @@ export function simulatePlaythrough(boards, options = {}) {
         }
         collectedAtRcEntry = { ...collected }
         drSpentAtRcEntry = drSpent
+        rcStart = { dr: drSpent, taps }
         // What the normal event leaves unspent is what Recompletion starts with.
         energyFlow.main.left = energyBalance
         energyFlow.rc.start = energyBalance
@@ -1575,7 +1592,7 @@ export function simulatePlaythrough(boards, options = {}) {
         nextBoardIndex = advanceBoards(state, activeBoards, 1, inventory, (waveBoard, rows, overflow) =>
           log?.({ type: 'board-push', name: waveBoard.name, rows, overflow }),
         )
-        recordAllOccupied(state, recordRank)
+        recordAllOccupied(state, recordSeen)
         log?.({ type: 'rc-entered' })
         progressByPhase.rc = 0
         continue
@@ -1618,7 +1635,7 @@ export function simulatePlaythrough(boards, options = {}) {
       nextBoardIndex = advanceBoards(state, activeBoards, nextBoardIndex, inventory, (waveBoard, rows, overflow) =>
         log?.({ type: 'board-push', name: waveBoard.name, rows, overflow }),
       )
-      recordAllOccupied(state, recordRank)
+      recordAllOccupied(state, recordSeen)
       continue
     }
 
@@ -1777,6 +1794,9 @@ export function simulatePlaythrough(boards, options = {}) {
     // Paid generator DR of each phase on its own (rc: null when never entered).
     drSpentMainPhase: drSpentAtRcEntry ?? drSpent,
     drSpentRcPhase: drSpentAtRcEntry != null ? drSpent - drSpentAtRcEntry : null,
+    // Recompletion's own climb, counted from its start (see rcReachedAt above;
+    // null when the run never entered it).
+    rcEffort: rcStart ? { reachedAt: rcReachedAt, tapsAt: rcTapsAt, drSpent: drSpent - rcStart.dr } : null,
     // When things happened, in paid DR (options.cadence) - see above.
     cadence,
     phase,

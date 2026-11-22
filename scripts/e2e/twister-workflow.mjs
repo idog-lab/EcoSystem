@@ -223,20 +223,23 @@ ok('generating the other small rewards leaves the Twister drop in place', (await
 
 // ---------- Syntax tab: shared definitions vs segment costs ----------
 await tab(page, 'Syntax').click()
-await syntaxView(page, 'V2 Twister')
-await page.waitForTimeout(200)
-const twisterSheet = await page.locator('table').first().innerText()
-ok('V2 Twister lists this segment\'s cost as runtime and the targets as design metadata', twisterSheet.includes('Runtime - segment-specific') && twisterSheet.includes('DR cost per spin') && twisterSheet.includes(String(sug0)) && twisterSheet.includes('Design metadata - not runtime') && twisterSheet.includes('Target spins by the checkpoint'))
-await syntaxView(page, 'V2 Reward Chain')
+// (The Twister, reward chain and drop groups pages were removed by the economist; the Twister's
+// values and syntax are on Small Rewards, its drops in Small Rewards Bank.)
+{
+  const pageNames = await page.getByTestId('syntax-view').locator('option').allInnerTexts()
+  ok(`no Twister, reward chain or drop groups page any more, and none named V2 (${pageNames.slice(-3).join(', ')})`, !pageNames.some((n) => /V2|Twister|Reward Chain|Drop Groups|Economy/.test(n)))
+}
+await syntaxView(page, 'Small Rewards')
 await page.waitForTimeout(200)
 {
-  const chainRows = await page.locator('table').first().locator('tr').allInnerTexts()
-  const twisterRows = chainRows.filter((t) => t.includes('dr-twister-r'))
-  ok(`the shared Twister ladder is exported with the reward definitions, each rank with its syntax (${twisterRows.map((t) => t.match(/\[dynamic\([^\]]*\]|my-[^\s]*/)?.[0] ?? 'NO SYNTAX').join(' ')})`, twisterRows.length >= 4 && twisterRows.every((t) => /dynamic\(dr-twister:\d|\S+:\d/.test(t.split('\t')[4] ?? t)) && twisterRows.some((t) => t.includes('dr-twister-r4')))
+  const rewardRows = await page.locator('table').first().locator('tr').allInnerTexts()
+  const twisterRows = rewardRows.filter((t) => t.includes('dr-twister-r'))
+  ok(`the Twister ladder is exported on Small Rewards, each rank with its syntax (${twisterRows.map((t) => t.match(/\[dynamic\([^\]]*\]|my-[^\s]*/)?.[0] ?? 'NO SYNTAX').join(' ')})`, twisterRows.length === 4 && twisterRows.every((t) => /dynamic\(dr-twister:\d|\S+:\d/.test(t)))
+  ok('...and each with its asset, merge-config-twister-v3', twisterRows.every((t) => t.includes('merge-config-twister-v3')))
 }
-await syntaxView(page, 'V2 Drop Groups')
+await syntaxView(page, 'Small Rewards Bank')
 await page.waitForTimeout(200)
-ok('the shared Twister drop is exported with the drop groups', /Twister DR rank/.test(await page.locator('table').first().innerText()) && (await page.locator('table').first().innerText()).includes('Twister DR R2'))
+ok('the Twister drop is exported in the containers', /dr-twister-r2/.test(await page.locator('table').first().innerText()))
 await syntaxView(page, 'Blocked Queue')
 await page.waitForTimeout(200)
 ok('the Blocked Queue export contains no Twister entry', !(await page.locator('table').first().innerText()).includes('twister'))

@@ -113,7 +113,9 @@ console.log('--- 4. The sheets ---')
   const names = sheetNames(wb)
   // (One bank and one weights table for the normal event and Recompletion: there are no "RC" container tabs any more.)
   check('the workbook keeps the reference tabs in order, with no Recompletion container tabs', names.indexOf('Small Rewards') < names.indexOf('Small Rewards Bank') && names.indexOf('Small Rewards Bank') + 1 === names.indexOf('Small Reward Weights') && !names.some((n) => /^RC Small/.test(n)))
-  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.at(-1) === 'V2 Endless')
+  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.at(-1) === 'Endless')
+  // Economist: keep only the pages of the example and the endless ones; no page named "V2".
+  check(`the workbook holds only the economist's pages and the three endless ones, none named V2 (${names.join(', ')})`, names.join('|') === 'Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless')
   check('no tab name is over Excel\'s 31 characters', names.every((n) => n.length <= 31))
   const read = (name) => {
     const ws = wb.getWorksheet(name)
@@ -129,11 +131,13 @@ console.log('--- 4. The sheets ---')
   check('...and its weights start at its own drop rank (tier 4) and run to 14', rcWeights.length === 13 && rcWeights[1].at(-1) === NO_DROP_ONLY_WEIGHT && rcWeights[2].at(-1) === 0)
 
   const values = buildAllSheetsAsValueRows(boards, rc)
-  check('the Google Sheets export carries the same container sheets, endless included', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => values.some((v) => v.title === t)) && !values.some((v) => /^RC Small/.test(v.title)) && values.find((v) => v.title === 'Small Rewards Bank').rows[1][0] === 'ContA')
+  check('the Google Sheets export carries the same container sheets, endless included', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'Endless'].every((t) => values.some((v) => v.title === t)) && !values.some((v) => /^RC Small/.test(v.title)) && values.find((v) => v.title === 'Small Rewards Bank').rows[1][0] === 'ContA')
   const segments = [{ name: 'Segment 1', boards, recompletionBoards: rc }, { name: 'Segment 2', boards, recompletionBoards: rc }]
   const combined = sheetNames(buildAllSegmentsWorkbook(segments))
-  check('the combined workbook has them once (containers are shared by every segment), and each segment its own Small Rewards', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'V2 Endless'].every((t) => combined.filter((n) => n === t).length === 1) && combined.includes('S1 Small Rewards') && combined.includes('S2 Small Rewards') && !combined.includes('Small Rewards') && combined.every((n) => n.length <= 31))
+  check('the combined workbook has them once (containers are shared by every segment), and each segment its own Small Rewards', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'Endless'].every((t) => combined.filter((n) => n === t).length === 1) && combined.includes('S1 Small Rewards') && combined.includes('S2 Small Rewards') && !combined.includes('Small Rewards') && combined.every((n) => n.length <= 31))
   check('...and so does the combined Google Sheets export', buildAllSegmentsSheetsAsValueRows(segments).filter((v) => /Small Reward/.test(v.title)).length === 6)
+  check(`the combined workbook has no page named V2, and no reward chain, drop groups, Twister or economy page (${combined.join(', ')})`, !combined.some((n) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(n)) && combined[0] === 'Segments')
+  check('...nor its Google Sheets form', !buildAllSegmentsSheetsAsValueRows(segments).some((v) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(v.title)) && !values.some((v) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(v.title)))
 }
 
 console.log('--- 4b. From a chosen rank, every drop holds two or more items ---')
@@ -390,6 +394,17 @@ console.log('--- 4g. The Twister rows of the Small Rewards sheet carry their amo
   const typed = JSON.parse(JSON.stringify(board))
   typed.rewardChainConfig[TWISTER_TYPE][3].syntax = 'my-twister:30'
   check('a syntax typed by hand is kept as typed', rowsOf(typed)[3][1] === 'my-twister:30')
+  // The Twister's asset (economist: "we are missing the assets of the twister" - merge-config-twister-v3).
+  const { ensureRewardChainConfig } = await import('../../src/features/merge/lib/rewards/rewardChain.js')
+  check(`each Twister rank is written with its asset (${rows.map((r) => r[2]).join(' ')})`, rows.every((r) => r[2] === 'merge-config-twister-v3'))
+  const savedBlank = { ...board.rewardChainConfig, [TWISTER_TYPE]: board.rewardChainConfig[TWISTER_TYPE].map((r, i) => ({ ...r, asset: i === 3 ? 'my-asset' : '' })) }
+  const opened = ensureRewardChainConfig(savedBlank)[TWISTER_TYPE].map((r) => r.asset)
+  check(`a project saved before it gets the asset when opened, and an asset typed is kept (${opened.join(' ')})`, opened.join() === 'merge-config-twister-v3,merge-config-twister-v3,merge-config-twister-v3,my-asset')
+  // Economist: "all should ve v3". A project saved with the v2 names opens with v3; another asset typed is kept.
+  const v2Saved = Object.fromEntries(Object.entries(board.rewardChainConfig).map(([type, ladder]) => [type, ladder.map((r, i) => ({ ...r, asset: type === 'puzzles' && i === 3 ? 'my-puzzle' : r.asset.replace(/-v3$/, '-v2') }))]))
+  const v3 = ensureRewardChainConfig(v2Saved)
+  const assetsOf = (config) => ['coins', 'energy', 'puzzles', 'charms', TWISTER_TYPE].map((t) => [...new Set(config[t].map((r) => r.asset))].join('/')).join(' ')
+  check(`every asset is v3; a project saved with the v2 names opens with v3, another asset typed is kept (${assetsOf(v2Saved)} -> ${assetsOf(v3)})`, assetsOf(board.rewardChainConfig) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3 merge-config-mfcharm-v3 merge-config-twister-v3' && assetsOf(v3) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3/my-puzzle merge-config-mfcharm-v3 merge-config-twister-v3')
   // The V2 Reward Chain sheet writes the Twister the same way (its syntax cells were blank).
   const { buildV2RewardChainSheet } = await import('../../src/features/merge/lib/export/eventSheets.js')
   const chainOf = (b) => buildV2RewardChainSheet([b]).rows.map((r) => r.cells).filter((c) => c[1] === 'Twister DR')
@@ -567,9 +582,9 @@ console.log('--- 7. Nothing is written twice on a page ---')
   const mixed = buildCombinedGeneratorWeightsSheet(otherTiers).rows.map((r) => r.cells[0])
   check('segments whose multipliers unlock at different ranks (different rows altogether) keep a block each', new Set(mixed).size === 8 && !mixed.includes(ALL_SEGMENTS_LABEL))
   const allTabs = buildAllSegmentsWorkbook(eight).worksheets.map((w) => w.name)
-  check('the all-segments workbook has the one drop table once ("V2 Drop Groups"), not once per segment', allTabs.filter((n) => /V2 Drop Groups/.test(n)).join() === 'V2 Drop Groups')
+  check('the all-segments workbook has no drop-group page at all (removed by the economist)', !allTabs.some((n) => /Drop Groups/.test(n)))
 
-  // The V2 pages: the normal event and Recompletion hold the same thing once.
+  // The model read through the builders of the removed pages: the normal event and Recompletion hold the same thing once.
   const chainRows = buildV2RewardChainSheet(main, rc).rows.map((r) => r.cells)
   check(`V2 Reward Chain lists the event's rank values once, as "${chainRows[0][0]}" (${chainRows.length} rows, not ${2 * chainRows.length})`, chainRows.every((r) => r[0] === 'Main + RC') && new Set(chainRows.map((r) => r[3])).size === chainRows.length)
   const differ = rc.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, puzzles: b.rewardChainConfig.puzzles.map((r) => ({ ...r, prizeAmount: r.prizeAmount + 1 })) } }))

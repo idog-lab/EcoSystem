@@ -891,7 +891,7 @@ function addBoardLayoutsSheet(workbook, name, { maxCols, sections }) {
 // external Ops/targeting decision outside this app's own scope. Optional
 // (defaults to an empty array) so every existing caller that only ever knew
 // about one RC variant keeps working unchanged.
-export function buildWorkbook(boards, recompletionBoards, recompletionBoards2 = [], twisterOptions = {}) {
+export function buildWorkbook(boards, recompletionBoards, _recompletionBoards2 = [], _twisterOptions = {}) {
   const workbook = new ExcelJS.Workbook()
   const queueFills = { 1: WORKBOOK_COLOR.entryNumberFill, 2: WORKBOOK_COLOR.poolNumberFill }
   const queueOpts = { header: { fill: WORKBOOK_COLOR.queueHeaderFill }, columnFills: queueFills }
@@ -922,14 +922,14 @@ export function buildWorkbook(boards, recompletionBoards, recompletionBoards2 = 
   addFlatSheet(workbook, 'Endless Small Reward Weights', buildEndlessWeightsSheet(boards, recompletionBoards), Array(12).fill(10), {
     header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
   })
-  // V2 - appended at the end, never reordering the eleven sheets above
-  // (which match the verified Ops reference) - see buildV2RewardChainSheet's
-  // own comment for why these two are clearly NOT presented as verified.
-  addFlatSheet(workbook, 'V2 Reward Chain', buildV2RewardChainSheet(boards, recompletionBoards, recompletionBoards2), [8, 14, 6, 16, 34, 26, 14])
-  addFlatSheet(workbook, 'V2 Drop Groups', buildV2DropGroupsSheet(boards, recompletionBoards, recompletionBoards2), [8, 14, 36, 10, 12, 13, 12, 12, 15, 12])
-  addFlatSheet(workbook, 'V2 Economy', buildV2EconomySheet(boards, recompletionBoards, recompletionBoards2), [8, 14, 16, 8, 13, 14, 36, 36])
-  addFlatSheet(workbook, 'V2 Twister', buildV2TwisterSheet(boards, recompletionBoards, recompletionBoards2, twisterOptions), [32, 8, 46, 12, 46])
-  addFlatSheet(workbook, 'V2 Endless', buildV2EndlessSheet(boards, recompletionBoards), [44, 12, 110])
+  // ONLY THE ECONOMIST'S PAGES, AND NO "V2" IN A NAME. The output holds the
+  // pages of the economist's example, plus endless mode's three (economist:
+  // "u can keep the endless ones. but, remove the reward chain, drop groups,
+  // twister, and economy" - and "remove the naming of V2"). So the price of a
+  // twist is no longer in the output (it was only on "V2 Twister"); the
+  // assets are on Small Rewards. The builders of the removed pages are kept:
+  // the engine checks read the model through them.
+  addFlatSheet(workbook, 'Endless', buildV2EndlessSheet(boards, recompletionBoards), [44, 12, 110])
 
   return workbook
 }
@@ -949,7 +949,7 @@ export function buildWorkbook(boards, recompletionBoards, recompletionBoards2 = 
 // per-segment ("this segment") export only - see buildAllSegmentsWorkbook's
 // own comment for the combined (all-segments) workbook's different sheet
 // structure, which this function intentionally has no part in.
-export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix = '', recompletionBoards2 = [], twisterOptions = {}) {
+export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix = '', _recompletionBoards2 = [], _twisterOptions = {}) {
   const flat = (sheet) => [sheet.columns, ...sheet.rows.map((r) => r.cells)]
   const n = (title) => namePrefix + title
   return [
@@ -965,13 +965,8 @@ export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix
     { title: n('Small Reward Weights'), rows: flat(buildSmallRewardWeightsSheet(boards, { recompletionBoards: recompletionBoards ?? [] })) },
     { title: n('Endless Small Rewards Bank'), rows: flat(buildEndlessBankSheet(boards, recompletionBoards)) },
     { title: n('Endless Small Reward Weights'), rows: flat(buildEndlessWeightsSheet(boards, recompletionBoards)) },
-    // V2 - appended at the end, same "not presented as verified" caveat as
-    // buildWorkbook's own addition above.
-    { title: n('V2 Reward Chain'), rows: flat(buildV2RewardChainSheet(boards, recompletionBoards, recompletionBoards2)) },
-    { title: n('V2 Drop Groups'), rows: flat(buildV2DropGroupsSheet(boards, recompletionBoards, recompletionBoards2)) },
-    { title: n('V2 Economy'), rows: flat(buildV2EconomySheet(boards, recompletionBoards, recompletionBoards2)) },
-    { title: n('V2 Twister'), rows: flat(buildV2TwisterSheet(boards, recompletionBoards, recompletionBoards2, twisterOptions)) },
-    { title: n('V2 Endless'), rows: flat(buildV2EndlessSheet(boards, recompletionBoards)) },
+    // (The same pages as buildWorkbook - see the note there.)
+    { title: n('Endless'), rows: flat(buildV2EndlessSheet(boards, recompletionBoards)) },
   ]
 }
 
@@ -1049,7 +1044,7 @@ export function buildCombinedGeneratorWeightsSheet(segments) {
 // index tab itself already uses - no segment free-text name is ever used in
 // a tab name here (that stays in the index tab only, where there's no
 // length limit to worry about).
-export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
+export function buildAllSegmentsWorkbook(segments, _twisterOptions = {}) {
   const workbook = new ExcelJS.Workbook()
   const queueFills = { 1: WORKBOOK_COLOR.entryNumberFill, 2: WORKBOOK_COLOR.poolNumberFill }
   const queueOpts = { header: { fill: WORKBOOK_COLOR.queueHeaderFill }, columnFills: queueFills }
@@ -1076,21 +1071,16 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
     // Every segment has its OWN rank values (coins, and puzzles, merge energy
     // and charms the build gives), so its Small Rewards sheet is its own.
     addFlatSheet(workbook, n('Small Rewards'), buildSmallRewardsSheet(seg.boards, seg.recompletionBoards ?? []), [15, 14, 18])
-    // V2 - same per-segment tabs the "this segment" workbook carries
-    // (parity), same clearly-labeled-unverified caveat. Longest name here,
-    // "S8 V2 Reward Chain", is 18 chars - well under Excel's 31-char cap.
-    addFlatSheet(workbook, n('V2 Reward Chain'), buildV2RewardChainSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2), [8, 14, 6, 16, 34, 26, 14])
-    addFlatSheet(workbook, n('V2 Economy'), buildV2EconomySheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2), [8, 14, 16, 8, 13, 14, 36, 36])
   })
 
   addGeneratorWeightsSheet(workbook, 'Generator Weights', buildCombinedGeneratorWeightsSheet(segments), { rankColumn: 2 })
-  // One table of every segment's Twister cost per spin (the one Twister
-  // setting that differs by segment), plus the shared widget rule and the
-  // design metadata - see buildCombinedV2TwisterSheet.
-  addFlatSheet(workbook, 'V2 Twister', buildCombinedV2TwisterSheet(segments, twisterOptions), [32, 10, 8, 46, 12, 46])
-  // The drop table is one table for every segment, so it is one tab here
-  // (it used to be repeated as "S{n} V2 Drop Groups" for each of them).
-  addFlatSheet(workbook, 'V2 Drop Groups', buildV2DropGroupsSheet(segments[0]?.boards ?? [], segments[0]?.recompletionBoards ?? []), [12, 14, 36, 10, 12, 13, 12, 12, 15, 12])
+  // ONLY THE ECONOMIST'S PAGES, AND NO "V2" IN A NAME. The output holds the
+  // pages of the economist's example, plus endless mode's three (economist:
+  // "u can keep the endless ones. but, remove the reward chain, drop groups,
+  // twister, and economy" - and "remove the naming of V2"). So the price of a
+  // twist is no longer in the output (it was only on "V2 Twister"); the
+  // assets are on Small Rewards. The builders of the removed pages are kept:
+  // the engine checks read the model through them.
   // Small Rewards/Bank/Weights stay ONE shared tab each (not per-segment),
   // matching their long-standing "no per-segment variation" treatment here -
   // now that they're economist-editable per segment (rather than a single
@@ -1110,7 +1100,7 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
   addFlatSheet(workbook, 'Endless Small Reward Weights', buildEndlessWeightsSheet(segments[0]?.boards, segments[0]?.recompletionBoards), Array(12).fill(10), {
     header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
   })
-  addFlatSheet(workbook, 'V2 Endless', buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards), [44, 12, 110])
+  addFlatSheet(workbook, 'Endless', buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards), [44, 12, 110])
 
   return workbook
 }
@@ -1121,7 +1111,7 @@ export function buildAllSegmentsWorkbook(segments, twisterOptions = {}) {
 // exactly: Segments index, combined Event Data/Multipliers, each segment's
 // six own sheets grouped together, combined Generator Weights, then the
 // three shared Small Rewards sheets.
-export function buildAllSegmentsSheetsAsValueRows(segments, twisterOptions = {}) {
+export function buildAllSegmentsSheetsAsValueRows(segments, _twisterOptions = {}) {
   const flat = (sheet) => [sheet.columns, ...sheet.rows.map((r) => r.cells)]
   const index = {
     title: 'Segments',
@@ -1136,9 +1126,6 @@ export function buildAllSegmentsSheetsAsValueRows(segments, twisterOptions = {})
       { title: n('RC Board Layouts'), rows: boardLayoutsSheetToRows(buildBoardLayoutsSheet(seg.recompletionBoards)) },
       { title: n('Item Ladder'), rows: flat(buildItemLadderSheet(seg.boards, seg.recompletionBoards ?? [])) },
       { title: n('Small Rewards'), rows: flat(buildSmallRewardsSheet(seg.boards, seg.recompletionBoards ?? [])) },
-      // V2 - parity with buildAllSegmentsWorkbook's own per-segment tabs.
-      { title: n('V2 Reward Chain'), rows: flat(buildV2RewardChainSheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2)) },
-      { title: n('V2 Economy'), rows: flat(buildV2EconomySheet(seg.boards, seg.recompletionBoards, seg.recompletionBoards2)) },
     ]
   })
 
@@ -1148,14 +1135,12 @@ export function buildAllSegmentsSheetsAsValueRows(segments, twisterOptions = {})
     { title: 'Multipliers', rows: flat(buildCombinedMultipliersSheet(segments)) },
     ...perSegment,
     { title: 'Generator Weights', rows: flat(buildCombinedGeneratorWeightsSheet(segments)) },
-    { title: 'V2 Twister', rows: flat(buildCombinedV2TwisterSheet(segments, twisterOptions)) },
-    { title: 'V2 Drop Groups', rows: flat(buildV2DropGroupsSheet(segments[0]?.boards ?? [], segments[0]?.recompletionBoards ?? [])) },
     // Same "Segment 1 is the one canonical source" scope decision as
     // buildAllSegmentsWorkbook's identical comment above.
     { title: 'Small Rewards Bank', rows: flat(buildSmallRewardsBankSheet(segments[0]?.boards, { recompletionBoards: segments[0]?.recompletionBoards ?? [] })) },
     { title: 'Small Reward Weights', rows: flat(buildSmallRewardWeightsSheet(segments[0]?.boards, { recompletionBoards: segments[0]?.recompletionBoards ?? [] })) },
     { title: 'Endless Small Rewards Bank', rows: flat(buildEndlessBankSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
     { title: 'Endless Small Reward Weights', rows: flat(buildEndlessWeightsSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
-    { title: 'V2 Endless', rows: flat(buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
+    { title: 'Endless', rows: flat(buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
   ]
 }

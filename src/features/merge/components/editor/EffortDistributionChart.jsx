@@ -6,7 +6,7 @@ import { buildSimulationRows, RANKS } from '../../lib/simulation/simulationRows'
 // Same 12 slots, all empty, used before a simulation has ever run - see the
 // component's own comment below for why this shape (not a short "run it
 // first" placeholder) is the point.
-const EMPTY_ROWS = RANKS.map((rank) => ({
+const emptyRows = (ranks) => ranks.map((rank) => ({
   rank,
   dr: null,
   drDelta: null,
@@ -40,7 +40,7 @@ function MetricRow({ label, rows, getValue, formatValue, useLog = false }) {
           const heightPct =
             raw == null ? 0 : Math.max(4, useLog ? (Math.log(magnitude + 1) / Math.log(maxAbs + 1)) * 100 : (magnitude / maxAbs) * 100)
           const color = row.outOfOrder ? OUT_OF_ORDER_COLOR : colorForRank(row.rank)
-          const title = raw == null ? `Rank ${row.rank} — not reached` : `Rank ${row.rank}: ${formatValue(raw)}`
+          const title = raw == null ? (row.aside ? `Rank ${row.rank} — first made after a higher rank, so not part of the climb` : `Rank ${row.rank} — not reached`) : `Rank ${row.rank}: ${formatValue(raw)}`
           return (
             <div key={row.rank} className="flex-1 flex flex-col items-center gap-0.5 min-w-0" title={title}>
               <div className="w-full flex items-end h-16 bg-slate-50 rounded-md overflow-hidden">
@@ -83,11 +83,13 @@ function MetricRow({ label, rows, getValue, formatValue, useLog = false }) {
 // before a run as after one (via EMPTY_ROWS, same shape `buildSimulationRows`
 // produces but with every value null) means this card's height never
 // changes across a run - only the bars themselves fill in.
-export default function EffortDistributionChart({ result, subtitle = "All four Playthrough simulation columns, per rank — from that card's last run" }) {
-  const rows = result ? buildSimulationRows(result) : EMPTY_ROWS
+// `ranks`: the ranks drawn - 1 to 12, or 1 to 14 for Recompletion's own climb.
+export default function EffortDistributionChart({ result, subtitle = "All four Playthrough simulation columns, per rank — from that card's last run", ranks = RANKS, title = 'Effort distribution', rows: givenRows = null, footnote = null }) {
+  // `rows`: rows worked out by the caller (Recompletion's climb), else the result's own.
+  const rows = givenRows ?? (result ? buildSimulationRows(result, ranks) : emptyRows(ranks))
   const rankLabels = (
     <div className="flex items-end gap-1.5">
-      {RANKS.map((rank) => (
+      {ranks.map((rank) => (
         <span key={rank} className="flex-1 text-center text-[10px] font-semibold text-slate-500 min-w-0">
           {rank}
         </span>
@@ -97,7 +99,7 @@ export default function EffortDistributionChart({ result, subtitle = "All four P
 
   return (
     <Card
-      title="Effort distribution"
+      title={title}
       subtitle={subtitle}
       icon={BarChart3}
     >
@@ -119,7 +121,9 @@ export default function EffortDistributionChart({ result, subtitle = "All four P
         <MetricRow label="Taps" rows={rows} getValue={(r) => r.tapsDelta} formatValue={(v) => `+${v}`} useLog />
         {rankLabels}
         <p className="text-xs text-slate-400 -mt-1">
-          {result
+          {footnote
+            ? footnote
+            : result
             ? 'DR/+DR/Taps use a log scale (they\'re as exponentially skewed as cumulative DR itself) — % effort is linear. Amber bars were reached before the rank right below them (not an error — see the table above for why). Hover any bar for its exact value.'
             : 'Run the playthrough simulation (in the "Playthrough simulation" card below) to fill these bars in.'}
         </p>
