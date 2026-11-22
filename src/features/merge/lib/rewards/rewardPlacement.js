@@ -14,9 +14,9 @@
 // and the two sources complete rank-4 collects TOGETHER. Units are packed
 // into as few tiles as possible (rank 3 = 4 units, rank 2 = 2, rank 1 = 1).
 import { REWARD_TYPES, REWARD_MAX_RANK, isMainItem } from './rewardChain'
-import { effectiveMinRank, effectiveMaxRank, minMainItemCount } from '../core/rankWindow'
+import { effectiveMaxRank, minMainItemCount } from '../core/rankWindow'
 import { regenerateBoard } from '../simulation/effortTargeting'
-import { applyForcedSemiCell, applyForcedHighestRankCell, FORCED_SEMI_CELL, FORCED_HIGHEST_RANK_CELL } from '../core/board'
+import { applyForcedSemiCell, applyForcedHighestRankCell, FORCED_SEMI_CELL, FORCED_HIGHEST_RANK_CELL, boardMinRank } from '../core/board'
 
 // The highest rank a reward item can sit on the board at (rank 4 collects
 // the instant it forms, so it is never placeable).
@@ -66,7 +66,7 @@ export const FIRST_BOARD_REWARD_SHARE = 0.15
 export function rewardSlotCapacity(board, boardIndex) {
   const tiles = tilesFor(board, boardIndex)
   const blockedTileCount = tiles.flat().filter((s) => s === 'blocked').length
-  const minRank = effectiveMinRank(board.minRank, boardIndex)
+  const minRank = boardMinRank(board, boardIndex)
   const maxRank = effectiveMaxRank(board.maxRank, boardIndex)
   // What the BLOCKED tiles have to carry. On board 1 the semi tiles hold
   // fixed main values of their own (rank 1 each, rank 2 at the forced cell,
@@ -127,7 +127,7 @@ export function rewardSemiSlots(board, boardIndex) {
   // Total tiles the main chain still needs somewhere on this board, after
   // every blocked slot a reward queue item could take is taken.
   const allTiles = tiles.flat().filter((s) => s === 'blocked' || s === 'semi').length
-  const minRank = effectiveMinRank(board.minRank, boardIndex)
+  const minRank = boardMinRank(board, boardIndex)
   const maxRank = effectiveMaxRank(board.maxRank, boardIndex)
   const mainNeeded = minMainItemCount(board.blockedValue, minRank, maxRank)
   const claimed = pinnedRewardItems(board).length + pinnedRewardSemiItems(board).length + forced.size

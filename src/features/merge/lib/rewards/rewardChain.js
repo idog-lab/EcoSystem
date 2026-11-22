@@ -57,7 +57,7 @@ export const REWARD_MAX_RANK = 4
 // player merges every reward item it can as it plays; whatever is still
 // unmerged when the phase's top rank is reached is tapped and paid at its own
 // rank's value ('collect'). It used to be assumed lost ('forfeit', still
-// selectable in step 4) - so every amount the simulator reported was short
+// selectable in step 3) - so every amount the simulator reported was short
 // by the last few items a real player taps before stopping.
 export const DEFAULT_LEFTOVER_POLICY = 'collect'
 export const REWARD_BASE = 1000
@@ -348,34 +348,55 @@ export function niceNearest(v) {
   return v - low < high - v ? low : high
 }
 export const REWARD_VALUE_SHAPE = [1 / 15, 3 / 15, 7 / 15]
-// The smallest rank-4 value a whole-number ladder that rewards merging can have (1/2/4/10).
-export const REWARD_MIN_TOP = 10
+// The largest round amount strictly below `v` (0 when there is none).
+export function niceBelow(v) {
+  const at = niceFloor(v)
+  if (at < v - 1e-9) return at
+  if (at <= 1) return 0
+  return niceFloor(at - 1e-6)
+}
+// The smallest round amount strictly above `v`.
+export function niceAbove(v) {
+  const low = niceFloor(v)
+  if (low < 1) return 1
+  return low + niceStepAt(low)
+}
+// EVERY UPGRADE STRICTLY REWARDS MERGING (economist: "V2 > 2 x V1, V3 > 2 x
+// V2, V4 > 2 x V3. Equality is insufficient."). The smallest whole-number
+// ladder that does is 1 / 3 / 7 / 15, so no model-given rank-4 value is under
+// 15. (It was "at least double" below the top rank: 3 / 10 / 20 / 50 and
+// 5 / 10 / 30 / 70 were given, where merging two items paid exactly what
+// tapping them did.)
+export const REWARD_MIN_TOP = 15
 function ladderShape(values) {
   const top = values?.[REWARD_MAX_RANK - 1] ?? 0
   if (!(top > 0) || validateRewardLadder(values.map((prizeAmount) => ({ prizeAmount }))).length > 0) return REWARD_VALUE_SHAPE
   return [values[0] / top, values[1] / top, values[2] / top]
 }
-// Four round, merge-rewarding values with rank 4 as near `top` as a round
-// amount gets. `like`: a ladder whose proportions to follow (see above).
+// Four round values, each more than double the one below, with rank 4 as near
+// `top` as a round amount gets. `like`: a ladder whose proportions to follow
+// (see above).
 export function niceRewardValues(top, like = null) {
   const shape = like ? ladderShape(like) : REWARD_VALUE_SHAPE
-  const v4 = Math.max(REWARD_MIN_TOP, niceNearest(top))
-  let v3 = niceFloor(Math.min(shape[2] * v4, (v4 - 1) / 2))
-  let v2 = niceFloor(Math.min(shape[1] * v4, v3 / 2))
-  const v1 = Math.max(1, niceFloor(Math.min(shape[0] * v4, v2 / 2)))
-  v2 = Math.max(v2, 2 * v1)
-  v3 = Math.max(v3, 2 * v2)
-  return [v1, v2, v3, Math.max(v4, 2 * v3 + 1)]
+  let v4 = Math.max(REWARD_MIN_TOP, niceNearest(top))
+  let v3 = Math.min(niceFloor(shape[2] * v4), niceBelow(v4 / 2))
+  let v2 = Math.min(niceFloor(shape[1] * v4), niceBelow(v3 / 2))
+  const v1 = Math.max(1, Math.min(niceFloor(shape[0] * v4), niceBelow(v2 / 2)))
+  // (the lower ranks could not go low enough: the higher ones go up instead)
+  if (!(v2 > 2 * v1)) v2 = niceAbove(2 * v1)
+  if (!(v3 > 2 * v2)) v3 = niceAbove(2 * v2)
+  if (!(v4 > 2 * v3)) v4 = niceAbove(2 * v3)
+  return [v1, v2, v3, v4]
 }
 // The same for a coin ladder (an allowance worth, so in hundredths).
 export function niceCoinValues(top) {
   const step = top >= 0.2 ? 0.01 : 0.001
-  const n4 = Math.max(9, Math.round(top / step))
+  const n4 = Math.max(15, Math.round(top / step))
   let n3 = Math.floor(Math.min((COIN_VALUE_SHAPE[2] / COIN_VALUE_SHAPE[3]) * n4, (n4 - 1) / 2) + 1e-9)
-  let n2 = Math.floor(Math.min((COIN_VALUE_SHAPE[1] / COIN_VALUE_SHAPE[3]) * n4, n3 / 2) + 1e-9)
-  const n1 = Math.max(1, Math.floor(Math.min((COIN_VALUE_SHAPE[0] / COIN_VALUE_SHAPE[3]) * n4, n2 / 2) + 1e-9))
-  n2 = Math.max(n2, 2 * n1)
-  n3 = Math.max(n3, 2 * n2)
+  let n2 = Math.floor(Math.min((COIN_VALUE_SHAPE[1] / COIN_VALUE_SHAPE[3]) * n4, (n3 - 1) / 2) + 1e-9)
+  const n1 = Math.max(1, Math.floor(Math.min((COIN_VALUE_SHAPE[0] / COIN_VALUE_SHAPE[3]) * n4, (n2 - 1) / 2) + 1e-9))
+  n2 = Math.max(n2, 2 * n1 + 1)
+  n3 = Math.max(n3, 2 * n2 + 1)
   return [n1, n2, n3, Math.max(n4, 2 * n3 + 1)].map((n) => Math.round(n * step * 1000) / 1000)
 }
 
@@ -486,10 +507,23 @@ export function mergeSharedRewardChain(source, target) {
     out = { ...out, [COIN_TYPE]: ladder }
   }
   const definition = (config, type) => JSON.stringify((config?.[type] ?? []).map((r) => [r?.typed?.prizeAmount ?? r?.prizeAmount ?? 0, r?.typed?.syntax ?? r?.syntax ?? '', r?.asset ?? '']))
+  // A SEGMENT'S OWN VALUES ARE ITS OWN WHETHER OR NOT THEY ARE MARKED. A rank
+  // the build re-valued remembers what was typed (`typed`), and that mark used
+  // to be what told a segment's own ladder apart. But a build that gives a
+  // segment EXACTLY the typed values (merge energy 5/15/35/75 for a segment
+  // whose amount needs a top value of 75) changes no rank and leaves no mark -
+  // and the copy from Segment 1 then replaced that segment's values with
+  // Segment 1's. Its boards had been built for other values: step 5 said
+  // "Segment 6 ... changed since it was built" and stopped the export
+  // (economist: "i cant understand what that means"). While the typed
+  // definition is the same on both sides, the segment keeps its ladder.
   for (const type of BUILD_VALUED_TYPES) {
-    if (!Array.isArray(target?.[type]) || !rewardLadderIsBuildValued(target, type)) continue
+    if (!Array.isArray(target?.[type])) continue
     if (definition(source, type) === definition(target, type)) out = { ...out, [type]: target[type] }
   }
+  // The Twister values the build fits are each segment's own as well (never
+  // typed ones: those are the definition and shared).
+  if (twisterLadderIsAuto(source) && twisterLadderIsAuto(target)) out = { ...out, [TWISTER_TYPE]: target[TWISTER_TYPE] }
   return out
 }
 
@@ -689,9 +723,11 @@ export function tapPaysAtLeastAsMuch(rewardChainConfig, type, rank) {
 //   - rank 4 > 2 x rank 3, > 4 x rank 2 and > 8 x rank 1 (strictly: rank 4 is
 //     where the automatic player is headed, so it has to beat every way of
 //     cashing out the same items earlier);
-//   - no intermediate merge loses value: rank N+1 >= 2 x rank N for the
-//     steps below the top (merging two items into one worth less than the
-//     pair is a step a player should never take).
+//   - EVERY merge pays strictly more: rank N+1 > 2 x rank N at every step
+//     (economist: "V2 > 2 x V1, V3 > 2 x V2, V4 > 2 x V3. Equality is
+//     insufficient." It used to be >= below the top rank.) A step that pays
+//     less is 'merge-step-loses-value'; one that pays exactly the same is
+//     'merge-step-pays-no-more'.
 // A ladder with no prize configured at all is skipped (nothing to judge -
 // "not configured" is reported separately by whoever needs that).
 // Nothing here changes a value; it only reports.
@@ -711,11 +747,17 @@ export function validateRewardLadder(ladder) {
     }
   }
   for (let rank = 1; rank < REWARD_MAX_RANK - 1; rank++) {
-    if (value(rank + 1) < 2 * value(rank)) {
+    if (value(rank + 1) < 2 * value(rank) - 1e-12) {
       issues.push({
         code: 'merge-step-loses-value',
         rank,
         message: `Merging two rank-${rank} items (2 x ${value(rank)} = ${2 * value(rank)}) into one rank-${rank + 1} item (${value(rank + 1)}) loses value.`,
+      })
+    } else if (!(value(rank + 1) > 2 * value(rank) + 1e-12) && value(rank) > 0) {
+      issues.push({
+        code: 'merge-step-pays-no-more',
+        rank,
+        message: `Merging two rank-${rank} items (2 x ${value(rank)} = ${2 * value(rank)}) into one rank-${rank + 1} item (${value(rank + 1)}) pays no more than tapping them: rank ${rank + 1} has to be worth more than ${2 * value(rank)}.`,
       })
     }
   }
@@ -742,8 +784,10 @@ export function suggestLadderFixes(ladder, { whole = true } = {}) {
 
   if (current[0] > 0) {
     const v = [...current]
-    v[1] = Math.max(v[1], 2 * v[0])
-    v[2] = Math.max(v[2], 2 * v[1])
+    // (a round number just above the minimum reads better than "31")
+    const roundAbove = (x) => (whole && above(x) >= 10 ? Math.ceil(above(x) / 5) * 5 : above(x))
+    if (!(v[1] > 2 * v[0])) v[1] = roundAbove(2 * v[0])
+    if (!(v[2] > 2 * v[1])) v[2] = roundAbove(2 * v[1])
     const floor = Math.max(2 * v[2], 4 * v[1], 8 * v[0])
     if (!(v[3] > floor)) {
       // A round number just above the minimum reads better than "61".
@@ -755,8 +799,8 @@ export function suggestLadderFixes(ladder, { whole = true } = {}) {
   if (current[3] > 0) {
     const v = [...current]
     v[2] = Math.min(v[2], below(v[3] / 2))
-    v[1] = Math.min(v[1], whole ? Math.floor(v[2] / 2) : v[2] / 2, below(v[3] / 4))
-    v[0] = Math.min(v[0], whole ? Math.floor(v[1] / 2) : v[1] / 2, below(v[3] / 8))
+    v[1] = Math.min(v[1], below(v[2] / 2), below(v[3] / 4))
+    v[0] = Math.min(v[0], below(v[1] / 2), below(v[3] / 8))
     options.push({ id: 'lower', label: 'Lower the lower ranks', values: v.map(tidy) })
   }
   return options.filter((o) => o.values.every((x) => x > 0) && o.values.some((x, i) => x !== current[i]) && validateRewardLadder(asLadder(o.values)).length === 0)

@@ -1,55 +1,71 @@
-// Config validation - by explicit economist brainstorm ask (channeling a
-// GPT review): three severities, each finding naming the affected object
-// and what it means, so a messy config can be caught before it's trusted.
+// The checks on a chef - by explicit economist brainstorm ask (channeling a
+// GPT review): three severities, each finding naming the affected object and
+// what it means, so a messy chef can be caught before it's trusted.
 //
-// - 'block': the config is structurally broken - a reference to nothing,
-//   a value that makes a roll impossible, a calendar that doesn't add up.
+// - 'block': the chef is structurally broken - a reference to nothing, a
+//   value that makes a roll impossible, a calendar that doesn't add up.
 // - 'review': not wrong, but worth a human's attention before shipping.
 // - 'info': background observations, no action implied.
 //
-// This is deliberately a plain list of {severity, area, message, entityId}
-// objects rather than inline per-tab checks - a few of these (calendar
-// gaps, basket feasibility) already partially exist as inline notes in
-// CalendarTab/BasketsTab; this module is the one place that can reason
-// about the WHOLE config at once (e.g. "no basket exists at all for this
-// chest type + phase combo," which no single tab's own local state can see).
-import { RARITY, CHEST_TYPES } from './chefModel'
+// A plain list of { severity, area, step, message, entityId } objects, made
+// in one place because several checks need the WHOLE chef at once ("no
+// basket exists at all for this chest type in this phase").
+//
+// `step` is the step of the flow where the finding is put right (ChefApp.jsx:
+// event, dishes, baskets): the flow shows a finding in that step, in sight,
+// and counts it on the step's button. `area` is the kind of thing it is
+// about and is what the full list groups by.
+//
+// The messages are written for the economist: the names shown on screen
+// (the basket's chest type and its phase's label, an ingredient's name),
+// never an internal id - an id only appears when the thing it names no
+// longer exists, since then there is nothing else to call it.
+import { RARITY, RARITY_LABELS, CHEST_TYPES, CHEST_LABELS } from './chefModel'
 
-function finding(severity, area, message, entityId = null) {
-  return { severity, area, message, entityId }
+const STEP_OF_AREA = {
+  Baskets: 'baskets',
+  Grants: 'baskets',
+  Dishes: 'dishes',
+  'Recompletion dishes': 'dishes',
+  Ingredients: 'dishes',
+  Calendar: 'event',
+  Segments: 'event',
+}
+
+function finding(severity, area, message, entityId = null, step = STEP_OF_AREA[area] ?? 'event') {
+  return { severity, area, step, message, entityId }
 }
 
 export function validateChefConfig({ ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants }) {
   const findings = []
   const ingredientIds = new Set(ingredients.map((i) => i.id))
+  const nameOf = (ingredientId) => ingredients.find((i) => i.id === ingredientId)?.name ?? `"${ingredientId}"`
+  const phaseLabel = (phaseId) => calendar.phases.find((p) => p.id === phaseId)?.label ?? `"${phaseId}"`
+  const basketName = (basket) => `${CHEST_LABELS[basket.chestType] ?? basket.chestType} basket, ${phaseLabel(basket.phaseId)}`
 
   // --- Baskets ---
   for (const basket of baskets) {
+    const name = basketName(basket)
     if (basket.totalMin < 0 || basket.totalMax < 0 || basket.totalMin > basket.totalMax) {
-      findings.push(finding('block', 'Baskets', `${basket.chestType} / ${basket.phaseId}: invalid total range (${basket.totalMin}–${basket.totalMax}).`, basket.id))
+      findings.push(finding('block', 'Baskets', `${name}: it gives from ${basket.totalMin} to ${basket.totalMax} ingredients - the smallest number is above the largest, or one is below zero.`, basket.id))
     }
     const positiveWeight = basket.ingredientWeights.filter((w) => w.weight > 0)
     if (positiveWeight.length === 0) {
-      findings.push(finding('block', 'Baskets', `${basket.chestType} / ${basket.phaseId}: no ingredient has a positive weight — this basket can never yield anything.`, basket.id))
+      findings.push(finding('block', 'Baskets', `${name}: no ingredient has a weight above 0, so this basket never gives anything.`, basket.id))
     } else {
       const combinedCap = positiveWeight.reduce((sum, w) => sum + w.max, 0)
       if (basket.totalMax > combinedCap) {
         findings.push(
-          finding(
-            'block',
-            'Baskets',
-            `${basket.chestType} / ${basket.phaseId}: total max (${basket.totalMax}) exceeds the combined per-open caps of its own positive-weight ingredients (${combinedCap}) — it can never actually roll that high.`,
-            basket.id
-          )
+          finding('block', 'Baskets', `${name}: it is set to give up to ${basket.totalMax} ingredients, but what each ingredient may give in one basket adds up to ${combinedCap} - it can never give that many.`, basket.id)
         )
       }
     }
     for (const w of basket.ingredientWeights) {
       if (!ingredientIds.has(w.ingredientId)) {
-        findings.push(finding('block', 'Baskets', `${basket.chestType} / ${basket.phaseId}: references an unknown ingredient "${w.ingredientId}".`, basket.id))
+        findings.push(finding('block', 'Baskets', `${name}: one of its rows is an ingredient that no longer exists ("${w.ingredientId}").`, basket.id))
       }
       if (w.weight < 0 || w.max < 0) {
-        findings.push(finding('block', 'Baskets', `${basket.chestType} / ${basket.phaseId}: negative weight or max for ${w.ingredientId}.`, basket.id))
+        findings.push(finding('block', 'Baskets', `${name}: ${nameOf(w.ingredientId)} has a weight or a most-per-basket below zero.`, basket.id))
       }
     }
   }
@@ -60,22 +76,25 @@ export function validateChefConfig({ ingredients, dishes, recompletionDishes, ba
   for (const phase of calendar.phases) {
     for (const chestType of CHEST_TYPES) {
       const exists = baskets.some((b) => b.phaseId === phase.id && b.chestType === chestType)
-      if (!exists) findings.push(finding('block', 'Baskets', `No basket configured for ${chestType} chests during ${phase.label} (${phase.id}).`))
+      if (!exists) findings.push(finding('block', 'Baskets', `No ${CHEST_LABELS[chestType]} basket is set for ${phase.label}: a player who opens one in those days gets nothing.`))
     }
   }
 
   // --- Recipes (both the main and Recompletion dish lists) ---
   function validateDishList(dishList, label) {
+    // (The two lists can hold dishes of the same name: a finding says which list it is about.)
+    const recompletion = label !== 'Dishes'
+    const dishName = (dish) => `"${dish.name}"${recompletion ? ' (Recompletion)' : ''}`
     for (const dish of dishList) {
       if (dish.recipe.length === 0) {
-        findings.push(finding('review', label, `"${dish.name}" has an empty recipe.`, dish.id))
+        findings.push(finding('review', label, `${dishName(dish)} needs no ingredients at all.`, dish.id))
       }
       for (const r of dish.recipe) {
         if (!ingredientIds.has(r.ingredientId)) {
-          findings.push(finding('block', label, `"${dish.name}" references an unknown ingredient "${r.ingredientId}".`, dish.id))
+          findings.push(finding('block', label, `${dishName(dish)} needs an ingredient that no longer exists ("${r.ingredientId}").`, dish.id))
         }
         if (r.count <= 0) {
-          findings.push(finding('block', label, `"${dish.name}" has a nonpositive requirement for ${r.ingredientId}.`, dish.id))
+          findings.push(finding('block', label, `${dishName(dish)} needs zero or fewer of ${nameOf(r.ingredientId)}.`, dish.id))
         }
       }
     }
@@ -83,7 +102,7 @@ export function validateChefConfig({ ingredients, dishes, recompletionDishes, ba
     for (const dish of dishList) for (const r of dish.recipe) usage[r.ingredientId] = (usage[r.ingredientId] ?? 0) + 1
     for (const [ingredientId, count] of Object.entries(usage)) {
       if (dishList.length > 0 && count >= Math.ceil(dishList.length * 0.7)) {
-        findings.push(finding('info', label, `${ingredientId} is required by ${count}/${dishList.length} dishes — heavily shared, strategy-sensitive.`))
+        findings.push(finding('info', label, `${nameOf(ingredientId)} is needed by ${count} of the ${dishList.length} ${recompletion ? 'Recompletion dishes' : 'dishes'}: which dish a player cooks first changes a lot for it.`))
       }
     }
   }
@@ -97,52 +116,53 @@ export function validateChefConfig({ ingredients, dishes, recompletionDishes, ba
   const basketIngredientIds = new Set(baskets.flatMap((b) => b.ingredientWeights.filter((w) => w.weight > 0).map((w) => w.ingredientId)))
   for (const ing of ingredients) {
     if (!usedIngredientIds.has(ing.id) && !basketIngredientIds.has(ing.id)) {
-      findings.push(finding('review', 'Ingredients', `"${ing.name}" isn't required by any dish and isn't obtainable from any basket.`, ing.id))
+      findings.push(finding('review', 'Ingredients', `"${ing.name}" is needed by no dish and given by no basket.`, ing.id))
     } else if (!usedIngredientIds.has(ing.id)) {
-      findings.push(finding('info', 'Ingredients', `"${ing.name}" is obtainable but isn't required by any dish yet.`, ing.id))
+      findings.push(finding('info', 'Ingredients', `"${ing.name}" comes out of baskets, but no dish needs it yet.`, ing.id))
     }
   }
 
   // --- Calendar ---
   const totalPhaseDays = calendar.phases.reduce((sum, p) => sum + p.days, 0)
   if (totalPhaseDays !== calendar.totalDays) {
-    findings.push(finding('block', 'Calendar', `Phases sum to ${totalPhaseDays} days but the event is ${calendar.totalDays} days long.`))
+    findings.push(finding('block', 'Calendar', `The phases add up to ${totalPhaseDays} days, but the event runs ${calendar.totalDays} days.`))
   }
   for (const phase of calendar.phases) {
-    if (phase.days <= 0) findings.push(finding('block', 'Calendar', `"${phase.label}" has a nonpositive day count.`, phase.id))
+    if (phase.days <= 0) findings.push(finding('block', 'Calendar', `"${phase.label}" has no days.`, phase.id))
   }
 
   // Semi-blocker/blocker ingredients that never get a positive weight on
   // ANY basket, in ANY phase, are structurally unobtainable from baskets -
   // only flagged as 'review' (not 'block') since a grant could still cover
   // it entirely, which is a legitimate design choice this tool supports.
+  // (They are put right where baskets and grants are set, so: step baskets.)
   for (const ing of ingredients) {
     if (ing.rarity !== RARITY.SEMI_BLOCKER && ing.rarity !== RARITY.BLOCKER) continue
     const everAvailable = baskets.some((b) => b.ingredientWeights.some((w) => w.ingredientId === ing.id && w.weight > 0))
     const hasGrant = grants.some((g) => g.ingredientId === ing.id)
     if (!everAvailable && !hasGrant) {
-      findings.push(finding('review', 'Calendar', `"${ing.name}" (${ing.rarity}) has no basket with a positive weight and no grant — it can never be obtained at all.`, ing.id))
+      findings.push(finding('review', 'Calendar', `"${ing.name}" (${RARITY_LABELS[ing.rarity].toLowerCase()}) is given by no basket in any phase and by no sale or event: a player can never get it.`, ing.id, 'baskets'))
     } else if (!everAvailable && hasGrant) {
-      findings.push(finding('info', 'Calendar', `"${ing.name}" is only obtainable via grants, never from baskets.`, ing.id))
+      findings.push(finding('info', 'Calendar', `"${ing.name}" only comes from sales and events, never from a basket.`, ing.id, 'baskets'))
     }
   }
 
   // --- Grants ---
   for (const grant of grants) {
     if (!ingredientIds.has(grant.ingredientId)) {
-      findings.push(finding('block', 'Grants', `A grant references an unknown ingredient "${grant.ingredientId}".`, grant.id))
+      findings.push(finding('block', 'Grants', `Something given outside the baskets is an ingredient that no longer exists ("${grant.ingredientId}").`, grant.id))
     }
     if (grant.day < 1 || grant.day > calendar.totalDays) {
-      findings.push(finding('block', 'Grants', `A grant on day ${grant.day} falls outside the event's ${calendar.totalDays}-day length.`, grant.id))
+      findings.push(finding('block', 'Grants', `${nameOf(grant.ingredientId)} is given on day ${grant.day}, outside the event's ${calendar.totalDays} days.`, grant.id))
     }
-    if (grant.amount < 0) findings.push(finding('block', 'Grants', 'A grant has a negative amount.', grant.id))
-    if (grant.coveragePct < 0 || grant.coveragePct > 100) findings.push(finding('block', 'Grants', 'A grant has a coverage % outside 0–100.', grant.id))
+    if (grant.amount < 0) findings.push(finding('block', 'Grants', `${nameOf(grant.ingredientId)} is given in an amount below zero.`, grant.id))
+    if (grant.coveragePct < 0 || grant.coveragePct > 100) findings.push(finding('block', 'Grants', `${nameOf(grant.ingredientId)} is given to a share of players outside 0 to 100%.`, grant.id))
   }
 
   // --- Segments ---
   for (const segment of segments) {
     for (const [chestType, rate] of Object.entries(segment.avgBasketsPerDay)) {
-      if (rate < 0) findings.push(finding('block', 'Segments', `"${segment.name}" has a negative avg-baskets/day for ${chestType}.`, segment.id))
+      if (rate < 0) findings.push(finding('block', 'Segments', `"${segment.name}" opens fewer than zero ${CHEST_LABELS[chestType] ?? chestType} baskets a day.`, segment.id))
     }
   }
 
@@ -150,4 +170,6 @@ export function validateChefConfig({ ingredients, dishes, recompletionDishes, ba
 }
 
 export const SEVERITY_ORDER = ['block', 'review', 'info']
-export const SEVERITY_LABELS = { block: 'Blocks release', review: 'Needs review', info: 'Informational' }
+// What a severity is called on screen - the words of the Merge flow ("Needs
+// a fix" stops an event from shipping as it is; the others do not).
+export const SEVERITY_LABELS = { block: 'Needs a fix', review: 'Worth a look', info: 'Good to know' }

@@ -1,8 +1,8 @@
-import { gzipSync, gunzipSync, strToU8, strFromU8 } from 'fflate'
+import { gzipSync, gunzipSync, deflateSync, inflateSync, strToU8, strFromU8 } from 'fflate'
 
-// Shared gzip+base64url codec for packing a JSON-serializable value into a
-// URL-safe query-param string - factored out of stageShare.js (the original
-// "?play&stage=..." player-link codec) so planShare.js (the "?plan=..."
+// Shared codec for packing a JSON-serializable value into a URL-safe
+// query-param string - factored out of stageShare.js (the player link's
+// codec) so planShare.js (the "?plan=..."
 // read-only planning-review link) can reuse the exact same plumbing instead
 // of a second copy. See stageShare.js's own long-standing comment for why
 // gzip specifically (real headroom against GitHub Pages' own Fastly CDN's
@@ -28,6 +28,19 @@ const ALNUM_VALUE = new Map([...ALNUM].map((ch, i) => [ch, i]))
 const CHUNK_DIGITS = 8
 const CHUNK_BASE = 62 ** CHUNK_DIGITS
 
+// A SHORTER WRITING, behind the marker letter "B" (economist: "i also want u to
+// make sure the link of the stage as short as possible"): raw deflate at its
+// highest level - no gzip header and checksum, 18 bytes less - against a
+// DICTIONARY the caller supplies: text that links of its kind have in common,
+// so a link only carries what is its own. The dictionary is part of the
+// writing: the same bytes are needed to read a link back, for ever. A caller
+// never changes its dictionary - a new one gets a new marker letter.
+const COMPACT_MARK = 'B'
+export function encodeCompactToUrlParam(value, dictionaryText) {
+  const compressed = deflateSync(strToU8(JSON.stringify(value)), { level: 9, mem: 12, dictionary: strToU8(dictionaryText) })
+  return COMPACT_MARK + bytesToAlnum(compressed)
+}
+
 export function encodeToUrlParam(value) {
   const json = JSON.stringify(value)
   const compressed = gzipSync(strToU8(json))
@@ -39,11 +52,17 @@ export function encodeToUrlParam(value) {
 // treat null as "this link is broken," not silently identical to "nothing
 // was shared" (see stageShare.js's decodeStage / App.jsx's PlayApp for why
 // that distinction matters to how a broken link gets reported to the user).
-export function decodeFromUrlParam(encoded, { validate } = {}) {
+// (`dictionaryText`: the dictionary of the caller's compact writing, for a link that starts with "B".)
+export function decodeFromUrlParam(encoded, { validate, dictionaryText = null } = {}) {
   if (!encoded) return null
   try {
-    const bytes = encoded.startsWith(ALNUM_MARK) ? alnumToBytes(encoded.slice(ALNUM_MARK.length)) : base64UrlToBytes(encoded)
-    const json = strFromU8(gunzipSync(bytes))
+    let json
+    if (encoded.startsWith(COMPACT_MARK) && dictionaryText != null) {
+      json = strFromU8(inflateSync(alnumToBytes(encoded.slice(COMPACT_MARK.length)), { dictionary: strToU8(dictionaryText) }))
+    } else {
+      const bytes = encoded.startsWith(ALNUM_MARK) ? alnumToBytes(encoded.slice(ALNUM_MARK.length)) : base64UrlToBytes(encoded)
+      json = strFromU8(gunzipSync(bytes))
+    }
     const value = JSON.parse(json)
     if (validate && !validate(value)) return null
     return value

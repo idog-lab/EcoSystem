@@ -42,26 +42,33 @@ async function analyze() {
   await page.waitForTimeout(200)
 }
 const row = (i) => page.locator(`[data-twister-row="${i}"]`)
+// The export buttons hold the segment shown or every segment: a switch beside them says which.
+const exportButton = async (scope) => {
+  await page.locator(`[data-scope="${scope}"]`).click()
+  await page.waitForTimeout(100)
+  return page.getByRole('button', { name: scope === 'all' ? 'Download combined workbook' : /Download workbook \(this segment\)/ })
+}
 const cell = async (i, name) => (await row(i).locator(`[data-cell="${name}"]`).first().innerText()).trim()
 
 // ---------- A hand-built design with no energy income needs nothing ----------
 await tab(page, 'Syntax').click()
 await page.waitForTimeout(300)
-ok('a hand-built design that pays no energy is exportable as it stands', (await page.getByTestId('export-blocked').count()) === 0 && (await page.getByRole('button', { name: /Download workbook \(this segment\)/ }).isEnabled()))
-ok('the Syntax tool says it exports the applied design', (await page.getByTestId('syntax-export-source').innerText()).includes('applied design'))
+ok('a hand-built design that pays no energy is exportable as it stands', (await page.getByTestId('export-blocked').count()) === 0 && (await (await exportButton('segment')).isEnabled()))
+ok('the Syntax tool says it exports the event in use', (await page.getByTestId('syntax-export-source').innerText()).includes('event in use'))
 
-// ---------- Build a draft; do NOT apply ----------
+// ---------- Build: the build is in use at once ----------
 await tab(page, 'Build event').click()
 await step(page, 'build').click()
 await page.waitForTimeout(200)
 await build()
-ok('a draft is built and not applied', (await chips(page)).includes('draft'))
+ok('the build is in use the moment it finishes', (await chips(page)).includes('applied'))
 const draftGenerated = num(await page.locator('[data-testid="review-subsidy"] [data-cell="effective"]').innerText())
 
-// ---------- Twister on the DRAFT, without applying it ----------
-await step(page, 'finalize').click()
-await page.waitForTimeout(200)
-await page.getByTestId('finalize-twister-draft').click()
+// ---------- The Twister tool on the build's own boards ----------
+// (The Twister tool is one of the advanced tools, in the header's "More" menu.)
+await tab(page, 'Twister').click()
+await page.waitForTimeout(300)
+await page.locator('[data-source="draft"]').click()
 await page.waitForTimeout(400)
 ok('Twister opens on the draft, and says the draft need not be applied', (await page.locator('[data-source="draft"]').getAttribute('aria-pressed')) === 'true' && (await page.getByTestId('twister-source-note').innerText()).includes('does not need to be applied'))
 await page.getByTestId('twister-runs').fill('30')
@@ -81,7 +88,7 @@ await page.waitForTimeout(250)
 ok('a suggested cost can be applied, and is recorded as derived from this draft', num(await cell(0, 'applied')) === draftCost && (await row(0).locator('[data-cost-basis]').innerText()).includes('from this draft'))
 await tab(page, 'Build event').click()
 await page.waitForTimeout(200)
-ok('evaluating Twister did not apply the draft', (await chips(page)).includes('draft') && !(await chips(page)).includes('applied'))
+ok('evaluating Twister changed nothing in Build event: the build is still in use', (await chips(page)).includes('applied'))
 
 // ---------- ...and on the APPLIED design, kept separate ----------
 await tab(page, 'Twister').click()
@@ -89,7 +96,9 @@ await page.waitForTimeout(200)
 await page.locator('[data-source="applied"]').click()
 await page.waitForTimeout(250)
 ok('switching to the applied design shows no numbers borrowed from the draft', (await cell(0, 'mean')) === '—' && (await cell(0, 'suggested')) === '—')
-ok('...and the cost is flagged as derived from a different configuration', (await row(0).locator('[data-cost-basis]').innerText()).includes('not the configuration selected here'))
+// (Back in Build event the twists typed in this tool were priced again on the build's own boards; that lands a moment later.)
+await row(0).locator('[data-cost-basis]').filter({ hasText: 'set by the build' }).waitFor({ state: 'visible', timeout: 30000 }).catch(() => {})
+ok('...and the cost set on the build is not flagged as foreign: the event in use IS that build', !(await row(0).locator('[data-cost-basis]').innerText()).includes('not the configuration selected here'))
 await analyze()
 const appliedMean = num(await cell(0, 'mean'))
 ok(`the applied design gets its own analysis (mean ${appliedMean})`, appliedMean > 0)
@@ -97,15 +106,14 @@ await page.locator('[data-source="draft"]').click()
 await page.waitForTimeout(250)
 ok('switching back shows the draft\'s own stored result again', num(await cell(0, 'mean')) === draftMean)
 
-// ---------- Apply the draft: every tool now reads the same design ----------
+// ---------- Tested on players: every tool reads the same design ----------
 await tab(page, 'Build event').click()
 await step(page, 'finalize').click()
 await page.waitForTimeout(200)
 await page.getByTestId('finalize-validate').click()
 await page.getByTestId('validation-table').waitFor({ state: 'visible', timeout: 120000 })
-await page.getByTestId('finalize-apply').click()
 await page.waitForTimeout(400)
-ok('applying makes the draft the applied design', (await chips(page)).includes('applied') && (await chips(page)).includes('validated'))
+ok('the build in use is now also tested on players', (await chips(page)).includes('applied') && (await chips(page)).includes('validated'))
 ok('the export step is not blocked', (await page.getByTestId('export-blocked').count()) === 0 && (await page.getByTestId('finalize-download').isEnabled()))
 await tab(page, 'Rewards (V2)').click()
 await page.waitForTimeout(300)
@@ -114,7 +122,7 @@ await tab(page, 'Twister').click()
 await page.waitForTimeout(250)
 await page.locator('[data-source="applied"]').click()
 await page.waitForTimeout(250)
-ok('the applied design changed, so its earlier Twister analysis is out of date', (await row(0).locator('[data-stale]').count()) === 1)
+ok('testing on players did not change the event in use, so its Twister analysis still stands', (await row(0).locator('[data-stale]').count()) === 0)
 
 // ---------- An advanced, rewards-only Generate + Apply ----------
 await tab(page, 'Rewards (V2)').click()
@@ -129,7 +137,7 @@ await page.waitForSelector('text=4. Review and apply', { timeout: 120000 })
 await page.getByRole('button', { name: 'Apply configuration' }).click()
 await page.waitForTimeout(500)
 ok('after the advanced Apply the design is OUT OF DATE, not finalized-looking', (await designState(page)) === 'stale' && /out of date - needs a rebuild/.test(await page.getByTestId('design-status').innerText()))
-ok('...it says what changed and that subsidy, energy accounting and validation no longer hold', /reward items under tiles|merge-drop groups|main-chain queue contents/.test(await page.getByTestId('design-status').innerText()) && /energy accounting and any earlier validation no longer describe it/.test(await page.getByTestId('design-status').innerText()))
+ok('...it says what changed and that the numbers of the last build no longer describe these boards', /reward items under tiles|what merges drop|the main-chain items under the tiles/.test(await page.getByTestId('design-status').innerText()) && /changed after the last build/.test(await page.getByTestId('design-status').innerText()) && /The numbers of the last build no longer describe these boards/.test(await page.getByTestId('design-status').innerText()))
 ok('...and offers a direct rebuild', await page.getByTestId('design-rebuild').isVisible())
 await tab(page, 'Build event').click()
 await page.waitForTimeout(250)
@@ -137,14 +145,14 @@ ok('Build event agrees: that draft is no longer the applied design', !(await chi
 
 await tab(page, 'Syntax').click()
 await page.waitForTimeout(300)
-ok('exports are blocked while the applied design is out of date', (await page.getByTestId('export-blocked').isVisible()) && (await page.getByRole('button', { name: /Download workbook \(this segment\)/ }).isDisabled()) && (await page.getByRole('button', { name: 'Download combined workbook' }).isDisabled()) && (await page.getByRole('button', { name: /Copy as TSV/ }).isDisabled()))
+ok('exports are blocked while the applied design is out of date', (await page.getByTestId('export-blocked').isVisible()) && (await (await exportButton('segment')).isDisabled()) && (await (await exportButton('all')).isDisabled()) && (await page.getByRole('button', { name: /Copy as TSV/ }).isDisabled()))
 ok('...naming the segment, the phase and the reason', /Base, Normal:/.test(await page.getByTestId('export-blocked').innerText()))
 await page.getByTestId('export-override').check()
 await page.waitForTimeout(150)
-ok('an explicit override enables export and stays visibly on', (await page.getByRole('button', { name: /Download workbook \(this segment\)/ }).isEnabled()) && (await page.getByTestId('export-override-active').innerText()).includes('out-of-date, unvalidated'))
+ok('an explicit override enables export and stays visibly on', (await (await exportButton('segment')).isEnabled()) && (await page.getByTestId('export-override-active').innerText()).includes('do not match their last build'))
 await page.getByTestId('export-override').uncheck()
 await page.waitForTimeout(150)
-ok('turning the override off blocks export again', await page.getByRole('button', { name: 'Download combined workbook' }).isDisabled())
+ok('turning the override off blocks export again', await (await exportButton('all')).isDisabled())
 
 // ---------- Rebuild restores agreement ----------
 await tab(page, 'Rewards (V2)').click()
@@ -155,14 +163,13 @@ ok('"Rebuild in Build event" lands on the Build step', (await page.getByTestId('
 await build()
 await step(page, 'finalize').click()
 await page.waitForTimeout(200)
-await page.getByTestId('finalize-apply').click()
 await page.waitForTimeout(400)
 await tab(page, 'Rewards (V2)').click()
 await page.waitForTimeout(300)
-ok('after rebuilding and applying, the design is consistent again (estimated until re-validated)', (await designState(page)) === 'consistent' && /estimated, not yet validated/.test(await page.getByTestId('design-status').innerText()))
+ok('after rebuilding, the design is consistent again (estimated until tested again)', (await designState(page)) === 'consistent' && /estimated, not yet validated/.test(await page.getByTestId('design-status').innerText()))
 await tab(page, 'Syntax').click()
 await page.waitForTimeout(300)
-ok('...and exports are open again without any override', (await page.getByTestId('export-blocked').count()) === 0 && (await page.getByRole('button', { name: 'Download combined workbook' }).isEnabled()))
+ok('...and exports are open again without any override', (await page.getByTestId('export-blocked').count()) === 0 && (await (await exportButton('all')).isEnabled()))
 
 // ---------- Draft restore: separate from the applied design, never applied ----------
 // Nothing was saved, so a reload brings back the ORIGINAL applied design -
@@ -172,10 +179,10 @@ ok('the draft is stored separately from the project save', draftStored && (await
 await page.reload({ waitUntil: 'networkidle' })
 await page.getByText('Merge Mania', { exact: false }).first().click()
 await page.waitForTimeout(400)
-ok('after a reload the draft is back, says it was restored, and is NOT applied', (await page.getByTestId('draft-restored').innerText()).includes('has not been applied') && !(await chips(page)).includes('applied'))
+ok('after a reload the build results are back, and they are NOT what is in use (the unsaved boards are gone)', !(await chips(page)).includes('applied'))
 // The split was changed in the advanced tool and never saved, so the reloaded
 // project has the old split: the restored draft no longer matches its inputs.
-ok('...and because it was built from an unsaved split, it says exactly that and needs a rebuild', (await chips(page)).includes('stale') && (await page.getByTestId('build-stale').innerText()).includes('split') && (await page.getByTestId('draft-restored').innerText()).includes('needs rebuilding'))
+ok('...and because it was built from an unsaved split, it says exactly that and needs a rebuild', (await chips(page)).includes('stale') && (await page.getByTestId('build-stale').innerText()).includes('split'))
 await step(page, 'build').click()
 await page.waitForTimeout(250)
 ok('its proposed boards, drops and reconciliation are intact', (await page.getByTestId('build-coverage').isVisible()) && num(await page.locator('[data-testid="review-subsidy"] [data-cell="effective"]').innerText()) > 0)
@@ -196,10 +203,10 @@ await page.waitForTimeout(200)
 await page.reload({ waitUntil: 'networkidle' })
 await page.getByText('Merge Mania', { exact: false }).first().click()
 await page.waitForTimeout(400)
-ok('a restored draft built from other inputs is kept but marked as needing a rebuild, with the reason', (await chips(page)).includes('stale') && (await page.getByTestId('draft-restored').innerText()).includes('needs rebuilding') && (await page.getByTestId('build-stale').innerText()).includes('reward targets'))
+ok('a restored build made from other inputs is kept but marked as needing a rebuild, with the reason', (await chips(page)).includes('stale') && (await page.getByTestId('build-stale').innerText()).includes('reward targets'))
 await step(page, 'finalize').click()
 await page.waitForTimeout(200)
-ok('...and it cannot be applied in that state', await page.getByTestId('finalize-apply').isDisabled())
+ok('...and it cannot be put in use in that state', (await page.getByTestId('finalize-apply').count()) === 0 && (await page.getByTestId('finalize-in-use').getAttribute('data-state')) === 'stale')
 
 // An incompatible stored draft is not restored, and says so.
 await page.evaluate(() => localStorage.setItem('merge-mania-build-drafts', JSON.stringify({ format: 1, drafts: { main: { key: 'x', segments: [] } } })))
@@ -209,7 +216,7 @@ await page.waitForTimeout(400)
 ok('a draft from an incompatible version is not restored; the applied design is kept and the reason is shown', (await page.getByTestId('draft-notice').innerText()).includes('earlier version') && (await chips(page)).includes('none'))
 await step(page, 'layouts').click()
 await page.waitForTimeout(200)
-ok('...with the applied boards still there', (await page.locator('[data-layout-board="1"] [data-cell="contents"]').innerText()).includes('has contents'))
+ok('...with the applied boards still there', (await page.locator('[data-capacity-board="1"] [data-cell="contents"]').innerText()).includes('has contents'))
 
 ok('zero page errors', errors.length === 0)
 await browser.close()

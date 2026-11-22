@@ -23,13 +23,13 @@
 import { simulatePlaythrough } from '../simulation/mergeSimulation'
 import { mulberry32 } from './rewardEconomy'
 import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_MAX_RANK, rewardPrizeAmount, rewardLadderIsConfigured } from './rewardChain'
-import { DEFAULT_MIN_DROP_RANK } from './dropGroups'
+import { DEFAULT_MIN_DROP_RANK, tableDrops, firstDropRank } from './dropGroups'
 import { DROP_TABLE_TOTAL_WEIGHT } from './rewardTargeting'
 import { RC_MAX_RANK } from '../core/ranks'
 import { computeEffectiveSubsidy } from './rewardEconomy'
 
 export const DEFAULT_CHECKPOINT_PCT = 70
-// THE EASY WAY (Build event, step 4) - by explicit economist request: "maybe
+// THE EASY WAY (Build event, step 3) - by explicit economist request: "maybe
 // ill give u the amount of twists for each segment and ull give the price of
 // a twist. maybe that should be done before the blocked queue". The economist
 // types the twists per segment; everything else has a working default and
@@ -59,8 +59,9 @@ export function roundTwisterValues(factor = 1) {
   const nice = (v) => (v >= 10 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v)))
   const niceUp = (v) => (v >= 10 ? Math.ceil(v / 5 - 1e-9) * 5 : Math.max(1, Math.ceil(v - 1e-9)))
   const out = TWISTER_DEFAULT_VALUES.map((v) => nice(v * f))
-  out[1] = Math.max(out[1], niceUp(2 * out[0]))
-  out[2] = Math.max(out[2], niceUp(2 * out[1]))
+  // Every merge strictly pays more (rewardChain.js: validateRewardLadder).
+  out[1] = Math.max(out[1], niceUp(2 * out[0] + 1))
+  out[2] = Math.max(out[2], niceUp(2 * out[1] + 1))
   out[3] = Math.max(out[3], niceUp(Math.max(2 * out[2], 4 * out[1], 8 * out[0]) + 1))
   return out
 }
@@ -73,7 +74,7 @@ export const PROGRESS_MARKS = [70, 75]
 // amount in 100% progression and some at 50 ... i need the model to be the
 // smart one"). Every simulated player's Twister DR is recorded every 5% of
 // the phase, so the build can say WHEN a typical player of each segment has
-// all the twists, and what they hold on the way (PACE_MARKS, shown in step 6).
+// all the twists, and what they hold on the way (PACE_MARKS, shown in step 4).
 //   on track  the typical player has all the twists by the point they are
 //             counted, and not more than TWISTER_ON_TRACK_WINDOW_PCT points
 //             of progress before it;
@@ -109,8 +110,17 @@ export function createTwisterPlan() {
     targetSpins: null,
     // Explicit per-segment overrides of targetSpins, keyed by segment index.
     targetSpinsOverrides: {},
-    // Supported price step: costs are whole multiples of this many DR.
+    // A price step: costs are whole multiples of this many DR. The advanced
+    // Twister tool uses it for its own suggestions. A BUILD uses it only when
+    // `roundPrice` is on (see below).
     costIncrement: 1,
+    // THE PRICE OF A TWIST IS WHATEVER MAKES IT WORK (economist: "the twister
+    // spin cost isnt hard on the 10, the model can give any price for the spin
+    // to make it work"). A build fits any whole price. Rounding the price to
+    // steps is an option that has to be switched on by typing a step in step
+    // 4; a step saved before this rule (a project that still carries 10) is
+    // not used.
+    roundPrice: false,
     runs: DEFAULT_TWISTER_RUNS,
     seed: DEFAULT_TWISTER_SEED,
   }
@@ -152,8 +162,9 @@ const tableTotal = (table) => (table?.noDropWeight ?? 0) + (table?.entries ?? []
 export function twisterDropOdds(dropGroups, dropGroupsConfig, { minDropRank = DEFAULT_MIN_DROP_RANK, rewardChainConfig = null, maxRank = RC_MAX_RANK } = {}) {
   const byId = new Map((dropGroups ?? []).map((g) => [g.id, g]))
   const rows = []
-  for (let rank = minDropRank; rank <= maxRank; rank++) {
+  for (let rank = firstDropRank(dropGroupsConfig, minDropRank); rank <= maxRank; rank++) {
     const table = dropGroupsConfig?.[rank - 1]
+    if (!tableDrops(table, minDropRank)) continue
     const total = tableTotal(table)
     let probability = 0
     let rawValuePerMerge = 0

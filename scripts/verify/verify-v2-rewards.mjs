@@ -121,7 +121,7 @@ console.log('--- 5. Reward-chain validation flags a wrong ladder ---')
   config.puzzles[3].prizeAmount = 1
   const findings = validateRewardChainConfig(config)
   check('a ladder that rewards merging has no finding', !findings.some((f) => f.type === 'coins'))
-  check('a merely proportional ladder is flagged (rank 4 must be strictly better)', findings.some((f) => f.type === 'charms' && f.issues.every((i) => i.code === 'top-rank-not-best')))
+  check('a merely proportional ladder is flagged (every rank must be strictly better than the two items it is made of)', findings.some((f) => f.type === 'charms' && f.issues.some((i) => i.code === 'top-rank-not-best') && f.issues.every((i) => i.code === 'top-rank-not-best' || i.code === 'merge-step-pays-no-more')))
   check('bad puzzles ladder is flagged', findings.some((f) => f.type === 'puzzles'))
 }
 
@@ -922,7 +922,9 @@ console.log('--- 27. Shared play link carries the RC variant; gated transition a
   climb(11)
   check('reaching rank 12 with every tile cleared enters RC', session.phase === 'rc' && session.reachedAt[12] !== undefined)
   check('RC activates the variant\'s own generator EV and tier unlocks', session.targetEv === 1.5 && session.tier2UnlockRank === 3)
-  check('RC activates the variant\'s own drop groups, drop start rank and leftover policy', session.dropGroupsById.has('rc-g') && session.minDropRank === 4 && session.leftoverPolicy === 'collect')
+  // (A link carries what a container holds, not the name the editor gave it: play never reads that.)
+  const rcGroups = [...session.dropGroupsById.values()]
+  check('RC activates the variant\'s own drop groups, drop start rank and leftover policy', rcGroups.length === 1 && rcGroups[0].items.charms === 4 && Object.keys(rcGroups[0].items).length === 1 && session.minDropRank === 4 && session.leftoverPolicy === 'collect')
   const charmsBefore = session.collected.charms
   climb(13)
   check('RC merges roll the RC variant\'s own drop table (charms R4 collects on the spot)', session.collected.charms > charmsBefore)

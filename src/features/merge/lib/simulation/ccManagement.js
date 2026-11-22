@@ -1,8 +1,9 @@
+import { boardMinRank } from '../core/board'
 import { generateCandidateInRange } from '../core/generateCandidateInRange'
 import { generateCandidateWithSmallRanks } from '../core/generateCandidateWithSmallRanks'
 import { valueOf, MAX_RANK } from '../core/ranks'
 import { DEFAULT_TARGET_EV, MIN_TARGET_EV, MAX_TARGET_EV, computeProbs } from '../core/luckyDrop'
-import { effectiveMinRank, effectiveMaxRank } from '../core/rankWindow'
+import { effectiveMaxRank } from '../core/rankWindow'
 
 function countFillableTiles(tiles) {
   return tiles.flat().filter((s) => s === 'blocked' || s === 'semi').length
@@ -19,7 +20,7 @@ function countFillableTiles(tiles) {
 // position might cap it right back down anyway.
 function summarize(board, isFirstBoard, blockedValue, maxRank, boardIndex) {
   const tileCount = countFillableTiles(board.tiles)
-  const minRank = effectiveMinRank(board.minRank, boardIndex)
+  const minRank = boardMinRank(board, boardIndex)
   const maxRankCeiling = effectiveMaxRank(maxRank, boardIndex)
   const ranks = isFirstBoard
     ? generateCandidateWithSmallRanks(blockedValue, tileCount, minRank, maxRankCeiling)

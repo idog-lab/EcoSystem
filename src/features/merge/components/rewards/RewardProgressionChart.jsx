@@ -43,8 +43,11 @@ function MiniLineChart({ points, color, max }) {
   )
 }
 
-export default function RewardProgressionChart({ events }) {
+// `hideEmpty`: nothing is drawn until a first reward is collected (four empty
+// boxes saying "No drops yet" were the first thing under a new game).
+export default function RewardProgressionChart({ events, hideEmpty = false }) {
   const { series, mergeCount, totals } = buildSeries(events ?? [])
+  if (hideEmpty && REWARD_TYPES.every((type) => Math.max(...series[type].map(([, y]) => y), 0) <= 0)) return null
   return (
     <Card
       title="Reward progression"

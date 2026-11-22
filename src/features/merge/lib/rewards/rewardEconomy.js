@@ -272,6 +272,8 @@ export function validateConfigAcrossRuns(
     if (stats.boardsReached < stats.boardsTotal) bucket.stoppedOn[stats.boardsReached - 1] = (bucket.stoppedOn[stats.boardsReached - 1] ?? 0) + 1
   }
   const drSpentSamples = []
+  const drMainSamples = []
+  const drRcSamples = []
   const energySpentSamples = []
   const spaceCollectSamples = []
 
@@ -317,6 +319,8 @@ export function validateConfigAcrossRuns(
     noteDelivery(delivery.main, result)
     noteDelivery(delivery.rc, result.rcPhase)
     drSpentSamples.push(result.drSpent)
+    drMainSamples.push(result.drSpentMainPhase ?? result.drSpent)
+    if (result.drSpentRcPhase != null) drRcSamples.push(result.drSpentRcPhase)
     energySpentSamples.push(result.energySpent)
     spaceCollectSamples.push(result.spaceCollects)
   }
@@ -336,6 +340,10 @@ export function validateConfigAcrossRuns(
       Object.entries(delivery).map(([phase, d]) => [phase, { share: d.shares.length ? d.shares.reduce((s, v) => s + v, 0) / d.shares.length : null, stoppedOn: Array.from(d.stoppedOn, (n) => n ?? 0) }]),
     ),
     drSpent: summarizeNumbers(drSpentSamples),
+    // The same per phase: the normal event's own spend, and Recompletion's
+    // counted from the moment it began (over the runs that entered it).
+    drSpentMainPhase: summarizeNumbers(drMainSamples),
+    drSpentRcPhase: rcBoards ? summarizeNumbers(drRcSamples) : null,
     energySpent: summarizeNumbers(energySpentSamples),
     spaceCollects: summarizeNumbers(spaceCollectSamples),
     mainPhaseCompletionRate: mainReached / runs,

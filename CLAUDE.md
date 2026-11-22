@@ -17,6 +17,13 @@ When this file and the history disagree, this file wins.
   "economist" was asked for in so many words. Do not change one to make code
   simpler or a number come out nicer; if two rules collide, say so and ask.
   Numbers marked "this app's own" are ours to tune; say when you change one.
+- **The economy is frozen** (economist: "Freeze economy development for now.
+  Further balancing and gameplay changes will come from my hands-on QA"). Do
+  not change formulas, drop rules, reward values, simulator strategy,
+  calibration objectives or margins unless asked. A suspected logic issue is
+  written down for QA, not fixed; ordinary presentation and interaction bugs
+  are fixed. A limitation is never hidden and a warning is never turned into
+  a success message.
 - **Do not invent production values or syntax.** Ops mappings that were never
   confirmed stay labelled "unverified" wherever they are shown or exported.
 - **Verify in the real app, not just the library** (Playwright suites below).
@@ -27,35 +34,38 @@ When this file and the history disagree, this file wins.
 - Artwork is prototype concept art made by the economist, not studio artwork.
 - `src/features/chef` and `src/features/diamondMine` are separate features
   that share only `src/components/` and `src/lib/`. Leave them alone unless
-  asked.
+  asked. **Chef has its own description, `docs/chef-overview.md`** - its
+  model, its five-step flow, its checks and its known limits: read it before
+  a Chef task. Its model is the economist's the way the Merge economy is: a
+  suspected flaw is measured, said on screen and written down, not fixed.
 
 ## Repository map
 
 ```
 src/
   main.jsx, App.jsx, index.css     app entry; App.jsx holds the Merge editor state and routing
-  components/                      shared UI (HeroPage, ui/Button, Card, NumberField, Slider, InfoHint)
+  components/                      shared UI (HeroPage, ui/Button, Card, Collapsible, NumberField, Slider, InfoHint)
   lib/gridWidth.js                 shared grid sizing
   features/merge/
-    lib/core/        ranks, board, layout edits, item generation and placement, onboarding goal,
-                     generator tiers, lucky drops, subsidy budget
+    lib/core/        ranks, board, layout edits, the bank of board layouts, item generation and
+                     placement, onboarding goal, generator tiers, lucky drops, subsidy budget
     lib/simulation/  mergeSimulation (the engine), playSession (interactive play),
                      effortTargeting, ccManagement, simulationRows
     lib/rewards/     small rewards: reward chains, drop groups and containers, placement under
                      tiles, the configuration workflow, Twister economy, endless mode
     lib/build/       eventBuild (the guided build), legacyRecompletion
     lib/export/      eventSheets (Ops workbook), Google Sheets export, boardSyntax (placeholder)
-    lib/share/       stage and plan links (gzip + base64url)
+    lib/share/       stage and plan links (letters and digits only; the stage link's short writing)
     lib/state/       persistence (localStorage), useBoardListState
     lib/play/        artwork lookup, tile surfaces, celebrations, phone layout hook
-    components/build/    the Build event flow (7 steps) and its review
+    components/build/    the Build event flow (5 steps) and its review
     components/editor/   advanced board editor, board list, simulation report, CC management
     components/rewards/  advanced Rewards and Twister tools
     components/play/     Play Tester, Play Stage (shared link), tiles, effects, celebrations
     components/export/   Syntax tab
     assets/game/     the artwork in use (copied and trimmed from art-source/)
     data/            the demo stage
-  features/diamondMine/, features/chef/   other features
+  features/diamondMine/, features/chef/   other features (Chef: a five-step flow, see docs/chef-overview.md)
 scripts/
   verify/          engine checks (npm run verify)
   e2e/             browser checks against the dev server (npm run e2e; one: npx vite-node <file>)
@@ -64,6 +74,7 @@ art-source/        the economist's original asset packs (untracked)
 reference/         the economist's reference spreadsheets: Merge Out.xlsx (Small Rewards
                    syntax example), chef_*.xlsx (Chef source data) (untracked)
 docs/history.md    the full design history
+docs/chef-overview.md   the Chef feature: what it is and how to work on it
 ```
 
 Dev: `npm run dev` (port 5173, `strictPort` - localStorage is per origin
@@ -92,7 +103,17 @@ tables, drop start rank, single/two/three-item ranks, reward under the tiles,
 differ in subsidy (demand), reward targets (base x factor), **the rank values
 the build gives - coins, puzzles, merge energy and charms, each segment its
 own** (`mergeSharedRewardChain` keeps them through the sync while the typed
-definition is the same) - and Twister price.
+definition is the same - **whether or not a ladder carries the build's
+`typed` mark**: a build that gives a segment exactly the typed values leaves
+no mark, and that segment's values used to be replaced by Segment 1's) - and **the four Twister values and the price of a
+twist, each segment its own** (fitted by the build; typed Twister values are
+the definition and shared).
+**Only the segments in use are in sight** (`segmentInUse`, `shownSegments` in
+`App.jsx`): the bar in the header and step 1 show a segment that has a DR
+demand or DR on its boards, one given a name of its own, the one selected, and
+any brought in with "Add segment" (kept for the visit); Segment 1 always. A
+segment out of sight keeps whatever it holds. Tables and "not built" lines of
+the flow name only the segments in sight.
 
 **One event, one table** (economist: "as for now its the same for both normal
 and RC"). The game has one Small Rewards table, one Bank and one Weights
@@ -106,13 +127,51 @@ with that, not sized for (economist, asked: "Normal exact"). The only things
 that are Recompletion's own: the reward under its tiles, and the two table
 rows only it can reach - the merges that make rank 13 and 14, one container
 each (`tuneRecompletionTopRows`, set on the base segment). Anything typed for
-drop rules or values in the Recompletion phase of step 4 is not used (the
+drop rules or values in the Recompletion phase of step 3 is not used (the
 step says so).
 
-**Subsidy.** The economist types each segment's **demand** (DR the player
-spends); subsidy = chase value - demand, where the chase is 2048 for the
+**Subsidy.** The economist types each segment's **demand**; the DR typed on
+the boards is chase value - demand, where the chase is 2048 for the
 normal event and 6144 for Recompletion (`chaseValue`; the player arrives with
-a rank 12 worth 2048). Recompletion's demand is the normal event's, read-only
+a rank 12 worth 2048). **Demand is the DR the player really pays** (economist:
+"the intended average DR its player actually pays during that phase under the
+baseline careful-player policy"). Chase - demand is a statement in value, and
+a player pays less than that (lucky drops, free taps): 12% less on average in
+the normal event and 14% less in Recompletion before this rule. So the build
+**calibrates, in both directions** (economist: "'Subsidy is never added' is
+not an economist requirement"): besides the 80% merge-energy credit - its own
+rule, untouched, never counted twice - it moves the later boards' subsidy
+(`calibration` in `allocateSubsidy`, **signed**: + taken off, - put back;
+moved pass by pass in `buildSegment` by the DR the average simulated player
+is short or over, kept between the calibrations already seen from both
+sides) until that player pays the demand within `demandToleranceFor` (2%, 4%
+in Recompletion, at least 10 DR - this app's own). That is what the build
+AIMS at. **What passes is the economist's mark: the average player pays the
+demand within 5% of it or 30 DR, whichever is smaller, in both phases**
+(`demandMarginFor`; economist: "for DR usage we can give 5% or 30DR (the
+smaller one for the segment)"). The aim is never looser than the mark
+(`demandAimFor`); inside the aim a figure reads Close, inside the mark Within
+margin, and only outside the mark does a segment get the cause `demand-off`
+(`demandFit.within` is the aim, `demandFit.inMargin` the mark). Under a
+demand of 200 DR the mark is tighter than the old 10 DR floor; over 1,500 DR
+it is 30 DR, tighter than 2%. Recompletion's spend is
+counted from the moment it begins (`drSpentRcPhase`). Board 1, every board's
+floor, what a board's tiles can hold (`maxFeasibleBoardValue`), rank limits,
+pins and exact queue values are kept; the boards never end with more than
+the chase. The accounting is shown step by step and never mixed
+(`demandFit.steps`: subsidy typed, energy credit, signed calibration,
+generated). When the mark cannot be met the build says so (`demandFit`,
+cause `demand-off`, "Can be improved") and says which kind it is
+(`demandFit.limit`): **`proven`** - `no-subsidy-left` (the later boards are
+at their floors: the player cannot be made to pay more) or `boards-full`
+(they hold all their tiles can: cannot be made to pay less); **`jumps`** -
+two passes with almost the same subsidy paid on either side of the demand
+(`demandFit.jump`; Recompletion, where single items are worth hundreds of DR:
+the same subsidy gave 756 and 1,148 DR on two sets of boards, single builds),
+so no amount of subsidy lands in between and another build can; or
+**`not-settled`** - the passes ran out. `spendRange` is what the passes found
+a player paying. Step 4 shows demand, average and middle player, difference,
+completion and the signed calibration; step 5 shows the spread with real luck. Recompletion's demand is the normal event's, read-only
 (`rcSubsidyForMainSubsidy`). The last board is never typed: it closes the gap
 (`fillLastBoard`). Board 1 carries at most 150 DR (300 on Recompletion,
 `firstBoardCapFor`).
@@ -129,13 +188,76 @@ ascending queue. Positional rules:
   Board 3 never ranks 1-2, Board 2 items at most rank 11.
 - Recompletion: **no main item below rank 3 anywhere on its boards** - semi-blocked
   cells, the fixed cell and hand-pinned ranks included (generation raises them; the
-  pin brush starts at 3). Rank 13 allowed
+  pin brush starts at 3). **The generator holds this itself, whatever `minRank`
+  a board's data carries** (`boardMinRank` in board.js, and `generatePlacement`
+  raises a Recompletion board's own `minRank`): a Recompletion list saved with
+  `minRank` 1 used to get ranks 1-2 (economist: "there is a hard rule, no ranks
+  1 and 2. u keep on generating RC boards with rank1 and 2 in them"). Never read
+  a board's lowest rank any other way. Rank 13 allowed
   under tiles and as a pinned semi rank. **Its Board 1 is not an onboarding
   board** (economist: "there is no onboarding experience that needs to be
   met"): no starting goal, no opening run (`isRecompletionBoard` - every
   board of that list carries `listPhase: 'rc'`, stamped by
   `useBoardListState({ phase: 'rc' })`). It keeps the fixed cell (rank 3 there)
   and RC event mode, and lands exactly on its 300 DR.
+- **The first board's two rules** (economist: "the rank2 we got in the first
+  board should be hardcoded into the board in any time, and the 2 cells in the
+  rightest column in the bottom of the column should always be empty. those
+  are used in the tutorial of any board in the game itself"): the fixed
+  rank-2 cell (above), and **the two bottom cells of the rightmost column are
+  always empty** (`tutorialCells` in board.js) - open, nothing under them, no
+  pin. Every layout edit keeps them so on the normal event's first board
+  (`forceCells` / `hasTutorialCells` in layoutEdits.js: paint, fill-all,
+  resize, a pick from the bank); Recompletion's first board and later boards
+  are not tutorial boards. A first board saved before the rule is not
+  rewritten: step 2 says so and offers "Empty these two cells".
+- **The bank of layouts** (`lib/core/boardBank.js`; economist: "in the board
+  layout ill just pick from the bank of boards which one we will use this
+  time"): 18 first boards (5 x 8: 7 standing, 6 hanging, 1 diagonal, 4 drawn
+  for Black Friday) and 9 later boards (up to 3 x 8), picked in step 2 as
+  pictures (`BoardBank.jsx`;
+  `applyLayout`; "Undo" brings back the layout from before the pick with what
+  was built under it). What a board of the bank is, all economist rules:
+  - **Enough tiles** ("a bit more tiles ... we are looking for a good amount
+    of rank1"): a first board has 20 to 24 tiles, which gives 8 to 11 rank-1
+    items at 150 DR.
+  - **Guides** ("we need some semi blocked on the board ... the players are
+    rather not so smart, and we should guide them to where to merge on to
+    reveal more tiles"): three semi-blocked tiles besides the fixed cell on a
+    first board (two on a later board), each with at least two blocked tiles
+    beside it (`guidesOf`), so merging into the item in sight opens more. On
+    Board 1 a guide holds rank 1.
+  - **Standing, hanging, diagonal** ("u are creating only boards who are
+    weighted down with gravity, can u crete also ones that are hanged up?"):
+    `BANK_GROUPS` - tiles on the floor, tiles hanging from the top, a
+    diagonal band.
+  - **Symmetrical to the eye, judged by the tiles alone** ("we need to look at
+    the 2 putple tiles as empty, we need to see the boards only with the tiles
+    on them. i want them to be simetrical to the eye"): the left half mirrors
+    the right - the shape AND the tiles in sight (`symmetryOf` 'mirror'). The
+    two tutorial cells are empty space like any other, so their mirror cells
+    at the left edge are empty too: a standing board is six tiles wide in its
+    two bottom rows, centred. The fixed rank-2 cell has a guide on its mirror
+    cell, so the two items in sight in the middle of row 3 are a centred
+    pair. The one diagonal is the same turned half a circle (`'turn'`), with
+    the same number of tiles in every row (economist, of rows of 4, 4, 4, 4
+    and 5: "this is not simetrical"). No steps, no block against one side.
+    The picker draws the tutorial cells as plain empty space.
+  - **Drawn for an occasion - ON TRIAL** (economist, of four Black Friday
+    shapes: "lets try to enter all for now, ill try to see them in the model
+    it self"): the group `black-friday` - Gift box, Price drop (an arrow
+    down), Sale sign, Floating gift. First boards like any other, held to
+    every rule above. The economist has not chosen among them: do not treat
+    them as settled, and remove the ones they drop.
+  - **One solid shape, no holes** ("the boards that looks like htey have holes
+    in them, i dont like those. we need boards that doesnt look like they were
+    a mistake"): the tiles are one piece, no row or column has a gap, and the
+    fixed cell is part of the shape (`isSolidShape`). No lanes, tips, arches
+    or checkers.
+  - **The simulator solves every one** ("i need boards that the simulator can
+    ofc solve. if he cant solve, check why and fix").
+  All of it is held by `verify-board-bank.mjs`; add or change a layout only
+  with that suite passing.
 - Economist pins (`forcedSemiRanks`) survive generation.
 - A wave board (every board after the first) is at most 3 rows and pushes in
   from the top once the board above is cleared.
@@ -188,9 +310,14 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   the model to give the values of the ranks but with nice rounding for the
   amounts"). For every segment, each reward's four values are round
   (`niceRewardValues`: whole numbers under 10, multiples of 5 to 200, of 10 to
-  1,000; coins in hundredths, `niceCoinValues`) and **reward merging** (each
-  rank at least double the one below, rank 4 more than the items it is made
-  of) - so tapping an item early never pays more than merging it on. The
+  1,000; coins in hundredths, `niceCoinValues`) and **strictly reward merging**
+  (economist: "V2 > 2 x V1, V3 > 2 x V2, V4 > 2 x V3. Equality is
+  insufficient" - every rank MORE than double the one below, Twister
+  included; the smallest whole-number ladder is 1/3/7/15, `REWARD_MIN_TOP`
+  15; `validateRewardLadder` flags an equal step as
+  `merge-step-pays-no-more`; a typed ladder that breaks it is never changed
+  on its own, it gets fixes to choose from) - so tapping an item early never
+  pays more than merging it on. The
   proportions follow the typed ladder when that one already rewards merging,
   else 1:3:7:15. They are set last, on the boards the segment really gets and
   on 150 simulated players (`fitValuesOnFinalBoards`, `FINAL_FIT_RUNS`), so
@@ -198,7 +325,7 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   (about 3% at a top value of 75, 6% at 40 - what round amounts cost). A
   later pass of the same build keeps the values of the pass before unless
   the amount is clearly off (`VALUE_DEAD_BAND`). Typed values stay the
-  definition (`typed`); switch the whole thing off in step 4. **Any screen where values are typed or pasted must
+  definition (`typed`); switch the whole thing off in step 3. **Any screen where values are typed or pasted must
   pass the result through `withTypedLadders`**: it drops the build's `auto`
   mark from a ladder whose values changed. (The Twister tool and the Rewards
   tab once kept it, so the next build replaced typed Twister values - "a rank 4
@@ -212,7 +339,7 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   semi-blocked one of its rank, pairs merge on up the chain; the player who
   taps when it pays does not merge those ranks; tapping them as they lay
   under-counted merge energy by 7% against the robot);
-  'forfeit' (the old assumption) is still selectable in step 4. A project
+  'forfeit' (the old assumption) is still selectable in step 3. A project
   saved before this rule is switched to 'collect' when opened
   (`migrateLeftoverRule`, the save's `leftoverRule` mark). In a run that goes
   on into Recompletion nothing is settled at rank 12 (everything comes
@@ -220,7 +347,16 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   counted to the normal event and taken off Recompletion's
   (`carriedIntoRc`), so the two phases always add up to the run.
 - **Merge energy** funds free x1 taps and earns an **80% credit** taken off
-  the later boards' subsidy, once per phase (Board 1 protected).
+  the later boards' subsidy, once per phase (Board 1 protected). The credit is
+  80% of the energy **collected**, used or not. Where the energy of a phase
+  goes is measured (`energyFlow` in the simulator, per phase: `start` carried
+  in, `play`, `cleanup` at the phase-end collection, `used` on free taps,
+  `left`; `energy` in `cadenceSummary`). Three test events, the average
+  player: in the normal event 74% of the energy collected is used in the phase
+  (45% to 91% by segment), 16% is collected only at the end and 26% is left
+  unused; in Recompletion 81% is used, and the 26 carried in is spent there
+  but was credited once, in the normal event. No cap was added - whether the
+  credit should follow the energy used is an open question.
 - **Three kinds of player** (`collectPolicy`, `findTapCollectCell`). A reward
   item can be merged on or tapped to collect it as it is, and that changes
   what a player ends up with. `'merge'` (default; the player every build is
@@ -229,7 +365,7 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   (puzzles 5/15/15/40, charms 5/10/30/40) that is about 1.5x the puzzles and
   charms. `'all'` taps every item: a reward under a tile is then never
   opened, the board never clears, the later boards never arrive, and the
-  player spends several times the DR (free on a play link). Step 7's
+  player spends several times the DR (free on a play link). Step 5's
   validation plays all three ("The same event, played by different players",
   `validateDraftSegment().styles`) and says where a tap pays more. With the
   values the model gives, a tap never does - the first two players are then
@@ -244,14 +380,14 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   other while a semi-blocked one of their rank waits; what is still
   semi-blocked when the top rank is made is subsidy never used. In a segment
   that lives on its subsidy that player paid 35-50% more DR and collected
-  5-15% more (single builds); elsewhere nothing changes. Step 7 shows the
+  5-15% more (single builds); elsewhere nothing changes. Step 5 shows the
   row; the build is still sized for the careful player.
 - **How close is ONE player** (economist: "we need to make sure we will know
   that the resources the user gets will be some what close to what we wanted
   him to get"). The simulator's averages were right; two players were not
   alike, because which container a merge rolled was chance (one test
   segment: 28 of 100 players within 15% on every reward). So:
-  **steady containers** (`steadyDrops`, step 4 "Every merge of a rank drops
+  **steady containers** (`steadyDrops`, step 3 "Every merge of a rank drops
   the same items", on unless false; `steady` in
   `buildAlwaysDropConfiguration`, this app's own design inside the item-count
   rules): one container per merge rank - rank 6 always the one item of the
@@ -264,7 +400,7 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   Result on test events: every player the same puzzles, energy and charms,
   100 of 100 within 15%; what still differs is generator luck (DR, sd 2-5%)
   and the Twister (4-6%).
-  **Step 7 validates on 300 players who roll their own lucky drops**
+  **Step 5 validates on 300 players who roll their own lucky drops**
   (`randomLuck` / `luckRng`; the build itself sizes on players with scheduled
   luck, an average free of noise) and shows, per reward, "players within 15%"
   (`nearShare`; 25% in Recompletion) and how many are near on every reward at
@@ -272,25 +408,43 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
 - **Margins**: a reward within **15%** of its target is met; board DR within
   5%. **Recompletion: 25% for both** (economist: "the miss amount can go up to
   25%") - always read through `offTargetToleranceFor(phase)` /
-  `drToleranceFor(phase)`. A reward amount never blocks a build ("Can be improved", with quick
+  `drToleranceFor(phase)`. **DR usage** - what the player pays against the
+  demand - passes within **5% of the demand or 30 DR, the smaller**, and **the
+  twists** within **5 points of the 70-75% window**; both are the economist's
+  and the same in both phases (see Subsidy and Twister). Offered and declined
+  for now ("None for now"): a mark for the share of players who finish, one
+  for how many single players land near, and "15% or one smallest item" for
+  small amounts. A reward amount never blocks a build ("Can be improved", with quick
   fixes); only structural problems block ("Needs a fix").
 
 **Drop rules (economist, the current set - hard rules).** From the drop start
 rank (default 6, "the rank the merge makes"), every merge drops; the start
 rank is never moved by the build.
-- Rank 6 (the single-item rank, `soloDropRank`, "up to rank" in step 4): **one
+- Rank 6 (the single-item rank, `soloDropRank`, "up to rank" in step 3): **one
   item**, 60% of them a rank-1 item of the reward under the tiles
   (`TILE_REWARD_FOCUS_SHARE`, this app's own) - all of them with steady
   containers (see "How close is ONE player").
-- Rank 7: one or two items (two in the share the rise gives). Ranks 8-9:
-  exactly two (`multiDropRank` 8). Rank 10+: exactly three, **only** from
-  there (`tripleDropRank` 10). Never more than the rank allows.
+- Rank 7: one or two items (two in the share the rise gives) - **always two
+  when the build places the Twister: its reward and the Twister item**
+  (`TWISTER_PAIR_RANK` 7; economist: "A main-chain merge creating rank 7
+  always drops two items: its existing non-Twister reward plus its Twister
+  item"). Ranks 8-9: exactly two (`multiDropRank` 8). Rank 10+: exactly
+  three, **only** from there (`tripleDropRank` 10). Never more than the rank
+  allows.
+- **Rank 5: exactly one rank-1 Twister item, and nothing else** (economist:
+  "The rank-5 exception applies only to Twister. Other small rewards still
+  start at rank 6"). The start rank stays 6; the rank-5 row of the table is
+  marked `belowStart` and the engines roll a row so marked although it is
+  under the start rank (`performMerge`; `tableDrops`, `firstDropRank`,
+  `TWISTER_FIRST_DROP_RANK` in dropGroups.js). Containers, exports (merge
+  tier 5 in Small Reward Weights) and play links carry it. The Twister resize
+  never touches that row.
 - When the rules cannot carry an amount: items get bigger first (rank 3 at
   most, never a rank-4 drop), and the **rank values** do the rest (see "The
   model gives the rank values" above; 0.1x-10x of the typed top value, this
   app's own). Typed values stay the definition (`typed` on each re-valued
   rank, `withTypedRewardValues`); every build starts from them; the values
-  given are a result, per segment, shown in step 6. Switch off in step 4
+  given are a result, per segment, shown in step 4. Switch off in step 3
   ("The build may change a reward's rank values"). A target smaller than one
   top prize gets smaller values before the solve.
 - Coins the build values are the filler above rank 6 (they ask nothing of the
@@ -299,7 +453,7 @@ rank is never moved by the build.
   per-merge-tier weights out of 1000).
 
 **Under the tiles (economist).** One reward only (`tileRewardType`, default
-coins; step 4). Board 1 holds none (in a list of 2+ boards); **only Board 2
+coins; step 3). Board 1 holds none (in a list of 2+ boards); **only Board 2
 holds items above rank 1** (rank 1 then 2, a chain one drop opens); every
 other board rank 1 only; at most 4 reward items on a board before the last.
 At most 40% of a reward is asked of the tiles - the drops are the bigger part.
@@ -309,71 +463,228 @@ A reward with no drops gets nothing under tiles (it could never be opened).
 of every rank's drops, taking a reward item's place, rank 1-2 items to start
 (with steady containers: in every two-item drop and the one-or-two rank's
 second place, one size per merge rank).
-The economist's fear is pace ("some segments get the final amount at 100%
-progression and some at 50 ... i need the model to be the smart one"), so the
-build keeps every segment **on track**, in three moves, all this app's own:
-- **Enough finished items.** Twister DR is only credited at rank 4, so a
-  segment with a lot of subsidy finishes one item and gets every twist in one
-  jump. The items are made bigger (rank 3 at most, `resizeTwisterDrops`) until
-  every segment's typical player finishes `TWISTER_MIN_COLLECTS` (3) - and
-  then, values and prices set, for as long as any segment's verdict is still
-  "early" (three items are a floor, not a promise: one test event had a
-  segment done at 75% with three). At rank 3 it stops and says who. Step 4
-  switch "Keep every segment's Twister steady" (`twisterSteady`, on unless
-  false; off = only while a segment would finish none). This overrides the
-  economist's older "bigger items make rank 1 useless" - said to them, and
-  theirs to switch off.
-- **Values** (start 2/5/12/30, rounded to 5s): the smallest at which every
-  segment has a whole-step price that leaves its typical player with the
-  twists asked and at most 25% more (`fitTwisterValues`). (Sized so the
-  worst segment paid one step, an in-between segment could only be too cheap
-  or too dear.) Typed values are kept as typed.
-- **Price** per segment: the dearest whole-step price at which the typical
-  player still has the twists at the counting point (`suggestSpinCost`).
-Every run records Twister DR every 5% of the phase (`TRACK_MARKS`); step 6
-shows twists at 25/50/70/75/100% (`PACE_MARKS`, `row.incomeAtMarks`), when the
-typical player has them all (`row.finishPct`) and a verdict (`row.pace`:
-on-track = within 20 points before the counting point / early / late, shown
-"Short"), with one line for the whole event (`twister-track`). Twists are not
-a build input (changing them only reprices, values stay); when the new twists
-no longer fit the values in whole price steps, the draft says to build again
-(`sizing.needsRebuild`). A build is random: a check on the Twister asserts
-"all on track, or at rank 3 and said", never a fixed outcome.
+**The twists are reached at 70-75% of the segment's DR demand spent**
+(economist), in recurring chances to spin - and that is what the build prices
+with. `demand progression = paid generator DR in the phase / the segment's DR
+demand` (`phaseDemand`): the x1/x2/x4 cost of paid taps only - free
+merge-energy taps add nothing - never main-chain value, board, merge count or
+time, and never clamped at 100%. A spin is taken whenever the balance affords
+one, several from one collection, the rest kept. What is merged up and tapped
+at a phase's top rank counts at that moment and is named the phase-end
+collection (reaching the twists in play / only at the end / never are three
+separate figures).
+**A segment passes when its twists are reached within 5 points of that
+window** - 65% to 80% of the DR demand (`TWISTER_WINDOW_MARGIN_PTS`;
+economist: "up to 5% margin for the twister finish" - asked what the 5% is,
+and answered: points of the DR demand, the same in both phases). The window
+is still what the build prices for. `twisterMark` reads a row's timing as
+`in-window`, `near` (outside the window, inside the margin: it passes) or
+`off`; an `off` segment gets the cause `twister-off` and reads "Can be
+improved" (`withTwisterMarks`: put on at the end of `buildEvent`, and put on
+or taken off again by `repriceTwister`, since other twists are priced
+without a rebuild). Before this the Twister's timing never failed a segment.
+- **Per segment, on the final boards** (`fitTwisterForBuild` in
+  `rewards/twisterCadence.js`, called at the end of `buildEvent` and by
+  `repriceTwister` when the twists change - no rebuild needed for that): each
+  segment is played by 120 players with their own luck and gets the simplest
+  values and price whose typical player lands in the window - values not
+  under 2/5/12/30 (scaled the build's way, every rank more than double), then
+  the lowest whole price (`fitTwisterToWindow`; Twister DR is its own
+  currency, so only value / price matters). **The price is any whole price**
+  (economist: "the twister spin cost isnt hard on the 10, the model can give
+  any price for the spin to make it work"): a build's price step
+  (`twisterCostStep`) is 1 unless rounding was switched on by typing a step in
+  step 3's fold (`twisterPlan.roundPrice`); a `costIncrement` saved before
+  that rule is not used by a build (the advanced Twister tool still uses it
+  for its own suggestions). Typed Twister values are kept and
+  only the price is fitted. **Recompletion plays the normal event's values**
+  (one table): only its price is fitted, so it lands in the window less often
+  - said in the row, never fixed by a table of its own.
+- A row carries `cost`, `values`, `ladder` (written to that segment's boards
+  when the build goes into use), `demandTiming` (`timingOf`: reach, verdict in-window / early /
+  late / never, distance, in play / at the end / never, first spin, chances
+  to spin, twists a chance, longest wait, twists at 25/50/70/75/100%) and
+  `fit` (`reachable`: where the twists CAN land when the window cannot be
+  hit - too few finished items for a moment in between).
+- Step 4 shows it in one panel (`TwisterTimingPanel`): timing and cadence in
+  separate columns, the distance from the window, never only "in or out".
+- **Bigger Twister items stay an EXPERIMENT** (`CADENCE_CANDIDATES`, the
+  "Compare" button in step 4, `scripts/analysis/twister-validation.mjs`). The
+  candidate compared is **`bigger79`**: the Twister item a rank bigger only in
+  the drops of merges that make ranks 7 to 9 (rank 3 at most), **rank 5 left
+  as it is** - one rank-1 item - and everything else untouched (the older
+  `bigger` raised rank 5 to rank 2, against the rule). Three test events,
+  normal event: the timing is the same (16 of 24 segment medians in the window
+  against 15, no segment further from it), the cadence is better - 17 chances
+  to spin against 15, 1.1 twists a chance against 1.4, most of all in
+  heavy-subsidy segments (7 chances of 3.0 twists become 10 of 1.9) - and the
+  other rewards, the DR and the board do not move. In Recompletion it is
+  mixed (12 of 24 in the window against 10, two segments 10 to 13 points
+  further out). The economist has not chosen it;
+  the production structure stays as it is until they do.
+- Measured, not assumed (`options.cadence` in the simulator): the paid DR of
+  every Twister drop, collection and merge; how full the board gets and how
+  many dropped items wait off the board (`space`); the Twister items carried
+  into Recompletion (`carried`; `rcCarryScenarios` reads the hand-over three
+  ways - items carried, nothing carried, items and the unspent balance - and
+  chooses none: it is an open question). A first spin is given in generator
+  actions as well as in % of demand (`firstSpinActions`): "0.8%" in
+  Recompletion is 25 taps in, most of it Twister items and energy carried over. Players of a comparison are paired:
+  each has their own luck stream and their own container stream
+  (`recordCadenceRuns`).
+- The older Twister tool (Twister tab) still measures against main-chain
+  progress and says so (`twister-two-clocks`). `twisterSteady`, the old
+  "counted at" field and the sizing loops (`fitTwisterValues`,
+  `priceTwisterForBuild`) are no longer part of a build.
 
 ## The Build event flow (the main path)
 
-Seven steps, ids `setup, layouts, generator, rewards, effort, build,
-finalize`: segment amounts · board layouts · generator and lucky drops ·
-small rewards (targets, drop rules, reward under tiles, Twister,
-definitions) · effort distribution · build · test and finalize. Every other
-tab is an advanced tool over the same state.
+Five steps, ids `setup, layouts, rewards, build, finalize`, shown as: DR
+demand · Board layouts · Rewards and Twister · Build · Test and export. Two
+former steps are folded sections now: the generator, lucky drops, dates and CC
+at the bottom of step 1 (`setup-generator`), the effort shape in step 4 beside
+the Build button (`build-effort-shape`); their old ids still lead there
+(`STEP_ALIAS`, `STEP_FOLD`, `goTo`). A step opens at its top (economist: "it
+should take me to the top part of the page and not make me scroll up").
+
+**The header** (economist: "the app is very heavy in text and buttons"; of the
+advanced tools: "i use only the builder as for the last runs"): the three
+tools of the main path (Build event, Play tester, Syntax), Share stage, Save,
+and one **"More" menu** holding the project actions (Share planning, Export
+backup, Import backup, What a backup holds, Clear data) and the five advanced
+tools. An advanced tool that is open shows as a tab while it is open. Every
+tool works on the same state. Do not put a project action or an advanced tool
+back in the bar.
+
+**How the flow is presented** (economist: an economist "should be able to
+open the app, understand what to enter, build an event, inspect the result,
+and know what to do next without reading documentation"):
+- **A step shows what has to be typed or judged; the rest is folded**
+  (`Collapsible` in buildUi.jsx: a native `<details>` whose heading carries a
+  one-line summary of what is in force, remembered for the visit, opened by
+  itself with `openWhen` when something inside needs attention). Step 1 shows
+  the demands and the reward sizes; the boards (how many, each board's share
+  of the subsidy - open by itself when boards were typed by hand or do not add
+  up) and the generator are folded. Step 2 shows the list of boards (board,
+  layout, tiles - no capacity in DR: economist, "the most DR it can hold in
+  the boards layout is useless") and the bank; changing tiles by hand (open when the board was drawn by hand), size,
+  rank limits and onboarding are folded. Step 3 shows the four amounts and the
+  Twister (one field a segment, one sentence for what the build does);
+  per-segment amounts, drop rules, rank values and milestones are folded - the
+  containers are shown where they are made, in step 4. Step 4 shows one Build
+  button ("one phase only" a click away) and, after a build, the summary and
+  - when the segment shown has something to look at - a small panel with its
+  causes and their fixes (`segment-causes`); that segment's detail, the
+  subsidy accounting, containers, Twister detail, boards and effort chart are
+  folded. The detail never opens by itself ("Show the detail" in the summary
+  opens it): with a flagged segment it made the step 2,321 px tall; the step
+  is 1,562 px on a seven-segment project now (single build). What is ready is not listed: the readiness list shows only what is
+  missing. Never fold a problem: a cause, a quick fix or a missing value stays
+  in sight.
+- **The words**: *DR demand* (what the player should spend), *board subsidy*
+  (main-chain value under the tiles), reward *amounts* per segment = base
+  amount x *reward size*, coins as an *allowance worth*, *Twister DR* and the
+  *price of a twist*, *In use* (never "draft" or "applied"), *Tested on
+  players* (never "seeded validation", "estimated", "energy credit", "factor",
+  or "amount" for the demand).
+- **After a build the summary leads** (`BuildSummary`): per built segment the
+  player's spend against the demand, each reward against its amount, when the
+  twists are reached and in how many chances, what to look at, and the next
+  action. **"Close" is not "Within margin"** (`lib/build/resultMatch.js`,
+  presentation only): close = within 5% of a reward amount or inside the
+  build's own demand aim; within margin = accepted but not close (a reward:
+  15%, 25% in Recompletion; the DR: 5% of the demand or 30 DR; the twists: 5
+  points outside the window); off target beyond - each chip says what its word
+  means in its hover. The panel says the figures are averages and that one
+  player differs from the next - a build with nothing to look at is not a
+  promise for every player (that sentence stays on screen).
+- **A number field says why it did not take a value** (`CommitNumber`,
+  `data-field-rejected`); a column of demands pasted into a demand field fills
+  down (`pasteDemands`); a running build shows a progress bar.
+- A table of segments leaves out the ones that are not built (no DR demand)
+  and says which; the reward size is typed in step 1 only.
+- Step 5 ("Test and export") says what is in use, then three buttons: test on
+  players, play it, go back to the previous build (what each does is in its
+  hover). The table of the four kinds of player is folded and opens by itself
+  when a tap pays more than a merge.
+- **As little scrolling as possible** (economist: "a layout for all the pages
+  that it will still look good but will make me scroll as minimum as
+  possible"), measured in a 1500 x 800 window on a seven-segment project
+  (`heights.mjs` in the history): on a wide window (`xl`) step 1 has the
+  demands beside the boards and generator sections, step 2 the list of boards
+  beside the picker, step 3 the amounts beside the Twister; folded sections sit
+  two in a row and one that is opened takes the full width
+  (`xl:open:col-span-2`); tables marked `data-dense` keep low rows
+  (index.css). In the Play tester the tiers, "Spend generator" and the Twister
+  sit beside the board, in the first screen. Step 1 fits one screen.
+- **Text is laid out gracefully** (economist: "we have in the app some layout
+  and formating problems with how the text is displayed"), held by
+  `scripts/e2e/text-layout.mjs` at a 1280 and a 1500 px window: no screen
+  wider than its window; no table cell squeezed to a word a line; no field
+  showing less than its text; no explanation over about 150 characters a
+  line; no button label on several lines. How: a card's header wraps
+  (`Card.jsx`); a tool page is `min-w-0 flex-1` so a wide table scrolls
+  inside its own box instead of widening the page; **a table with many
+  number columns gets one group head and short column heads** (the full
+  meaning in the hover) - never a sentence per column (`ContainersTable`,
+  `TwisterTimingPanel`); a note that belongs to a row goes on a line of its
+  own under it; running text stops at about 105 characters (`.merge-app
+  :where(p, li)` and `[data-note]` in index.css, base layer, so a width set
+  on purpose still wins).
 
 - `buildEvent` builds one phase for all segments, base segment first; others
   are solved against the base's shared drops (Recompletion: every segment
   against the normal event's). `buildSegment` loops up to 4 passes until the
   energy credit agrees within 0.5 DR or 1.5% of the DR the segment spends,
-  whichever is more (`creditToleranceFor`, this app's own: merge energy lands
+  whichever is more - and the average player pays the demand (see Subsidy);
+  `MAX_PASSES` 6 (`creditToleranceFor`, this app's own: merge energy lands
   near its target, in round values, not on it; **5% in Recompletion**, whose
   energy follows from boards made anew in every pass - 1.5% of a 300 DR
   demand is less than one energy item). Rebalances shared drops when
   they over-pay other segments.
-- The effort distribution typed in step 5 is kept (saved across reloads) and
+- The effort shape typed in step 4 (its folded section) is kept (saved across reloads) and
   the build picks, of 24 generated layouts, the one closest to it
   (`pickBoardsForEffort`), **judged with the build's own merge drops** - the
-  same playthrough the step 6 chart shows. (Judged on the main chain alone it
+  same playthrough the step 4 chart shows. (Judged on the main chain alone it
   looked close while the chart showed rank 12 at 77% against 65% asked.)
-  Step 5 itself can only judge the main chain: the drops do not exist yet.
-- A build is a **draft** (saved separately from the project); Apply writes the
-  build-owned fields and stamps the boards (`buildStamp`).
+  That section itself can only judge the main chain: the drops do not exist yet.
+- **A change of the build's rules marks older builds "Out of date"**
+  (`BUILD_RULES_VERSION`, the `rules` part of a build's inputs): nothing that
+  was applied is altered on its own; the economist is told why and builds
+  again.
+- **A finished build is in use at once** (economist: "i dont understand the
+  things with the draft all the time. draft vs applied" - asked, and chose "In
+  use at once"). There is no draft to apply and no Apply button: a build that
+  can be used is written onto the design the moment it finishes (`putInUse`
+  in BuildEventPage.jsx: the build-owned fields, plus the boards' stamp,
+  `buildStamp`), and the Play tester and the exports use it. A whole-event
+  build puts both phases in use in the same moment. What was there before is
+  kept - the boards (`applied.snapshot`) and the build before with its
+  results (`applied.previous`) - so **"Go back to the previous build"**
+  (`goBack`, step 5) restores it, one step back. **A build that needs a fix
+  is never put in use**; the build before stays, and its results stay on
+  screen. Internally a build is still the `draft` object (saved separately
+  from the project) and "in use" is still read off the design (`applied`,
+  `draftSegmentIsApplied`). "Not in use" remains for the three cases where a
+  usable, current build does not match the boards - kept from a session whose
+  boards were not saved, come with a backup, or boards edited by hand after
+  the build - and step 5 then offers "Put this build in use". Never write
+  "draft", "apply" or "applied" on a screen of the main path.
   `designConsistency` gives every tool one status (consistent / stale /
-  unaccounted / manual / empty). Exports go through `ExportGate` and use the
-  **applied** design only; the Syntax tab says when a newer build waits.
-- Status words shown: Draft, Applied, Out of date, Ready, Can be improved,
-  Needs a fix, Not built.
+  unaccounted / manual / empty). Exports go through `ExportGate` and hold the
+  event in use.
+- Status words shown: In use, Not in use, Out of date, Nothing
+  built yet, Not tested on players yet, Tested on players; per segment Ready,
+  Can be improved, Needs a fix, Not built; per figure Close, Within margin,
+  Off target.
 - Editing a board's layout clears that board's contents; a share link refuses
   unbuilt normal boards and leaves out an unbuilt Recompletion.
 
 ## Exports (Syntax tab)
+
+The tab shows one sheet at a time, picked in a dropdown (`syntax-view`), and
+has one pair of export buttons with a switch for what they hold: the segment
+shown, or all segments (`syntax-scope`). No board list beside it.
 
 Per-segment workbook / Google Sheet in the reference tab order (Event Data,
 Multipliers, Board Layouts, Recompletion Board Layouts, Generator Weights,
@@ -420,7 +731,11 @@ answered.
 
 - **Play Tester** (economist): any board, tier choice, jump to Recompletion /
   endless, compare to the simulator, warns when Recompletion boards are
-  unbuilt.
+  unbuilt. Its banner (`play-source`) always says what is being played - the
+  build in use with the time it was built, whether the boards still match it,
+  or (rarely) a build that is not in use - and leads back to step 4 or 5. The board list
+  beside it only picks the board to start on (`pickOnly`): nothing is edited
+  next to a game.
 - **A play link with no Recompletion ends at rank 12** (`endAtGoal`,
   `sessionEnded`): the generator stops, what is left can still be merged and
   tapped. (It used to go on for ever after "the chain is complete", every
@@ -428,7 +743,7 @@ answered.
   the normal only".) The Play Tester does not end there. Taps on a link are
   free, so a player who taps every reward item (and so never opens the reward
   under a tile) can still play far past the DR a segment is meant to spend.
-- **Play Stage** (`?play&stage=...`, a shared link, no editor reachable). Made
+- **Play Stage** (`?s=...`, a shared link, no editor reachable). Made
   for a **phone held sideways**: the whole board and controls on one screen,
   nothing scrolls; upright it stacks and suggests turning; desktop keeps the
   roomy layout. `scripts/e2e/play-mobile.mjs` checks this. Tap-then-tap or a
@@ -442,17 +757,38 @@ answered.
   but one for exactly the people a link is sent to; the generator keeps its
   `data-tutorial="generate-button"` hook, which tests and effects use).
   Test a link as a FIRST VISIT (a fresh browser), never only as a returning one.
-- Stage links are **format 2** (`stageShare.js`): each list carries what its
-  boards share once and leaves out editor-only fields (~37% shorter). Older
-  links still open; a format-2 link opens only on a site deployed with it.
-- **A link is letters and digits only** after the address (`urlCodec.js`:
-  gzip, then base 62 behind the marker letter `A`). Economist: "we got a -
-  and it breaks the link when sent" - base64url's "-" and "_" are where chat
-  apps end or wrap a link. Never put another character in a share link.
-  Decoding drops anything that is not a letter or digit (a full stop after
-  the link, a line break inside it); the older base64url writing (starts
-  `H4sI`) still opens. A link in a new writing opens only once the site that
-  reads it is deployed - until then the tool makes links nobody can open.
+- **A stage link is as short as it can be made** (economist: "make sure the
+  link of the stage as short as possible"): **format 3** (`stageShare.js`),
+  about 230 characters after the address for a built event with Recompletion
+  and about 150 for a normal event alone - it was 2,339. Three things: only
+  what play reads travels (found by a robot on the real play engine and by
+  reading the play screens - tiles, items, queue, reward values, containers
+  and weights, the drop and generator ranks, the price of a twist, the ranks
+  that carry a reward; the player's side fills in the rest,
+  `normalizeBoards`); it is written by position, an item one character, a
+  container a short string in its own order, one number a merge rank where a
+  container always drops; and it is read against a dictionary
+  (`STAGE_DICTIONARY`: the bank's layouts, the round value ladders, the usual
+  settings) by raw deflate, behind the marker letter `B`. The address is
+  `?s=`. **Frozen for good**: the dictionary, the order of the five rewards,
+  the letters and the positions - a link made today has to open for as long
+  as links are opened. Anything new is a new format number (a new dictionary:
+  a new marker letter too), with this one kept for reading;
+  `verify-stage-link.mjs` holds a link written down on the day and the
+  dictionary's fingerprint. A stage the short writing has no place for is
+  written in format 2. Every older link still opens: format 2 (`A...`: what
+  the boards of a list share once), the base64url writing (`H4sI...`), a
+  bare list of boards, and the address `?play&stage=`. A link carries what a
+  container holds, not its editor id or name.
+- **A link is letters and digits only** after the address (`urlCodec.js`,
+  base 62). Economist: "we got a - and it breaks the link when sent" -
+  base64url's "-" and "_" are where chat apps end or wrap a link. Never put
+  another character in a share link. Decoding drops anything that is not a
+  letter or digit (a full stop after the link, a line break inside it). A
+  link changed on the way reads as broken, never as another stage (the short
+  writing carries a check number). **A link in a new writing opens only once
+  the site that reads it is deployed** - until then the tool makes links
+  nobody can open.
 - `?plan=...` is a read-only review of every segment's main list.
 - All effects live in `PlayEffects.jsx`; the cell a player is about to tap
   never moves or resizes.
@@ -460,8 +796,14 @@ answered.
 ## Persistence
 
 `localStorage` key `merge-mania-board-simulator`, `{ segments: [...] }`, written
-by Save only. Separate entries: build drafts, the step-5 effort curve.
-Backups export/import every segment; older shapes migrate
+by Save only - the header says "Unsaved changes" while the project differs
+from what was saved or loaded. Separate entries: build drafts, the effort
+shape typed in step 4. **A backup file holds all of it**: every segment, the
+applied design, the results of the last builds (`buildDrafts`) and the effort
+shape (`effortTargets`), so a file sent to reproduce an issue opens on the
+same draft; "What a backup holds" in the "More" menu says so. Import restores them
+(a draft comes back marked restored, nothing is applied by that). **Clear
+data downloads a backup first**, so it can be undone. Older shapes migrate
 through `segmentsFromPersisted` (a pre-segment save lands on Segment 1, an
 older second Recompletion list is kept for explicit recovery).
 
@@ -469,15 +811,68 @@ older second Recompletion list is kept for explicit recovery).
 
 - Production Ops mapping for reward keys and the V2 / Twister / Endless tabs.
 - Twister spin outcomes, widget length, balance across the main -> RC boundary.
+- Bigger Twister items at ranks 7 to 9 (`bigger79`, see Twister): measured to
+  give more, smaller chances to spin with the same timing; rank 5 untouched.
+  Adopting it is the economist's call.
+- What crosses from the normal event into Recompletion: Twister items on the
+  board (they do, in the simulator), an unspent Twister balance (assumed
+  not). Measured three ways, decided by nobody yet.
+- The 80% merge-energy credit is taken on energy collected; about a quarter of
+  it is not used in the phase (see Merge energy). The two-way calibration puts
+  back what that costs the player, so it no longer shows as overspending -
+  but whether the credit should follow the energy used is the economist's call.
+- Recompletion spend moves in jumps between sets of boards (`limit: 'jumps'`):
+  a small demand there lands within a few % only by the draw. Whether the
+  build should try more sets of boards (a longer build) is not decided.
+- Recompletion's Twister timing with the normal event's values (it lands in
+  the window in about a third of the segments).
 - Push / stall pacing (design intent only, nothing built).
 - Whether a play link should stop at the DR a segment is meant to spend
   (taps are free there, so a tapping player can far out-earn the design).
+- Chef (`docs/chef-overview.md`, section 9): its "one more basket" figure is
+  noisy (the two plays do not differ by that basket alone), and an activity
+  shape other than Flat changes how many baskets are opened. Both are said on
+  its screens; changing the model is the economist's call.
 
 ## Verification
 
-`npm run verify` - all engine suites (the last one, verify-real-play, plays a
-built event with a robot on the real play engine and holds the simulator to
-it). `npm run e2e` - every browser suite
+`npm run verify` - all engine suites (verify-board-bank holds the two rules of
+a first board and that the simulator solves every layout of the bank;
+verify-real-play plays a built event
+with a robot on the real play engine and holds the simulator to it;
+verify-twister-cadence holds the DR-spent clock, the spin logic, the fit, the
+strict merge rule, the two Twister drop rules on the play engine, the demand
+calibration in both directions with its limits and jumps, where merge energy
+goes, the rank 7-9 candidate, the Recompletion rank floor, board occupancy,
+paired players, the Recompletion hand-over and the per-segment values in the
+exports; verify-stage-link holds the short link - a link of the day it was
+made, the dictionary's fingerprint, a robot playing a stage and its link to
+the same last item, every older writing, a changed link never opening as
+another stage; verify-chef holds the Chef model as it is, its two known
+limits included).
+`scripts/analysis/twister-validation.mjs [players]` - three events, eight
+segments, both phases, players the build never saw (an investigation, not a
+check; about 20 minutes). `twister-cadence.mjs` is the first investigation.
+`npm run e2e` warms the dev server up first (it compiles on first use and
+reloads the page it serves, which crashed whichever suite ran first).
+`npm run e2e` - every browser suite
 (start `npm run dev` first; a suite can time out while the dev server is
 reloading after many file changes - rerun it alone before calling it a
-failure). A build has randomness in it: say "single run" when quoting one.
+failure). The suites open every folded section as it appears
+(`launch()` in helpers.mjs), so they keep checking everything a section
+holds; `guided-flow.mjs` runs with `folded: true` and checks the flow as a
+first visit finds it - what is folded, the words, the summary, the way back
+from the Play Tester, the backup, the bank of boards; `text-layout.mjs`
+measures every screen for cut, squeezed or spilling text; `chef-flow.mjs`
+walks the Chef flow as a first visit. A suite prints `CONSOLE ERROR` and `PAGE
+RELOADED` lines when the app reports one: read them when a page went blank.
+Do not edit project files while a full run is going. A build has randomness in it: say "single run" when quoting one.
+The suites reach the advanced tools and the project actions through the
+"More" menu (`tab()` in helpers.mjs opens it), bring a segment into sight
+with `showSegments` / `selectSegment`, and pick a sheet with `syntaxView`.
+One check is known to depend on the build's draw: build-event's "the residual
+... is only rounding (within 4 DR)" was seen failing in a full run and passing
+twice alone - a note for QA, not a regression. (verify-event-build once
+stopped a full run with a crash, not a failure: a check read the mark of a
+re-valued rank on a segment the build had given exactly the typed values,
+which has none. The check now reads the typed values there.)

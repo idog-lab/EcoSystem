@@ -79,7 +79,7 @@ export const soloDropRankOf = (board) => (Number.isFinite(board?.soloDropRank) ?
 // Coins are the starting choice because the build sets the coin values: how
 // many coin items drop is then free, so the first dropping rank really can
 // drop mostly coins. A reward with a typed target (merge energy) can only
-// drop as often as its target allows. The economist picks it in step 4.
+// drop as often as its target allows. The economist picks it in step 3.
 export const DEFAULT_TILE_REWARD_TYPE = 'coins'
 export const tileRewardTypeOf = (board) => board?.tileRewardType ?? DEFAULT_TILE_REWARD_TYPE
 // The share of the single-item rank's drops the reward under the tiles
@@ -142,6 +142,25 @@ export function validateDropGroup(group) {
 // at roll time - but normalization is surfaced to the UI so an obviously
 // mis-entered table (e.g. every weight 0) is visible rather than silently
 // always rolling "no drop".
+// THE TWISTER'S OWN FIRST RANK (economist): "A main-chain merge creating rank
+// 5 drops exactly one rank-1 Twister item ... The rank-5 exception applies
+// only to Twister. Other small rewards still start at rank 6." The drop start
+// rank stays the rewards' (6); the rank-5 row is marked `belowStart` and the
+// engines roll a row so marked although it sits under the start rank
+// (mergeSimulation.js: performMerge). Nothing else may set the mark.
+export const TWISTER_FIRST_DROP_RANK = 5
+// ...and "A main-chain merge creating rank 7 always drops two items: its
+// existing non-Twister reward plus its Twister item."
+export const TWISTER_PAIR_RANK = 7
+// Does a merge that makes this row's rank drop anything at all?
+export const tableDrops = (table, minDropRank) => !!table && (table.rank >= (minDropRank ?? MIN_DROP_RANK) || table.belowStart === true)
+// The lowest rank whose merges drop (the start rank, or a marked row below it).
+export function firstDropRank(dropGroupsConfig, minDropRank) {
+  const start = minDropRank ?? MIN_DROP_RANK
+  const below = (dropGroupsConfig ?? []).filter((t) => t?.belowStart === true && t.rank < start && (t.entries ?? []).some((e) => e.weight > 0)).map((t) => t.rank)
+  return below.length ? Math.min(start, ...below) : start
+}
+
 export function createRankDropTable(rank) {
   // `locked` (V2 section 9): when true, rewardTargeting.js's solver treats
   // this rank's own table as a fixed input - "respect locked inputs," the
@@ -161,7 +180,7 @@ export function validateDropGroupsConfig(config, groupsById, { minDropRank: minD
     // engine hard-gates them), so a zero-weight table there isn't a
     // misconfiguration to flag. Entries configured there anyway still get
     // their own reference/negative-weight checks below.
-    if (table.rank >= effectiveMinDropRank) {
+    if (tableDrops(table, effectiveMinDropRank)) {
       const totalWeight = table.noDropWeight + table.entries.reduce((s, e) => s + e.weight, 0)
       if (totalWeight <= 0) {
         findings.push(`Rank ${table.rank}'s drop table has zero total weight - it can never resolve to anything.`)

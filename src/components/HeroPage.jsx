@@ -16,7 +16,7 @@ const FEATURES = [
   {
     id: 'chef',
     name: 'Chef',
-    description: 'Ingredients, dishes, baskets, calendar and segments for the Chef live-ops event.',
+    description: 'Design a Chef live-ops event in five steps: players, dishes and baskets, then simulate it and value a basket.',
     icon: ChefHat,
   },
 ]

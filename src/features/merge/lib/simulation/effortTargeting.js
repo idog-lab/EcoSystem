@@ -1,9 +1,9 @@
 import { placeItems } from '../core/placement'
 import { simulatePlaythrough } from './mergeSimulation'
 import { buildSimulationRows, RANKS } from './simulationRows'
-import { applyForcedSemiCell, applyForcedHighestRankCell, generationTargetOf } from '../core/board'
+import { applyForcedSemiCell, applyForcedHighestRankCell, generationTargetOf, boardMinRank } from '../core/board'
 import { valueOf } from '../core/ranks'
-import { effectiveMinRank, effectiveMaxRank } from '../core/rankWindow'
+import { effectiveMaxRank } from '../core/rankWindow'
 import { isMainItem } from '../rewards/rewardChain'
 
 // "Given a target effort distribution, suggest board blockedValues that
@@ -175,7 +175,7 @@ function boardChecks(board, boardIndex, { varietyRelevant = true } = {}) {
     board.semiPlacements.reduce((s, p) => s + (isMainItem(p.rank) ? valueOf(p.rank) : 0), 0) +
     board.blockedQueue.reduce((s, r) => s + (isMainItem(r) ? valueOf(r) : 0), 0)
 
-  const minRankFloor = effectiveMinRank(board.minRank, boardIndex)
+  const minRankFloor = boardMinRank(board, boardIndex)
   // Board 1 / Board 2's hardcoded rank ceilings (rankWindow.js) - used below
   // instead of the raw board.maxRank so this check can't disagree with what
   // placement.js's own generation actually enforced at this position.
@@ -372,7 +372,7 @@ function boardChecks(board, boardIndex, { varietyRelevant = true } = {}) {
 // board-position floor applies there), so this stays the exact same
 // expression for every board rather than needing its own special case.
 function varietyNeeded(board, boardIndex) {
-  return valueOf(effectiveMaxRank(board.maxRank, boardIndex)) + valueOf(effectiveMinRank(board.minRank, boardIndex))
+  return valueOf(effectiveMaxRank(board.maxRank, boardIndex)) + valueOf(boardMinRank(board, boardIndex))
 }
 
 // One board's own `varietyNeeded` fitting within the segment TOTAL doesn't

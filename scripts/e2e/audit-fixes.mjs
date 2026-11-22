@@ -3,11 +3,11 @@
 //     protects it, and it used to be lost silently);
 //   - an item syntax that pays more than one resource is called out;
 //   - "Share stage" never puts boards into a link that were not built;
-//   - the Syntax tab says when a newer build is waiting, not applied.
+//   - the Syntax tab shows a build as soon as it finishes (it is in use at once).
 // See helpers.mjs. Run: npx vite-node scripts/e2e/audit-fixes.mjs
 import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { decodeStage } from '../../src/features/merge/lib/share/stageShare.js'
-import { createChecker, launch, openMerge, tab } from './helpers.mjs'
+import { BASE, createChecker, launch, openMerge, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 const step = (page, id) => page.locator(`[data-step="${id}"]`)
@@ -34,13 +34,13 @@ const { browser, page, errors } = await launch({ save: { segments: [{ name: 'Bas
 await openMerge(page)
 
 console.log('--- 1. The effort distribution typed in step 5 survives a reload ---')
-await step(page, 'effort').click()
+await step(page, 'build').click()
 await page.waitForTimeout(300)
 await set(page.locator('[data-effort-rank="12"]'), 70)
 await set(page.locator('[data-effort-rank="11"]'), 30)
 await page.reload({ waitUntil: 'networkidle' })
 await openMerge(page)
-await step(page, 'effort').click()
+await step(page, 'build').click()
 await page.waitForTimeout(300)
 ok('after a reload the typed shares are still there (70 at rank 12, 30 at rank 11)', (await page.locator('[data-effort-rank="12"]').inputValue()) === '70' && (await page.locator('[data-effort-rank="11"]').inputValue()) === '30' && (await page.locator('[data-effort-rank="5"]').inputValue()) === '')
 
@@ -62,7 +62,7 @@ await page.waitForTimeout(400)
 ok('with the normal boards not built, no link is made and it says why', (await page.getByTestId('share-link-box').count()) === 0 && (await page.getByText(/No link was made: Board 1, 2 has tiles but nothing under them/).count()) === 1)
 await page.getByRole('button', { name: 'Dismiss' }).click()
 
-console.log('--- 4. The Syntax tab says when a newer build is waiting, not applied ---')
+console.log('--- 4. The Syntax tab shows a build as soon as it finishes ---')
 await step(page, 'build').click()
 await page.waitForTimeout(300)
 await page.getByTestId('build-configuration').click()
@@ -71,19 +71,17 @@ await page.waitForTimeout(500)
 await tab(page, 'Syntax').click()
 await page.waitForTimeout(400)
 {
-  const notice = page.getByTestId('syntax-pending-build')
-  ok('built but not applied: the Syntax tab says a newer Normal build is waiting and that these sheets do not show it', (await notice.count()) === 1 && /Normal/.test(await notice.innerText()) && /not applied/.test(await notice.innerText()))
-  await notice.getByRole('button', { name: 'Open Build event' }).click()
+  ok('a finished build is in use: the Syntax tab says its sheets are the event in use, and no build is left waiting', (await page.getByTestId('syntax-pending-build').count()) === 0 && /event in use/.test(await page.getByTestId('syntax-export-source').innerText()))
+  await tab(page, 'Build event').click()
   await page.waitForTimeout(300)
-  ok('...with a button that goes to Build event', (await step(page, 'finalize').count()) === 1)
+  ok('...and Build event says the same', (await page.locator('[data-testid="build-scope"] [data-status="applied"]').innerText()) === 'In use')
 }
 await step(page, 'finalize').click()
 await page.waitForTimeout(300)
-await page.getByTestId('finalize-apply').click()
 await page.waitForTimeout(700)
 await tab(page, 'Syntax').click()
 await page.waitForTimeout(400)
-ok('once the build is applied the notice is gone', (await page.getByTestId('syntax-pending-build').count()) === 0)
+ok('...and step 7 has nothing to apply', (await page.getByTestId('syntax-pending-build').count()) === 0)
 
 console.log('--- 5. Shared again: the built normal event is in the link, the unbuilt Recompletion is left out ---')
 await share.click()
@@ -91,10 +89,25 @@ await page.waitForTimeout(500)
 {
   const box = page.getByTestId('share-link-box')
   const link = (await box.count()) === 1 ? await page.getByTestId('share-link').inputValue() : ''
-  const decoded = link ? decodeStage(new URL(link).searchParams.get('stage')) : null
+  const code = link ? new URL(link).searchParams.get('s') : null
+  const decoded = code ? decodeStage(code) : null
   ok('a link is made for the built normal event', !!decoded && decoded.boards.length === 2 && decoded.boards.every((b) => b.blockedQueue.length > 0))
   // A chat app ends a link at a "-" or "_", so the link has none after the address.
-  ok(`the link is letters and digits only after the address - nothing a chat app can break it at (${link.length} characters, "${link.slice(0, 52)}...")`, /^https:\/\/idoggk\.github\.io\/Merge\/\?play&stage=[0-9A-Za-z]+$/.test(link))
+  ok(`the link is letters and digits only after the address - nothing a chat app can break it at (${link.length} characters, "${link.slice(0, 52)}...")`, /^https:\/\/idoggk\.github\.io\/Merge\/\?s=[0-9A-Za-z]+$/.test(link))
+  ok(`...and short: ${link.length} characters with the address, for two built boards (under 260)`, link.length > 40 && link.length < 260)
+  // The link, opened as the person it is sent to opens it: a fresh browser, nothing stored. (The link itself
+  // points at the deployed site; here the same code is opened on this server.)
+  for (const [name, address] of [['the link', `${BASE}?s=${code}`], ['the same stage behind the address links had before ("?play&stage=")', `${BASE}?play&stage=${code}`]]) {
+    const visit = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    const friend = await visit.newPage()
+    const friendErrors = []
+    friend.on('pageerror', (e) => friendErrors.push(e.message))
+    await friend.goto(address, { waitUntil: 'networkidle' })
+    await friend.waitForTimeout(400)
+    const text = (await friend.locator('body').innerText()).replace(/\s+/g, ' ')
+    ok(`${name} opens on a first visit as the stage - its 40 cells, a generator to tap, no "broken link" notice, no editor`, (await friend.locator('[data-cell]').count()) === 40 && (await friend.locator('[data-tutorial="generate-button"]').isEnabled()) && !/This share link looks broken/.test(text) && (await friend.getByRole('button', { name: 'Share stage' }).count()) === 0 && friendErrors.length === 0)
+    await visit.close()
+  }
   ok('...without the Recompletion boards, which have tiles and nothing under them', !!decoded && !(decoded.rcBoards?.length > 0))
   ok('...and it says so, and what to do', (await page.getByText(/The link plays the normal event only: Recompletion Board 1, 2 has tiles but nothing under them/).count()) === 1)
 }

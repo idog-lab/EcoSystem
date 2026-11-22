@@ -39,11 +39,21 @@ export default function BoardList({
   targetSubsidy,
   layoutLocked = false,
   readOnly = false,
+  // The Play Tester: the list only chooses the board to start on. Its
+  // subsidy, rank limits and starting goal are edited in Build event (or the
+  // advanced Editor), not beside a game in progress - changing them there put
+  // the build out of date without the economist having meant to edit at all.
+  pickOnly = false,
 }) {
-  const locked = layoutLocked || readOnly
+  const locked = layoutLocked || readOnly || pickOnly
   return (
     <div className="flex flex-col gap-3 w-72 shrink-0">
-      <h2 className="font-display text-sm font-bold text-slate-800 px-1 tracking-tight">Boards</h2>
+      <h2 className="font-display text-sm font-bold text-slate-800 px-1 tracking-tight">{pickOnly ? 'Start on board' : 'Boards'}</h2>
+      {pickOnly && (
+        <p className="px-1 text-xs text-slate-500" data-testid="board-pick-note">
+          Pick the board to start playing on. To change a board, use Build event (or the advanced Editor).
+        </p>
+      )}
 
       {layoutLocked && (
         <div className="flex items-start gap-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-xl px-2.5 py-2">
@@ -106,7 +116,7 @@ export default function BoardList({
                 )}
               </div>
 
-              {active && (
+              {active && !pickOnly && (
                 <div className="flex flex-col gap-3 pt-2.5 mt-1 pl-1 border-t border-purple-200/60">
                   <div className="flex flex-col gap-2">
                     <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

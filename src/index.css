@@ -644,3 +644,29 @@ body {
     transition: none;
   }
 }
+
+/* RUNNING TEXT KEEPS A READABLE LINE. Explanations in small type used to run
+   the whole width of a panel - about 200 characters a line on a wide screen,
+   where the eye loses the next line. A paragraph, a list item and a note box
+   stop at about 105 characters whatever the panel's width. In the base layer,
+   so a width set on purpose (max-w-...) still wins. */
+/* A table marked data-dense keeps its rows low: the fields in it are the height of their text plus a little.
+   (Outside any layer, so it holds against the padding classes on the cells.) */
+/* (Both rules hold in the Merge app and in the Chef flow, which is built on the same logic.) */
+:is(.merge-app, .chef-app) table[data-dense] td {
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+:is(.merge-app, .chef-app) table[data-dense] input,
+.chef-app table[data-dense] select {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+@layer base {
+  :is(.merge-app, .chef-app) :where(p, li) {
+    max-width: 105ch;
+  }
+  :is(.merge-app, .chef-app) :where([data-note]) {
+    max-width: 112ch;
+  }
+}

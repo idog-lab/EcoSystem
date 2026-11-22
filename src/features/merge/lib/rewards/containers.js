@@ -68,7 +68,7 @@ export function modelContainers({ dropGroups = [], dropGroupsConfig = [], minDro
     const table = dropGroupsConfig?.[tier - 1]
     const weights = {}
     let noDrop = Math.max(0, table?.noDropWeight ?? 0)
-    if (tier >= startRank && table) {
+    if ((tier >= startRank || table?.belowStart === true) && table) {
       for (const entry of table.entries ?? []) {
         if (!(entry.weight > 0)) continue
         // An entry pointing at a group that no longer exists can never drop.

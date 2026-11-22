@@ -25,7 +25,7 @@
 // exactly as it is; and ranks below the configured minDropRank are never
 // given entries (the engine would ignore them anyway).
 import { REWARD_TYPES, ALL_REWARD_TYPES, REWARD_TYPE_LABELS, REWARD_MAX_RANK, TWISTER_TYPE } from './rewardChain'
-import { MIN_DROP_RANK, MAX_GROUP_ITEMS } from './dropGroups'
+import { MIN_DROP_RANK, MAX_GROUP_ITEMS, TWISTER_FIRST_DROP_RANK, TWISTER_PAIR_RANK } from './dropGroups'
 import { RC_MAX_RANK } from '../core/ranks'
 
 // Tables are written with this total weight, so a weight reads directly as
@@ -805,8 +805,14 @@ export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, m
       let extraShare = 0
       if (r < multiFrom) {
         always = leastServed(1)
-        extraShare = generatedShareAt(r)
-        extra = twisterOn ? TWISTER_TYPE : (elasticType ?? [...order].reverse().find((t) => !always.includes(t)) ?? null)
+        if (twisterOn && r === TWISTER_PAIR_RANK) {
+          // Economist: "A main-chain merge creating rank 7 always drops two
+          // items: its existing non-Twister reward plus its Twister item."
+          always.push(TWISTER_TYPE)
+        } else {
+          extraShare = generatedShareAt(r)
+          extra = twisterOn ? TWISTER_TYPE : (elasticType ?? [...order].reverse().find((t) => !always.includes(t)) ?? null)
+        }
       } else if (r < tripleFrom) {
         twoItemRanks += 1
         // The Twister item sits in every two-item drop: the economist's worry
@@ -920,6 +926,57 @@ export function buildAlwaysDropConfiguration({ dropUnits, unitsPerDrop = null, m
       focus: { type: soloType, rank: startRank, share: 1, elastic: elasticType === soloType },
     }
   }
+  // THE TWISTER'S TWO RULES (economist), on whichever table was made above:
+  //   - a merge that makes rank 5 drops exactly one rank-1 Twister item (only
+  //     the Twister starts there; the rewards' start rank is not moved);
+  //   - a merge that makes rank 7 always drops two items: its reward and the
+  //     Twister item (when rank 7 is a "one or two items" rank, as it is with
+  //     the usual single-item rank 6 and two items from rank 8).
+  if (twisterOn && !perDropGiven && startRank != null) {
+    const made = new Map()
+    const byId = new Map(nextGroups.map((g) => [g.id, g]))
+    const idOf = (items) => {
+      const id = uniqueId(groupId(items))
+      if (!made.has(id)) made.set(id, { id, name: groupName(items), items, auto: true })
+      return id
+    }
+    nextTables = nextTables.map((table) => {
+      if (!table || table.locked) return table
+      if (table.rank === TWISTER_FIRST_DROP_RANK && table.rank < startRank) {
+        return { ...table, noDropWeight: 0, entries: [{ groupId: idOf({ [TWISTER_TYPE]: 1 }), weight: DROP_TABLE_TOTAL_WEIGHT }], belowStart: true }
+      }
+      if (allSolo || multiFrom == null || table.rank !== TWISTER_PAIR_RANK || !(table.rank > startRank && table.rank < multiFrom) || isSolo(table.rank)) return table
+      const sizeHere = (table.entries ?? []).map((e) => byId.get(e.groupId)?.items?.[TWISTER_TYPE]).find((r) => r != null) ?? 1
+      const merged = new Map()
+      for (const e of table.entries ?? []) {
+        const g = byId.get(e.groupId)
+        if (!g) continue
+        const id = g.auto && g.items[TWISTER_TYPE] == null && Object.keys(g.items).length === 1 ? idOf({ ...g.items, [TWISTER_TYPE]: sizeHere }) : e.groupId
+        merged.set(id, (merged.get(id) ?? 0) + e.weight)
+      }
+      // A drop that was the Twister item alone has no reward to go with it:
+      // its share goes to the rank's reward-and-Twister drops, in proportion.
+      const itemsOf = (id) => made.get(id)?.items ?? byId.get(id)?.items ?? {}
+      const alone = [...merged].filter(([id]) => Object.keys(itemsOf(id)).join() === TWISTER_TYPE)
+      const paired = [...merged].filter(([id]) => Object.keys(itemsOf(id)).length >= 2)
+      const pairedWeight = paired.reduce((sum, [, w]) => sum + w, 0)
+      if (alone.length > 0 && pairedWeight > 0) {
+        const extra = alone.reduce((sum, [, w]) => sum + w, 0)
+        for (const [id] of alone) merged.delete(id)
+        let given = 0
+        paired.forEach(([id, w], k) => {
+          const add = k === paired.length - 1 ? extra - given : Math.round((extra * w) / pairedWeight)
+          given += add
+          merged.set(id, w + add)
+        })
+      }
+      return { ...table, entries: [...merged].map(([id, weight]) => ({ groupId: id, weight })) }
+    })
+    if (made.size > 0) {
+      const used = new Set(nextTables.flatMap((t) => (t?.entries ?? []).map((e) => e.groupId)))
+      nextGroups = [...nextGroups.filter((g) => !g.auto || used.has(g.id) || !made.has(g.id)), ...[...made.values()].filter((g) => !byId.has(g.id))].filter((g) => !g.auto || used.has(g.id))
+    }
+  }
   // When one item per merge is already more than was wanted, the drops pay
   // more than asked. The start rank is NOT moved; the rank from which the
   // drops would fit is only reported, so it can be offered as a choice.
@@ -1019,7 +1076,8 @@ export function resizeTwisterDrops({ dropGroups = [], dropGroupsConfig = [] } = 
   }
   const pending = [] // steady: { index, pooled } - the Twister containers of each table, ranked afterwards
   const tables = dropGroupsConfig.map((table, index) => {
-    if (!table || table.locked) return table
+    // (the rank-5 row is "exactly one rank-1 Twister item": never resized)
+    if (!table || table.locked || table.belowStart === true) return table
     const rest = [] // entries that are not ours to change
     const plain = [] // generated, no Twister item: { entry, group }
     const pooled = new Map() // the other items of a Twister container -> weight

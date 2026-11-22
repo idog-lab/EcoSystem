@@ -43,7 +43,10 @@ const STATES = [
 // 12, or 13 on a Recompletion board (the chase there goes to rank 14).
 // minBrushRank: the lowest rank it offers - 3 on a Recompletion board, which
 // holds nothing below rank 3.
-export default function BoardGrid({ tiles, placements, forcedRanks, onPaint, onFillAll, maxBrushRank = MAX_RANK, minBrushRank = 1 }) {
+// keptEmpty: cells that always stay open ({row, col}) - the first board's two
+// tutorial cells. They are marked, and painting them does nothing (the layout
+// edit keeps them open).
+export default function BoardGrid({ tiles, placements, forcedRanks, onPaint, onFillAll, maxBrushRank = MAX_RANK, minBrushRank = 1, keptEmpty = [] }) {
   const [brush, setBrush] = useState('blocked')
   // Which rank (if any) painting a semi tile should also force there - null
   // means "Auto" (the ordinary behavior: let generation decide, same as
@@ -180,6 +183,7 @@ export default function BoardGrid({ tiles, placements, forcedRanks, onPaint, onF
               // A reward item on a semi tile (V2) renders as its own gold
               // tile - type + reward rank, never a main rank/DR value.
               const reward = decodeReward(showRank)
+              const kept = state === 'open' && keptEmpty.some((cell) => cell.row === r && cell.col === c)
               return (
                 <button
                   key={`${r}-${c}`}
@@ -192,8 +196,11 @@ export default function BoardGrid({ tiles, placements, forcedRanks, onPaint, onF
                   }}
                   onMouseEnter={() => paintingRef.current && paint(r, c)}
                   onDragStart={(e) => e.preventDefault()}
+                  data-kept-empty={kept ? 'yes' : undefined}
                   title={
-                    reward
+                    kept
+                      ? 'Always empty: the game\'s tutorial uses this cell'
+                      : reward
                       ? `${REWARD_TYPE_LABELS[reward.type]} reward, rank ${reward.rank} · ${state} · counts toward the collectible payout, not main-chain DR`
                       : showRank
                         ? `rank ${showRank} (${valueOf(showRank)} DR) · ${state}${forcedRank != null ? ' · forced - applies on next Generate' : ''}`
@@ -228,6 +235,7 @@ export default function BoardGrid({ tiles, placements, forcedRanks, onPaint, onF
                   {forcedRank != null && (
                     <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white shadow ring-1 ring-slate-900/20" />
                   )}
+                  {kept && <span className="absolute inset-1 rounded-lg border-2 border-dashed border-purple-300 text-[9px] font-semibold text-purple-400 flex items-center justify-center">empty</span>}
                 </button>
               )
             }),

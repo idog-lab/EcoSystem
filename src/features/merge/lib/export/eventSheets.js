@@ -355,8 +355,8 @@ export function buildV2DropGroupsSheet(boards, recompletionBoards = [], recomple
   const rankRows = ({ name, board }, rank) => {
     // Ranks below the list's own drop gate never roll, and the normal event
     // never makes rank 13 or 14 (only Recompletion does).
-    if (rank < (board?.minDropRank ?? 1) || (name === 'Main' && rank > MAX_RANK)) return null
     const table = board?.dropGroupsConfig?.[rank - 1]
+    if ((rank < (board?.minDropRank ?? 1) && table?.belowStart !== true) || (name === 'Main' && rank > MAX_RANK)) return null
     if (!table) return null
     const groupsById = new Map((board.dropGroups ?? []).map((g) => [g.id, g]))
     const locked = table.locked ? 'yes' : ''
@@ -467,7 +467,7 @@ function twisterDesignRows(twisterPlan, segmentIndex, boards, recompletionBoards
     const target = segmentIndex == null ? plan.targetSpins : targetSpinsForSegment(plan, segmentIndex, list?.[0]?.twisterSpinObjective ?? null)
     rows.push([V2_TWISTER_DESIGN, phaseName, 'Progression checkpoint (% of main-chain DR progress)', plan.checkpointPct ?? '', ''])
     rows.push([V2_TWISTER_DESIGN, phaseName, 'Target spins by the checkpoint', target ?? '', target == null ? 'not entered' : ''])
-    rows.push([V2_TWISTER_DESIGN, phaseName, 'Cost increment (DR)', plan.costIncrement ?? 1, ''])
+    rows.push([V2_TWISTER_DESIGN, phaseName, 'Cost increment (DR)', plan.roundPrice ? (plan.costIncrement ?? 1) : 1, ''])
     rows.push([V2_TWISTER_DESIGN, phaseName, 'Simulation runs', plan.runs ?? '', ''])
     rows.push([V2_TWISTER_DESIGN, phaseName, 'Simulation seed', plan.seed ?? '', ''])
   }

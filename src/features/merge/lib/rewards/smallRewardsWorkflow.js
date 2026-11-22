@@ -383,7 +383,7 @@ export async function generateSmallRewardsConfiguration({
   // merges focus on the blocked tiles of the small rewards on the board ...
   // maybe even the blocked should be all of them as coins and the rank 6
   // focus mostly on dropping coins. or energy"). It is the one picked in
-  // step 4 (dropGroups.js: tileRewardTypeOf); when that reward has no target
+  // step 3 (dropGroups.js: tileRewardTypeOf); when that reward has no target
   // or does not drop, the one with the most to give is used and that is
   // said. Every segment uses the base segment's (sharedDrops.tileType).
   const tileTypeAsked = alwaysDrop ? tileRewardTypeOf(board0) : null

@@ -6647,3 +6647,822 @@ Recompletion list holding more than the chase (no DR spent to measure a
 credit against), "a segment that merges more gets smaller values" (now per
 amount asked - with steady containers a reward sits at a few ranks), a
 20-unit amount with round values (within half a rounding step, 25%).
+
+### Twister timed on the DR spent; the strict merge rule
+
+A written brief from the economist (prepared with another assistant) that
+clarified and replaced several assumptions. In force from it:
+
+- **Every upgrade strictly rewards merging** ("V2 > 2 x V1, V3 > 2 x V2,
+  V4 > 2 x V3. Equality is insufficient."). The model's values were "at least
+  double" below the top rank: 3/10/20/50 and 5/10/30/70 had been given. Now
+  strict everywhere a value is generated (rewards, coins, Twister); the
+  smallest whole-number ladder is 1/3/7/15 instead of 1/2/4/10. Cost: a very
+  small amount on a design where every merge drops can no longer be met (the
+  test of 85 merge energy alone pays 128-175 at the smallest values) - it is
+  reported with fixes, as before for other floors. Typed ladders are flagged
+  (`merge-step-pays-no-more`), never changed.
+- **The Twister's clock is demand spent**: paid generator DR / the segment's
+  DR demand, target 70-75% for the twists asked. It had been main-chain
+  progress, counted at the end of the phase.
+- **Investigate before changing a drop rule**, with rank-5 Twister drops an
+  experiment only.
+
+What was built: the simulator's cadence record, `twisterCadence.js`
+(measuring, fitting, candidates), `scripts/analysis/twister-cadence.mjs`,
+step 6's "Twister, timed on the DR spent" with the comparison, 45 engine and
+13 browser checks. What was NOT changed: the drop rules, and how the build
+prices a twist.
+
+Findings (one built test event, 300 players per segment and structure,
+demand 298 / 748 / 1,048 / 1,348, 15 twists; full tables in
+`docs/twister-cadence-investigation.md`):
+- As priced today the segments reach the twists at 79 / 65 / 86 / 74% of the
+  demand; the heaviest-subsidy segment in 6 jumps of about 3 twists.
+- The typical player ends the normal event at 88-96% of the demand typed and
+  Recompletion at 78-86% (lucky drops) - so "100% of demand" is a point most
+  players never reach. Reported, not corrected: what "demand" means is the
+  economist's to say.
+- Merges of ranks 5-9 are spread evenly over the spend, so rank-5 eligibility
+  adds volume (twice the drops of rank 6), not earliness.
+- With 6-10 finished items a phase, the moment the twists are reached moves
+  in jumps of 15-30 points with the price: on the current drops half the
+  segments cannot land in a 5-point window at any price. That is why the
+  build's pricing was left alone until a structure is chosen.
+- Twister from rank 5 with the Twister item in every rank-7 drop lands all
+  four segments at 72-74% with every player within 10 points, three of four
+  in Recompletion, and changes nothing else. Rank 5 with bigger items is the
+  alternative that leaves rank 7 alone. Putting the Twister in half the
+  rank-6 drops costs 34-41% of the coins and leaves tile rewards unopened; in
+  the three-item drops it costs 32-52% of the merge energy and 4-21% more DR.
+- Rejected as a fit rule: the pair closest to the middle of the window (it
+  picked prices like 170 DR); kept: the simplest pair inside it. Rejected for
+  the fit's smallest ladder: 1/4/10/30 from the general round-value grid;
+  kept: the economist's own 2/5/12/30 scaled the way the build scales it.
+
+### The Twister's two drop rules, demand as paid DR, the Twister fitted per segment
+
+Two written briefs from the economist, after the cadence investigation. In
+force from them:
+
+- **Rank 5 drops exactly one rank-1 Twister item** (Twister only; the other
+  rewards still start at rank 6) and **rank 7 always drops two items**, its
+  reward and the Twister item. The start rank is not moved: the rank-5 row is
+  marked `belowStart` and the engines roll a marked row under the start rank.
+  (Rejected: lowering the start rank to 5 for the build - it is the
+  economist's setting and would have made a draft out of date on apply.)
+  The rank-7 rule is applied to rank 7 as written, not to every "one or two"
+  rank a different setting could create.
+- **Demand is the DR a player really pays.** Chase - demand is value; players
+  paid 12% less than the demand in the normal event and 10-14% less in
+  Recompletion (from 53% under to 56% over, segment by segment). The build
+  now takes a further amount off the later boards, pass by pass, until the
+  average simulated player pays the demand. The 80% merge-energy credit is
+  left exactly as it was. Subsidy is never added.
+- **Twister values and price per segment**, fitted on the final boards to the
+  70-75% window. The older pricing (shared values, twists by the end of the
+  phase, items made bigger until "on track") is no longer part of a build.
+
+What it cost and what it found (three test events, 8 segments, both phases,
+200 fresh players each - `docs/twister-validation.md`):
+- Where the demand can be reached the player pays within 0.8% (normal) and
+  1.7% (Recompletion) on average. It cannot always be reached, and the build
+  says so: small demands, where the 80% energy credit alone takes more off
+  than the free taps return (the player pays up to 22% over in the normal
+  event and up to 64% over in Recompletion - nothing may be added); and small
+  subsidies with a lucky generator, where the boards have nothing left to
+  give (up to 33% under).
+- Normal event: 17 of 24 segment medians in the window, all 24 within 5
+  points. Recompletion: 9 of 24, because it plays the normal event's values
+  and only its price moves.
+- Bigger Twister items would put 19 of 24 (normal) and 14 of 24
+  (Recompletion) in the window and bring the heavy-subsidy segments from 2-3
+  twists a chance to 1-2, with other rewards at 99-101%. Not adopted: it
+  makes the rank-5 item rank 2. Presented to the economist.
+- A fit detail that mattered: the price search stopped after 40 price steps.
+  With steps of 5 a segment that collects a lot could not be priced high
+  enough and reached its twists at 64% (one at 18% with bigger items). The
+  search now ends where no player could afford a twist.
+- Boards regenerate at random in every pass and one set can cost a player
+  far more than the next, most of all in Recompletion (656 against 1,040 DR
+  on the same allocation). So "pays too much with nothing taken off" only
+  counts after it is seen on two sets, and the demand margin has a 10 DR
+  floor.
+- The full browser run used to lose its first suites: the dev server compiles
+  on first use and reloads the page it is serving. The runner now opens every
+  tab, every step and the play screen first and waits for the server to go
+  quiet. Nothing is retried.
+- The "Keep every segment's Twister steady" switch and the "twists counted
+  at" field are gone from step 4; the rules and the 70-75% target are stated
+  there instead.
+
+### No rank 1 or 2 on a Recompletion board; calibration both ways; where merge energy goes
+
+The economist, and a third written brief.
+
+- **"in the RC boards, there is a hard rule, no ranks 1 and 2. u keep on
+  generating RC boards with rank1 and 2 in them."** True. The floor lived in
+  each board's `minRank`, which the editor sets to 3 when a board becomes a
+  Recompletion board - so a Recompletion list whose saved boards carried
+  `minRank` 1 (an older save, an imported backup, boards made by code) was
+  generated from rank 1. The floor now lives in the generator: `boardMinRank`
+  (board.js) is never below 3 on a Recompletion board whatever the data says,
+  `generatePlacement` raises the board's own `minRank` the same way, and the
+  four places that read a board's lowest rank (the build, reward placement,
+  CC management, effort targeting) read it through that. Check: 24 of 24
+  boards generated from data that says "from rank 1" hold nothing below
+  rank 3. Boards already generated are not rewritten: builds made before this
+  are "Out of date" and a rebuild makes them anew.
+- **Calibration in both directions** ("'Subsidy is never added' is not an
+  economist requirement"). The calibration is signed: taken off the later
+  boards, or put back - inside the energy credit first, then beyond what was
+  typed, up to what each board's tiles can hold at its highest rank
+  (`maxFeasibleBoardValue`) and never past the chase. Board 1, floors, pins
+  and exact queue values as before. The search keeps between the calibrations
+  it has already seen from both sides. The accounting is four separate
+  figures (`demandFit.steps`): subsidy typed, 80% energy credit, signed
+  calibration, generated.
+- **A limit that is proven is told apart from a search that did not settle**
+  (`demandFit.limit`). Proven: every later board at its floor
+  (`no-subsidy-left`) or at what it can hold (`boards-full`). And a third
+  kind, found while looking at why Recompletion would not settle: **the spend
+  moves in jumps**. The same segment with the same subsidy, two sets of
+  boards: 756 and 1,148 DR; another: 1,300 DR at three sets running, then
+  about 800 with 13 DR more subsidy. Which items a set of boards happens to
+  hold decides it (paid taps in Recompletion are x4 taps, 4 DR each, and a
+  set that needs 70 more of them costs 280 DR more). No amount of subsidy
+  lands in between, so a pass that halves the step again cannot either; the
+  build now says so (`limit: 'jumps'`, with the two figures) instead of "did
+  not settle". (Tried and dropped: one seeded stream for board generation so
+  two passes would differ only by the subsidy - the jumps are in the boards,
+  not in the draw. Not tried: making more sets of boards and keeping the
+  closest, which is a longer build; left as a question.)
+- A bound that was wrong for one afternoon: the calibration was limited to
+  "never more subsidy than the chase" without counting the energy credit
+  that comes off first, so a segment that needed nearly all of it back
+  stopped 280 DR short (event B, Segment 1, Recompletion: 42% over; 19% over
+  on the build after the correction, still not settled).
+- **Where merge energy goes** (`energyFlow`: carried in, collected in play,
+  collected at the phase-end collection, used on free taps, left). Normal
+  event, average player over three events: 228 in play, 39 at the end, 202
+  used, 66 left - 74% of what is collected is used in the phase (45% to 91%
+  by segment). Recompletion: 26 carried in, 416 in play, 23 at the end, 394
+  used, 71 left - 81%. The credit is 80% of energy COLLECTED (98.7% and 88.4%
+  of exactly that), so it takes off more subsidy than the free taps give
+  back wherever energy arrives late: the cause of the "pays more than the
+  demand" segments of the round before. Energy carried into Recompletion was
+  credited once, in the normal event, and is not credited again. The 80% rule
+  is unchanged and nothing is capped; the calibration puts back what it
+  costs.
+- **Bigger Twister items without touching rank 5** (`bigger79`: the Twister
+  item one rank bigger only in the drops of merges that make ranks 7 to 9,
+  rank 3 at most). Normal event: timing unchanged (16 of 24 medians in the
+  window against 15, 23 against 21 within 3 points, no segment further out),
+  cadence better (17.2 chances to spin against 14.8, 1.12 twists a chance
+  against 1.39, highest 1.9 against 3.0), other rewards and DR at 100.0%,
+  board 70% full both ways. Recompletion: 12 of 24 in the window against 10,
+  but two segments 10 to 13 points further out. An experiment still; the "Compare" button in step 6
+  shows it.
+- A first spin "at 0.8% of the demand" in Recompletion is 25 generator
+  actions in, on Twister items and merge energy carried over
+  (`firstSpinActions`); with nothing carried it is 35 actions.
+- What it gave (three events, 8 segments, 200 fresh players; events A and C
+  from the first two-way build, event B built again after the bound was
+  corrected - single builds): normal event 21 of 24 segments within 5% of the
+  demand (19 one way, 2 with no calibration), the three that are further off
+  are proven limits; the two segments that paid over (22% and 4%) now pay 3%
+  and 4% under. Recompletion 17 of 24 within 5% (19 one way on another draw
+  of boards), worst 25% over where it was 64%, average distance 4.8% against
+  8.2%.
+- One engine check turned out to sit on the edge of the 15% margin ("with the
+  build's values off, the shortfall is reported": one build paid 78% of the
+  amounts asked, the next 87%, where there is rightly nothing to report). It
+  now asks for clearly more than typed values can pay.
+
+### The economy frozen; the guided flow made easier to enter, read and review
+
+A written brief: "Freeze economy development for now. Further balancing and
+gameplay changes will come from my hands-on QA. Focus this round on making the
+existing app easier to configure, understand, and review." No formula, drop
+rule, value, simulator strategy, calibration objective or margin was touched;
+`lib/` gained one presentation file (`build/resultMatch.js`).
+
+The app was first walked as a first visit and as a built three-segment event,
+every screen photographed. What was in the way:
+- Step 4 was 4,000 pixels of rules around four inputs: drop rules, rank
+  values, milestones, containers and three long explanations, all open.
+- After a build the page (6,400 pixels) opened on the subsidy accounting, a
+  17-column container table and a 15-column Twister table. What an economist
+  judges a build by - spend against demand, rewards against amounts - was a
+  screen and a half down, for one segment at a time.
+- Eight tabs of equal weight, one of them called "Recompletion" like the
+  phase switch below it. Steps called "Segment amounts" and "Test and
+  finalize"; "Estimated", "Simulation validated", "seeded validation",
+  "reward factor", "pass 2 of 6".
+- Step 7 had two purple apply buttons side by side, and said "Twister is not
+  set up for this phase" about a draft whose Twister had just been priced
+  (the panel read the applied design).
+- A number outside a field's range was put back without a word. Nothing said
+  that the project on screen was not saved. "Clear data" could not be undone.
+  A backup left out the draft being looked at.
+- The Play Tester said "the applied design" and nothing more, and showed the
+  board's subsidy and rank limits as editable fields next to the game.
+
+What changed:
+- **Folded sections** (`Collapsible`): a heading with a one-line summary of
+  what is in force ("Coins under the tiles (50% asked from tiles) · merges
+  drop from rank 6: one item up to rank 6, two from rank 8, three from rank
+  10 · leftovers are collected · every merge of a rank drops the same
+  items"). Step 4: 4,040 -> 1,880 pixels. Step 6 after a build: 6,400 ->
+  2,590. Rank values open by themselves when a value is missing; a typed set
+  that does not reward merging is only named in the summary while the build
+  sets the values (it used to put a warning in front of every first visit,
+  about the reference values, while the build's own values were fine).
+- **The summary leads step 6** (`BuildSummary`): one row a built segment -
+  spend against demand, each reward against its amount, the twists (reached
+  at, chances to spin x twists), what to look at - a verdict line and the
+  next action. Unbuilt segments are one line.
+- **"Close" and "Within margin" are different words** (economist:
+  "Distinguish 'within accepted tolerance' from 'closely matched'. Do not
+  imply a warning-free design is guaranteed to behave identically for every
+  player"): close = within 5% of a reward amount or inside the build's own
+  demand margin; within margin = accepted but not close; and the panel says
+  these are averages of simulated players with average luck. The 5% is a
+  word, this app's own, not a margin.
+- **Words**: DR demand, board subsidy, reward size, Draft - not applied,
+  Tested on players; steps DR demand / Board layouts / Generator (optional) /
+  Rewards and Twister / Effort (optional) / Build / Test and apply, each with
+  a line saying what it is for. The header: Build event, Play tester, Syntax,
+  then "Advanced tools".
+- **Step 7**: test on players, play it, apply it, as three numbered cards;
+  one main action; "Undo apply"; the Twister panel reads the draft; endless
+  mode folded.
+- **Editing**: a field says why it did not take a value; a pasted column of
+  demands fills down; a build shows a progress bar; the per-segment tables of
+  step 4 leave out segments that are not built and say which; the reward size
+  is typed in one place (step 1).
+- **QA**: the Play Tester banner says draft (with its build time) or applied
+  design (and whether it still matches its build) and leads back to step 6 or
+  7; its side panel only picks a board. "Unsaved changes" in the header. A
+  backup carries the drafts and the effort distribution, says what is in it,
+  and Clear data downloads one first.
+- (Rejected: a warning on leaving the page with unsaved changes - it would
+  have to be answered on every reload. Not done: the advanced tools keep
+  their older, denser wording.)
+
+Tests: the suites open every folded section as it appears, so nothing they
+checked is skipped; a new suite, `guided-flow.mjs` (53 checks), walks the
+flow folded, as a first visit. A full run still now and then loses a page in
+the middle of a suite (twice in this round, in build-event and
+build-feedback, each passing when run again); no page error is logged, so the
+suites now print console errors and page reloads to catch the reason next
+time.
+
+### No draft: a finished build is in use at once. The price of a twist is any whole price
+
+The economist, after the round above: "the model looks alot better. 2 thins,
+1. i dont understand the things with the draft all the time. draft vs applied.
+2. the twister spin cost isnt hard on the 10, the model can give any price for
+the spin to make it work". Asked as two questions with options; both answers
+were the recommended one.
+
+- **"In use at once."** A build was kept apart as a draft until Apply, so the
+  Play tester and Syntax could show something other than the build on screen,
+  and every screen had to say which. Now a build that can be used is written
+  onto the design the moment it finishes; a whole-event build puts both phases
+  in use together. What was there before is kept, so step 7 has "Go back to
+  the previous build" (one step: the boards, and the build before with its
+  results). A build that needs a fix is never put in use. The words draft,
+  apply and applied are gone from the main path ("In use" / "Not in use");
+  step 7 is "Test and export". "Not in use" is left for the cases where a
+  build and the boards really differ: results kept from a session whose
+  boards were not saved, a backup, boards edited by hand - with one button,
+  "Put this build in use".
+  (Rejected: keeping the check before use under a simpler name - the
+  economist chose not to have it. Kept: a build is still a separate object
+  internally, and "in use" is still read off the design, so nothing can claim
+  to be in use that the boards do not carry.)
+- **Any whole price.** A build read the Twister plan's price step, so a 10
+  typed in an earlier round kept rounding prices and pushed twists out of the
+  70-75% window. A build's step is now 1 unless rounding is switched on by
+  typing a step in step 4's fold; a step saved before the rule is not used.
+  Opening a project that carried a 10 re-prices its last build by itself (the
+  price follows its inputs, as it always did when the twists changed).
+- Tests: the suites that applied a draft now check that a build is in use
+  when it finishes; `guided-flow.mjs` also builds twice and goes back, and
+  checks that no screen of steps 6 and 7 says draft, apply or applied.
+
+### A bank of board layouts, and the two rules of a first board
+
+The economist: "another thing ill want us to insert into the model, is some
+board suggetsions, mostlly its important for the first board. the rules for
+any board is that the rank2 we got in the first board should be hardcoded into
+the board in any time, and the 2 cells in the rightest columnin the bottom of
+the column should always be empty. those are used in the tutorial of any board
+in the game itself. i need boards that the simulator can ofc solve. if he cant
+solve, check why and fix, i nthe board layout ill just pick from the bank of
+boards which one we will use this time".
+
+- **The two tutorial cells.** The rank-2 cell was already forced. Now the two
+  bottom cells of the rightmost column of the normal event's first board are
+  always empty too: every layout edit keeps them open and unpinned. Read as
+  the normal event's first board only (Recompletion's first board has no
+  tutorial; later boards push in from the top and never cover those cells).
+  A first board saved before the rule is not rewritten - step 2 shows a
+  warning with "Empty these two cells". (Not done: blocking a build on it.)
+- **The bank**: 12 first boards (two rows, row and a half, stairs down, stairs
+  up, pyramid, frame, columns, checker, corners, showcase, diagonal, islands)
+  and 6 later boards, as pictures in step 2. Picking one draws it; "Undo"
+  restores the layout from before with what was built under it.
+- **Solved by the simulator**, checked rather than assumed
+  (`verify-board-bank.mjs`): each first board filled at 150, 100 and 60 DR
+  (exact every time, rank 2 on the fixed cell, nothing on the tutorial cells),
+  played alone and ahead of two later boards at three subsidies, played as
+  Recompletion's Board 1, and built once for real with rewards and a Twister
+  (all "ok", every simulated player finishing, paying 538-556 of a 548 DR
+  demand - single builds); each later board played as Board 2 and 3.
+- What did not hold, and what was done: two first candidates with 7 blocked
+  tiles could not hold Board 1's 150 DR exactly under its small-item rules
+  (dropped; the smallest has 10). At a subsidy of 1,900 of the 2,048 DR a
+  lucky player made rank 12 before the last tiles opened (1,644 of 1,900 DR
+  opened behind the "arch" later board) - a finished event that did not need
+  all its subsidy, not an unsolvable board, so at that subsidy "solved" asks
+  for the top rank on every board and full opening is asked at the moderate
+  subsidies, where every layout opens every tile in every play.
+
+Three rounds on the bank followed, each a remark of the economist on the
+boards themselves:
+- "the boards are not the best. they should have a bit more tiles i guess like
+  the amounts we are seeing the main board now, becausse we are looking for a
+  good amount of rank1 in them as we know. and also, we need some semi blocked
+  on the board. we take into account that the players are rather not so smart,
+  and we should guide them to where to merge on to reveal more tiles." The
+  first bank had 11 to 20 tiles and one board with semi-blocked tiles. Every
+  first board now has 20 to 24 tiles (8 to 10 rank-1 items at 150 DR,
+  measured) and two or three guides: semi-blocked tiles with at least two
+  blocked tiles beside them, so the merge into the item in sight is the one
+  that opens more of the board. On Board 1 a guide holds a rank 1.
+- "u are creating only boards who are weighted down with gravity, can u crete
+  also ones that are hanged up?" Boards hanging from the top were added, and
+  the picker shows three groups: standing on the floor, hanging from the top,
+  sides.
+- "the boards that looks like htey have holes in them, i dont like those. we
+  need boards that doesnt look like they were a mistake." Eight boards went:
+  those with a lane between two blocks, tips with space between them, an
+  opening under an arch, points above a row, and a fixed cell standing alone.
+  The rule they broke is now written down and checked: one piece, no gap in
+  any row or column (`isSolidShape`). The simulator had solved all of them -
+  they were dropped for how they look.
+The bank was then 16 first boards (7 standing, 6 hanging, 3 along a side) and
+9 later boards.
+
+A fourth round: "when we are creating boards we need to look at the 2 putple
+tiles as empty, we need to see the boards only with the tiles on them. i want
+them to be simetrical to the eye. also in the diagonal up we got 4 in all the
+rows except 5 in the bottom one, thie is not simetrical".
+- The boards had been drawn full to the right edge except for the two
+  tutorial cells, which the picker outlined in purple: read with those two
+  cells as tiles they looked even, read by their tiles alone they were
+  lopsided. A board is now judged by its tiles alone (`symmetryOf`): the left
+  half mirrors the right, tiles and items in sight alike. The mirror cells of
+  the two tutorial cells, at the left edge, are empty too - so a board that
+  stands on the floor is six tiles wide in its two bottom rows, centred.
+- The fixed rank-2 cell sits right of the middle; a guide now sits on its
+  mirror cell, so the two items in sight are a centred pair. Every first
+  board has three guides (it was two or three).
+- The three boards along a side (steps, a block against a wall) cannot be
+  symmetrical and went. One diagonal stays: a band of four tiles in every
+  row, the same turned half a circle.
+- The picker draws the tutorial cells as the empty space they are (the big
+  grid under it still marks them "empty", because painting them does
+  nothing and that has to be said somewhere).
+The bank is 14 first boards (7 standing, 6 hanging, 1 diagonal) and 9 later
+boards, each with 20 to 24 tiles and 8.3 to 10.7 rank-1 items at 150 DR; 69
+engine checks hold the rules and the solving, and every board was built once
+for real again ("ok", single builds).
+
+Then: "do we havea good idea for a boad layout for black friday ?" Nothing in
+the bank was drawn for an occasion. Four shapes were tried against the rules
+and the simulator before anything was added - a gift box (bow, wide lid, box),
+a price drop (an arrow pointing down), a sale sign hanging from its nail, and
+a gift floating above a free floor - and all four held: symmetrical, one
+piece, 20 to 22 tiles, three guides that open three tiles each, 150 DR exact,
+8.3 to 9.0 rank-1 items, 30 of 30 plays solved, each built once for real
+("ok", paying 538 to 552 of a 548 DR demand - single builds). What the rules
+leave no room for was said too: a bag with a handle loop and a price tag with
+its hole (a hole), a cart (lopsided), letters. The recommendation was the gift
+box; the economist: "lets try to enter all for now, ill try to see them in the
+model it self". All four are in the picker as a fourth group, "Black Friday",
+on trial - nothing has been chosen. The bank is 18 first boards and 9 later
+boards; 78 engine checks.
+
+### Text laid out gracefully
+
+The economist: "we have i nthe app some layout and formating problems with how
+the text is displayed. lets try making hte app handle that gracefully". Rather
+than fix what happened to be noticed, every screen was measured: a script
+opens the seven steps (with a built event and every folded section open), the
+Play tester, the Syntax tab and the advanced tools at 1280 and 1500 px and
+lists text that is cut, squeezed, spilling or stretched. First run: 296
+places.
+- The Syntax tab was 2,105 px wide in a 1,280 px window: its sixteen sheet
+  buttons sat on one line in the card's header. The Twister tool was 1,474 px
+  wide: its page could not shrink below its widest table. (Card headers wrap;
+  tool pages may shrink, and a wide table scrolls inside its own box.)
+- 76 table cells were squeezed to a word a line. The containers table had
+  "Weight, merges making rank 5" as the head of every weight column, which
+  left 56 px for "What it drops"; the Twister table had fifteen columns each
+  under a sentence. Both now have one group head and short column heads, and
+  the Twister table's note is a line of its own under its row. At 1,280 px
+  the Twister table fits without scrolling.
+- 32 fields showed less than their text (the "15 (as base)" hint in step 4;
+  the syntax and asset fields of the Rewards tool).
+- 54 explanations ran 150 to 216 characters a line. Running text now stops at
+  about 105 characters.
+- Two formatting slips in the Twister table: "1 points early", and a sentence
+  that began with a lower-case "with".
+After: none in the main path. Left, and listed by the suite rather than
+failed: two wide tables in the advanced tools scroll inside their own box at
+1,280 px, and four placeholders there are cut. The audit is kept as a browser
+suite (`text-layout.mjs`, 10 checks).
+
+### A lighter app: five steps, one menu, less scrolling
+
+The economist: "u will give suggestions of things that u think are not needed
+and can be handled without them in the app, the app is very heavy in text and
+buttons." Every screen was measured as a first visit finds it (words, buttons,
+fields, with the folded sections folded) and 31 things the app could do
+without were listed, as suggestions. The answer: "i use only the builder as
+for the last runs. lets go with ur suggestions".
+
+What a screen held, before and after (a 1440 px window, a project of three
+segments; the two screens that were steps of their own are gone):
+
+| Screen | Words | Buttons | Fields |
+|---|---|---|---|
+| Header (on every screen) | 46 -> 19 | 24 -> 11 | |
+| DR demand | 366 -> 265 | 43 -> 24 | 41 -> 16 (7 once the demands are typed) |
+| Board layouts | 629 -> 475 | 42 -> 27 | 8 -> 2 |
+| Generator (was step 3) | 326 -> a folded section of step 1 | 36 | 9 |
+| Rewards and Twister | 604 -> 462 | 37 -> 21 | 8 -> 8 |
+| Effort (was step 5) | 275 -> a folded section of step 4 | 37 | 13 |
+| Build, after a build | 926 -> 512 | 38 -> 22 | 1 |
+| Test and export, after a test | 719 -> 331 | 40 -> 23 | 1 |
+| Play tester | 318 -> 177 | 37 -> 24 | 1 |
+| Syntax | 253 -> 189 | 64 -> 16 | 6 -> 2 |
+
+About 35 of the 40 buttons on every step had belonged to the frame, not to the
+step: that is where most of it went.
+- **The frame.** One "More" menu holds the project actions and the five
+  advanced tools (an open advanced tool shows as a tab while it is open); the
+  bar keeps Build event, Play tester, Syntax, Share stage and Save. The
+  segment bar and step 1 show the segments in use - a demand or DR on the
+  boards, a name of its own, the one selected - and "Add segment" brings in
+  the next; nothing is removed from a segment out of sight. The app's subtitle
+  and the sentence repeated over every step went; a step says what it is for
+  once.
+- **Seven steps became five.** The generator, lucky drops, dates and CC are a
+  folded section at the bottom of step 1; the effort shape is a folded section
+  of step 4, beside the Build button. Every "step 4 / 6 / 7" written on a
+  screen, in a comment or in a check was renumbered (about 150 places).
+- **Step by step.** Step 1: one line for the two terms, the per-board subsidy
+  in a section that opens by itself when boards were typed by hand or do not
+  add up. Step 2: the bank first, "change tiles by hand" folded (open when the
+  board was drawn by hand), size, rank limits and onboarding folded, the board
+  table down to board, layout and tiles. Step 3: no "price of a twist now"
+  column, one sentence for the three read-only boxes, no containers section
+  (the build results show them). Step 4: the readiness list only when
+  something is missing, one Build button with "one phase only" a click away,
+  "in use" said once, the segment in detail folded while there is nothing to
+  look at, the meaning of Close / Within margin / Off target in the chips'
+  hovers - the sentence that the figures are averages and one player differs
+  from the next stays on screen. Step 5: three buttons, the table of the four
+  kinds of player folded (open when a tap pays more than a merge), no door to
+  the Twister tool, no second link to the Syntax tab. Play tester: the rank
+  list folded, the helper lines behind an "i", no empty charts. Syntax: no
+  board list beside it, the seventeen sheets in a dropdown, one pair of export
+  buttons with a "This segment / All segments" switch.
+- **Two things done differently from the list**, said at the time: the CC
+  fields were not removed from the generator section (the CC tool that also
+  holds them is out of sight now, so removing them would have left CC behind a
+  menu), and the Play tester's rank list was folded, not removed (it is the
+  only place that shows the DR spent at each rank).
+- Then, of the board table: "the most DR it can hold in the boards layout is
+  useless" - the column went.
+
+**Less scrolling.** With a screenshot of step 1 using a third of the window's
+width: "maybe we can find a layout for all the pages that it will still look
+good but will make me scroll as minimum as possible. also, when using the go
+to the next page button in the right lower part of each page, i think it
+should take me to the top part of the page and not make me scroll up". A step
+now opens at its top. The pages were measured in a window like the
+economist's (1500 x 800, a project of seven segments) and laid out to use the
+width: step 1 has the demands beside the two folded sections, step 2 the list
+of boards beside the picker (whose short groups share a row), step 3 the
+amounts beside the Twister; folded sections sit two in a row and one that is
+opened takes the full width; table rows are lower; the frame is two rows,
+never three. Page heights, before -> after: step 1 1,005 -> 800 px (one
+screen), step 2 1,643 -> 1,045, step 3 1,651 -> 1,062, step 4 after a build
+1,777 -> 1,376, step 5 after a test 1,353 -> 1,065, Play tester 1,334 ->
+1,308 - there the point was another one: "Spend generator" was below the
+first screen and now sits beside the board with the tiers and the Twister.
+What is left is content: seven segments' rows in the build summary, eighteen
+pictures in the bank.
+
+**What the checks found on the way.**
+- A check of the advanced Twister tool had been passing or failing by the
+  build's draw: a price taken from a build's boards was called "not the
+  configuration selected here" when looked at as the event in use, although
+  with "in use at once" they are the same boards - unless the build happened
+  to re-price it in between. The tool now recognises a price taken from
+  exactly the boards selected, whichever name they were measured under.
+- Two checks depend on the build's draw and are written down for QA, not
+  loosened: build-event's "the residual ... is only rounding (within 4 DR)"
+  (failed in one full run, passed twice alone), and twister-timing's "the
+  other rewards measured beside it" for the bigger-items experiment - one
+  build of a full run gave 100 / 100 / 109 / 105 against 100 each when run
+  alone, twice. The second matters for the open question of that experiment:
+  "the other rewards do not move" held on the three test events, and one
+  build here moved merge energy by 9%. A third check (a container's weight at
+  the highest merge rank can be 0) read only that one cell and now reads any
+  of the container's weights.
+- The browser suites reach the advanced tools and project actions through the
+  menu, bring a segment into sight before typing into it, and pick a sheet in
+  the dropdown (helpers.mjs). The first-visit suite was rewritten for the new
+  screens (83 checks).
+
+### Pass marks for DR usage and for the Twister
+
+The economist, in the same hours: "we can insert margins for the segments the
+pass the checks on the segments. as for DR usage. we can give 5% or 30DR (the
+smaller one for the segmet) for DR usage, also, up to 5% margin for the
+twister finish. give me suggestions if u think we need more margins". What
+existed was laid out first: DR spend passed within 2% (4% in Recompletion, at
+least 10 DR) - this app's own number, and also what the build aimed at; the
+Twister's 70-75% window had no margin at all and never failed a segment;
+rewards 15% / 25% (the economist's). Three questions were asked back, with
+options:
+- What the Twister's 5% is measured in: **points of the DR demand** on each
+  side of the window (65-80% passes) - not the number of twists, not both.
+- Recompletion: **the same marks in both phases** - not 25%, not "normal event
+  only". (Said with the question: Recompletion spend moves in jumps between
+  sets of boards, so it will often miss.)
+- More margins - a finish rate, how many single players land near, "15% or
+  one smallest item" for small amounts: **"None for now"**.
+
+What was built:
+- **DR usage**: a segment passes when its average simulated player pays the
+  demand within 5% of it or 30 DR, the smaller (`demandMarginFor`). The build
+  keeps aiming as closely as before and never more loosely than the mark, so
+  three words still mean three things: Close (inside the aim), Within margin
+  (inside the mark), Off target (outside it - the only case that gives the
+  segment something to look at). A demand of 548 DR now passes within 27 DR
+  where it passed within 11; under 200 DR the mark is tighter than the old 10
+  DR floor, and over 1,500 DR it is 30 DR, tighter than 2%.
+- **The Twister**: a segment whose typical player reaches the twists more
+  than 5 points outside the window (or never) now reads "Can be improved",
+  with the distance and the margin in words; inside the margin its chip reads
+  Within margin. Typing other twists prices them again without a rebuild, and
+  the mark follows: the cause is put on or taken off at once. This is new for
+  Recompletion in particular, where the twists land in the window in about a
+  third of the segments: more of them will now say so.
+- A build made before the marks is told it is out of date (the rules of the
+  build changed), like every earlier change of rules.
+- Engine checks hold both marks at their edges (65 and 80 pass, 64 and 81 do
+  not; 575 of 548 passes, 576 does not), that a cause is put on and taken off,
+  and that a spend between the aim and the mark gives no cause.
+
+### "i cant understand what that means": a segment that lost its own rank values
+
+The economist sent a picture of step 5: "The applied design is not ready to
+export as finished - Segment 6, Normal: changed since it was built: reward
+definitions or drop rules - so the boards are allocated for an energy income
+they no longer have", the same for Recompletion, a disabled download and "The
+build on this page is NOT in use". And: "i cant understand what that means".
+
+Two things were wrong, and the warning itself was not one of them: it was
+right to stop the export.
+- **The cause.** A rank the build re-values remembers what was typed, and that
+  mark was what told a segment's own values apart when Segment 1's settings
+  are copied to the other segments. A build that gives a segment EXACTLY the
+  typed values - merge energy 5/15/35/75 for a segment whose amount needs a
+  top value of 75 - changes no rank and leaves no mark, so the copy replaced
+  that segment's values with Segment 1's (reproduced: 5/15/35/75 became
+  10/30/70/150). The segment's boards had been built for other values: its
+  stamp no longer matched, in both phases, and the build was no longer what
+  was in use. Typing other twists for one segment was tried first as a cause
+  and ruled out (the build stays in use). The copy now keeps a segment's
+  ladder whenever the typed definition is the same on both sides, marked or
+  not; values typed anew on Segment 1 still reach every segment. Not a change
+  to any formula or value - the build's result is now what is stored. A
+  project caught by it is put right by building again.
+- **The words.** The warning now says: "The event was changed after its last
+  build. A download would hold boards that no longer match what was built for
+  them. Build again and they are in line." - then, per segment, what changed
+  ("reward rank values or drop rules changed after the last build"), a "Build
+  again" button, and "Download anyway - I know these boards do not match their
+  last build."
+
+### A second pass on the Build step: what to look at stays in sight, the detail folds
+
+The economist: "keep on another run to check what can be done even better."
+
+With the Twister's pass mark a segment could be flagged for a reason that has
+no quick fix, and the selected segment's whole detail - opened by itself
+whenever a segment had something to look at - made step 4 **2,321 px** tall
+on the seven-segment project (1500 x 800 window). A problem must stay in
+sight; its 900 px of tables need not.
+
+- **`segment-causes`**: a small panel under the summary, "{segment}: what to
+  look at", holds the causes of the segment shown, each with its fixes. It is
+  there only when there is a cause.
+- **The segment's detail never opens by itself** (`build-segment-{phase}`,
+  `data-testid="segment-detail-fold"`). "Show the detail" in the summary opens
+  it and scrolls to it.
+- A Twister cause no longer says its first sentence twice (the row's message
+  repeated the cause's title), and an action label has no full stop.
+
+Step 4 after a build is **1,562 px** on the same project (single build; 1,376
+before the pass marks existed, when that project had no cause to show).
+Checked in the browser: guided-flow 84, build-event 125, build-feedback 88,
+twister-easy 44, each run alone.
+
+### The shortest stage link
+
+The economist: "i also want u to make sure the link of the stage as short as
+pobbisle."
+
+**What a link was.** Format 2 wrote each list as JSON by field name - what
+its boards share once, each board's own fields - gzipped, in base 62. A built
+event with three boards, three Recompletion boards, rewards, drops and a
+Twister was **2,339 characters** after the address (15,346 bytes of JSON,
+1,740 gzipped).
+
+**What play reads.** A robot played the real play engine (normal event,
+Recompletion, endless) on boards wrapped so that every field read was written
+down. The engine reads, per board, `name, rows, cols, tiles, semiPlacements
+(row, col, rank), blockedQueue`, and for the list the reward values
+(`prizeAmount` only), what each container drops and whether the build made
+it, the weights per merge rank with their `noDropWeight` and `belowStart`,
+the four drop ranks, the leftover rule, the lucky-drop EV, the two generator
+ranks, the price of a twist and the spin objective. The play screens add one
+thing the engine does not read: `rewardRanks`, the marks on the ranks bar -
+found by reading the screens, not by the robot. Nothing else is needed: the
+player's side back-fills every other field (`normalizeBoards`), and gives
+every board of a list its first board's shared settings anyway.
+
+**Format 3** (`stageShare.js`), each step measured on two built events (the
+second with other layouts, demand and amounts, four boards a phase):
+
+| | event 1 | event 2 |
+|---|---|---|
+| format 2 | 2,339 | - |
+| only what play reads, by position, numbers | 449 | 520 |
+| ...items, items in sight and containers as one character each | 392 | 446 |
+| ...one number a merge rank where one container always drops | 366 | 419 |
+| ...read against a dictionary | **227** | **272** |
+| the normal event alone | 145 | 172 |
+
+- **By position**: a list is `[settings, values, containers, weights,
+  boards]`; a board `[name or 0, rows, columns, tiles, items in sight,
+  queue]`.
+- **One character an item**: a main-chain rank is its base-36 digit, a reward
+  item a capital letter worked out from its number (1000 + 10 x reward +
+  rank). Tiles are `o`, `b`, `s`. An item in sight is row, column, item.
+- **Containers** are strings of reward digit and rank digit, in the
+  container's own order. The order is kept on purpose: it is the order the
+  items land on the board in, and the first version, which wrote a container
+  as five positions, changed it.
+- **Weights**: `-1` nothing drops, a number = always that container (steady
+  containers), else the full row.
+- **A dictionary** (`STAGE_DICTIONARY`, 3,213 characters): the 27 layouts of
+  the bank as this writing spells them (a first board with its items in
+  sight), the round value ladders a build gives, typical containers, tables
+  and settings. Raw deflate at its highest level reads the link against it
+  (`encodeCompactToUrlParam`, marker letter `B`), which also drops gzip's 18
+  bytes of header and checksum. A check number inside the link stands in for
+  the checksum.
+- **Not worth it, measured**: writing "as the normal event" where
+  Recompletion repeats it (deflate already does: 250 against 246).
+- **The address** is `?s=` in place of `?play&stage=`: nine characters less.
+
+**Frozen.** The dictionary, the order of the five rewards, the letters and
+the positions can never change: a link made today has to open for as long as
+links are opened. A new dictionary is a new marker letter and a new format
+number, with this one kept for reading. `verify-stage-link.mjs` holds a link
+written down on 22 November 2026 and the dictionary's fingerprint.
+
+**What still opens**: format 2 (`A...`), the base64url writing (`H4sI...`),
+a bare list of boards, and the address `?play&stage=`. A stage with something
+the short writing has no place for (a rank over 35, a reward it does not
+know) is written in format 2.
+
+**A link changed on the way** reads as broken, never as another stage: every
+character of a link was swapped three ways and dropped once (738 and 245
+links), none opened as another stage.
+
+**Checked.** `verify-stage-link.mjs`, 29 checks: the link of the day, every
+item's character, a built event short and for play the same stage - a robot
+plays the stage and its link to the same last item through Recompletion and
+endless, three kinds of player - every older writing, the fallback, a changed
+link. A built event is 246 to 260 characters there (single builds).
+`verify-real-play` (70) already played its event through the link, with the
+simulator on the same boards, and passes. One check in `verify-v2-rewards`
+looked for a container by its editor id, which a link no longer carries; it
+now looks at what the container holds. In the browser: audit-fixes opens the
+link made by "Share stage" as a first visit, behind both addresses (15
+checks; the link is 190 characters with the address for two built boards);
+play-mobile 47, play-motion 37, real-play 40, small-rewards-play 31,
+twister-play 42, endless-mode 56.
+
+**A link in this writing opens only on a site deployed with it.** Until a
+deploy, "Share stage" makes links the live site cannot read.
+
+### The Chef flow: the Merge logic applied to Chef
+
+The economist: "ill want u to give an over view of all the chef feature in
+this app. of everything we got, befor writing the overview i want u to apply
+the logic of how we build the merge also to the chef. the flow and etc. the
+promp ull give me iwll be sent to GPT for future tasks."
+
+**What Chef was**: nine flat tabs (Ingredients, Dishes, Baskets, Calendar,
+Segments, Blocker sources, Validation, Simulation, Basket value) in a
+1,152 px column, every project action in a bar, cards for everything. In a
+1500 x 800 window: Dishes 1,702 px, Baskets 1,722, Basket value 1,567,
+Segments 1,153, Blocker sources 1,085, Calendar 1,030.
+
+**What it is**: five steps in the order of the work - Event and players,
+Ingredients and dishes, Baskets, Simulate, Basket value - each saying what it
+is for, "Next" opening the next at its top, at the app's full width.
+
+| Step | Height, first visit | Was |
+|---|---|---|
+| 1 Event and players | 800 (one screen) | Calendar 1,030 + Segments 1,153 |
+| 2 Ingredients and dishes | 1,062 | Ingredients 957 + Dishes 1,702 |
+| 3 Baskets | 951 | Baskets 1,722 + Blocker sources 1,085 |
+| 4 Simulate | 800 before a run, 1,273 after | Simulation 800 before a run; 9 cards after |
+| 5 Basket value | 810 | 1,567 |
+
+- **Tables in place of cards** for what is typed: segments, phases,
+  ingredients. One phase of baskets in view, its three side by side.
+- **Folded**: the dishes as cards; sales and events; where each blocker comes
+  from; what a run plays; day by day; all segments on one chart; a segment
+  dish by dish; the two what-ifs; the list of checks; what one ingredient
+  counts for.
+- **The checks are no longer a tab.** A finding carries the step that puts it
+  right (`step` in `chefValidation.js`), is shown at the top of that step,
+  never folded, and counted on the step's button; the Simulate step lists
+  what needs a fix with a link to its step, and the whole list is a fold
+  there. Their words are the economist's: "Epic basket, Phase 2", an
+  ingredient's name, "Needs a fix / Worth a look / Good to know".
+- **One button to simulate**, a line saying what it plays, a progress bar.
+  After a run one row a segment leads. The words are plain: the middle
+  player, most players, simulated players, the same players every run.
+- **A run is kept for the visit, per chef, and marked "Out of date"** once
+  the chef has changed - not dropped, not shown as current.
+- **The header**: name, "Unsaved changes" / "Saved", one "More" menu, Save.
+- **A number is taken when its field is left** (`Num`). The fields reported
+  every key before, so "0.25" could not be typed in one go: "0." became 0.
+- **New, because a blank chef could not be finished without them**: adding
+  and removing a phase (its baskets go with it), typing the prize for cooking
+  every dish, "Add a basket" giving the first type the phase lacks, and a row
+  for every ingredient in every basket (one added after a basket was made had
+  no row there, so it could never be given a weight in it).
+- `Collapsible` moved to `src/components/ui/` (the Merge flow re-exports it);
+  the low-row and line-length rules of `index.css` hold for `.chef-app` too.
+
+**Two bugs of presentation, fixed.** The day-by-day basket value chart was
+blank: its day columns had no height, so every bar was 0 px (63 bars of 46 to
+160 px now). The "more or fewer baskets" chart had the same fault.
+
+**Two limits of the model, found by measuring, said on screen and not
+changed** (the model is the economist's; `verify-chef.mjs` section 8 holds
+both as they are):
+- **"One more basket" is noisy.** Its two plays share players and days of
+  play, not the luck of the baskets after the extra one. Halloween, 300
+  players: one more basket that gives nothing moved the average prize by
+  0.63; one more Basic basket on day 1 gave +3.4, +3.9, +3.5, +6.4, -0.6 and
+  +2.4 on six sets of players. Step 5 says the figure is rough, before it is
+  run. A stream of its own for the extra basket would fix it.
+- **An activity shape other than Flat changes the number of baskets**: over
+  Halloween's 21 days a slow start -5.7%, a fade -8.6%, a weekend boost
+  +8.6%. Step 1 shows the figure beside the shape.
+
+**Checked.** `verify-chef.mjs`, the feature's first engine checks (56): the
+two real chefs, the checks' steps and words, a basket roll's rules over 2,400
+rolls, the same players giving the same result, the order of a run's
+figures, more baskets and sales never cooking fewer dishes, the what-ifs, the
+basket value, the two limits, backups and removing an ingredient.
+`chef-flow.mjs` in the browser (104), as a first visit at 1500 x 800 and at
+1280: the steps, the menu, typing, Next, each step, a run and its folds, out
+of date, the charts drawn, several chefs, a backup out and in, the copies, a
+new ingredient, the Recompletion round, no step wider than its window. `docs/chef-overview.md` is the feature's description and the
+brief for whoever takes tasks on it.
+
+**A crash in an old check, found by the full run.** `verify-event-build` stopped
+a full engine run with a TypeError, not a failed check: "the values are whole
+numbers, each segment its own" read the record of a re-valued reward on every
+segment, and a segment the build gives exactly the typed values has none (the
+same fact that made a segment lose its values in the round before). It only
+shows on a draw where that happens - the suite had passed three times that
+day. The check now reads the typed values for such a segment.

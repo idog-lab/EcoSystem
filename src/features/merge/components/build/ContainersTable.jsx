@@ -33,13 +33,28 @@ export default function ContainersTable({ dropGroups, dropGroupsConfig, minDropR
       <div className="overflow-x-auto">
         <table className="w-full min-w-[36rem] text-sm tabular-nums">
           <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-              <th className="py-1.5 pr-3">Container</th>
-              <th className="py-1.5 pr-3">What it drops</th>
-              <th className="py-1.5 pr-3">Written as</th>
+            {/* One head for all the weight columns, so each column is as wide as
+                its numbers and not as its sentence ("Weight, merges making rank
+                5" on every column squeezed the first three columns to a word a
+                line). */}
+            <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <th rowSpan={2} className="border-b border-slate-200 py-1.5 pr-4 align-bottom">
+                Container
+              </th>
+              <th rowSpan={2} className="min-w-[10rem] border-b border-slate-200 py-1.5 pr-3 align-bottom">
+                What it drops
+              </th>
+              <th rowSpan={2} className="border-b border-slate-200 py-1.5 pr-4 align-bottom">
+                Written as
+              </th>
+              <th colSpan={dropping.length} className="border-b border-slate-100 py-1 pr-3 text-right">
+                Weight out of 1,000, for a merge that makes
+              </th>
+            </tr>
+            <tr className="border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               {dropping.map((run) => (
                 <th key={run.from} className="py-1.5 pr-3 text-right whitespace-nowrap">
-                  Weight, merges making {span(run)}
+                  {span(run)}
                 </th>
               ))}
             </tr>
@@ -47,7 +62,7 @@ export default function ContainersTable({ dropGroups, dropGroupsConfig, minDropR
           <tbody>
             {containers.map((c) => (
               <tr key={c.id} className="border-b border-slate-100" data-container={c.key}>
-                <td className="py-1.5 pr-3 font-semibold text-slate-700">{c.key}</td>
+                <td className="py-1.5 pr-3 font-semibold whitespace-nowrap text-slate-700">{c.key}</td>
                 <td className="py-1.5 pr-3">
                   <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     {ALL_REWARD_TYPES.filter((t) => c.items?.[t] != null).map((t) => (
@@ -59,14 +74,15 @@ export default function ContainersTable({ dropGroups, dropGroupsConfig, minDropR
                     <span className="text-xs text-slate-500">{c.contents}</span>
                   </span>
                 </td>
-                <td className="py-1.5 pr-3 font-mono text-xs text-slate-600" data-field="container-syntax">
+                <td className="py-1.5 pr-3 font-mono text-xs whitespace-nowrap text-slate-600" data-field="container-syntax">
                   {c.syntax}
                 </td>
                 {dropping.map((run) => {
                   const weight = run.row.weights[c.id] ?? 0
                   return (
                     <td key={run.from} className={`py-1.5 pr-3 text-right whitespace-nowrap ${weight > 0 ? 'text-slate-700' : 'text-slate-300'}`}>
-                      {weight} <span className="text-xs text-slate-400">({share(weight, run.row.total)})</span>
+                      {weight}
+                      {weight > 0 && <span className="text-xs text-slate-400"> ({share(weight, run.row.total)})</span>}
                     </td>
                   )
                 })}

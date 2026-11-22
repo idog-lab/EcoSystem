@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { setEffortTargetForBuild } from './features/merge/lib/build/eventBuild'
-import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer } from 'lucide-react'
+import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer, Menu, Info, Plus } from 'lucide-react'
 import BoardList from './features/merge/components/editor/BoardList'
 import BoardEditor from './features/merge/components/editor/BoardEditor'
 import PlayTester from './features/merge/components/play/PlayTester'
@@ -40,15 +40,34 @@ const PRODUCTION_ORIGIN = 'https://idoggk.github.io/Merge/'
 // "Build event" is the guided workflow and the place to start; every tab
 // after it is an advanced tool that edits the same canonical configuration
 // (there is no second copy of the design anywhere).
+// THE MAIN PATH is three tabs: build the event, play it, export it. The
+// other five are advanced tools over the same configuration and sit apart,
+// under their own caption, so a first visit is not asked to choose between
+// eight things of equal weight ("Recompletion" there is the Recompletion
+// board editor - the Recompletion PHASE is built in Build event).
+// A row of the "More" menu. (A plain button, so it is found by its name like any other.)
+function MenuItem({ icon: Icon, children, danger = false, ...props }) {
+  return (
+    <button
+      type="button"
+      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold whitespace-nowrap ${danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-100'}`}
+      {...props}
+    >
+      {Icon && <Icon size={14} strokeWidth={2.25} className="shrink-0" />}
+      {children}
+    </button>
+  )
+}
+
 const MODES = [
-  { id: 'build', label: 'Build event', icon: Hammer },
-  { id: 'editor', label: 'Editor', icon: LayoutGrid },
-  { id: 'recompletion', label: 'Recompletion', icon: RotateCcw },
-  { id: 'rewards', label: 'Rewards (V2)', icon: Gift },
-  { id: 'twister', label: 'Twister', icon: Tornado },
-  { id: 'play', label: 'Play tester', icon: Gamepad2 },
-  { id: 'cc', label: 'CC management', icon: Boxes },
-  { id: 'syntax', label: 'Syntax', icon: FileCode2 },
+  { id: 'build', label: 'Build event', icon: Hammer, hint: 'The guided flow: enter the event, build it, test and apply it' },
+  { id: 'play', label: 'Play tester', icon: Gamepad2, hint: 'Play a segment yourself' },
+  { id: 'syntax', label: 'Syntax', icon: FileCode2, hint: 'The Ops export of the event in use' },
+  { id: 'editor', label: 'Editor', icon: LayoutGrid, advanced: true, hint: 'Advanced: the normal event board editor' },
+  { id: 'recompletion', label: 'Recompletion', icon: RotateCcw, advanced: true, hint: 'Advanced: the Recompletion board editor' },
+  { id: 'rewards', label: 'Rewards (V2)', icon: Gift, advanced: true, hint: 'Advanced: reward definitions, drop groups, pinned reward items' },
+  { id: 'twister', label: 'Twister', icon: Tornado, advanced: true, hint: 'Advanced: a closer look at Twister income' },
+  { id: 'cc', label: 'CC management', icon: Boxes, advanced: true, hint: 'Advanced: CC per board' },
 ]
 
 // Eight player segments (bucketed by daily Brut Win habit - see CLAUDE.md's
@@ -57,8 +76,9 @@ const MODES = [
 // economist request ("4 different configurations for 4 different
 // segments"), raised to 8 by a later explicit request ("let me support 8
 // segments"). The count is a fixed constant, not economist-configurable,
-// matching the literal ask; add/remove-segment UI wasn't requested and isn't
-// built. `segmentsFromPersisted` below already migrates an older 4-segment
+// matching the literal ask: all eight always exist. Which of them are IN
+// SIGHT is another matter (see segmentInUse below) - the bar shows the ones
+// in use and "Add segment" brings the next one in; none is ever removed. `segmentsFromPersisted` below already migrates an older 4-segment
 // save/backup cleanly onto this - `parsed.segments[i] ?? {}` falls back to a
 // fresh segment for any index the old save didn't have, so segments 5-8
 // simply start blank rather than erroring or losing segments 1-4's data.
@@ -568,7 +588,7 @@ function migrateTwisterByBuild(segments) {
 // all the small rewards and collect them. to understand how much really the
 // user got". So a project saved BEFORE the rule (no `leftoverRule` mark) is
 // switched to 'collect' when it is opened, on every list of every segment; a
-// project saved since keeps whatever step 4 was set to.
+// project saved since keeps whatever step 3 was set to.
 const LEFTOVER_RULE_MARK = 'collect-by-default'
 function migrateLeftoverRule(segments, parsed) {
   if (parsed?.leftoverRule === LEFTOVER_RULE_MARK) return segments
@@ -678,8 +698,9 @@ function useSegment(initial) {
   }
 }
 
-// A shared stage link (?play, optionally &stage=<encoded boards> — see
-// stageShare.js) renders the stripped-down player view instead of the
+// A shared stage link (?s=<encoded boards>, see stageShare.js; before the
+// short link it was ?play&stage=<encoded boards>, which still opens, and a
+// bare ?play is the demo) renders the stripped-down player view instead of the
 // economist app entirely, so a friend opening the link never sees the
 // editor/CC-management/syntax tooling. No stage param falls back to the
 // baked-in defaultStage.js demo, so a bare "?play" link is still meaningful.
@@ -694,7 +715,7 @@ function useSegment(initial) {
 function PlayApp() {
   const [{ boards, rcBoards, linkBroken }] = useState(() => {
     const params = new URLSearchParams(window.location.search)
-    const stageParam = params.get('stage')
+    const stageParam = params.get('s') ?? params.get('stage')
     const demo = { boards: createDefaultStage().boards, rcBoards: null }
     if (!stageParam) return { ...demo, linkBroken: false }
     const decoded = decodeStage(stageParam)
@@ -809,7 +830,7 @@ function PlanApp() {
         </div>
       </header>
 
-      <main className="max-w-[1760px] mx-auto px-6 py-6 flex gap-8">
+      <main className="max-w-[1760px] mx-auto px-6 py-4 flex gap-8">
         <PlanSegmentView
           key={activeSegmentIndex}
           segment={activeSegment}
@@ -1132,7 +1153,7 @@ function EditorApp({ onHome }) {
       if (buildDrafts.main || buildDrafts.rc) localStorage.setItem(DRAFT_STORAGE_KEY, serializeDrafts({ drafts: buildDrafts, validation: buildValidation }))
       else localStorage.removeItem(DRAFT_STORAGE_KEY)
     } catch {
-      setDraftNotice('The draft is too large to keep in this browser, so it will not survive a reload. Your applied design is unaffected.')
+      setDraftNotice('The results of this build are too large to keep in this browser, so the results (not the event itself) will be gone after a reload. Build again to see them.')
     }
   }, [buildDrafts, buildValidation])
   function resetBuildWorkflow() {
@@ -1144,6 +1165,7 @@ function EditorApp({ onHome }) {
     setTwisterResults({ analysis: {}, suggestions: {} })
     setDraftNotice(null)
     setBuildStep('setup')
+    setAddedSegments(new Set())
   }
   function goRebuild(phase) {
     if (phase) setRewardsPhase(phase)
@@ -1172,6 +1194,56 @@ function EditorApp({ onHome }) {
   const [planCopied, setPlanCopied] = useState(false)
   const [planWarning, setPlanWarning] = useState(null)
   const [importError, setImportError] = useState(null)
+  const [backupInfo, setBackupInfo] = useState(false)
+  // THE "MORE" MENU (economist: "the app is very heavy in text and buttons";
+  // and of the five advanced tools: "i use only the builder as for the last
+  // runs"). The header keeps what is used all the time - the three tools of
+  // the main path, Share stage and Save. The project actions (planning link,
+  // backup, clear) and the five advanced tools sit in one menu. An advanced
+  // tool that is open shows as a tab while it is open, so the header always
+  // says where you are.
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef(null)
+  useEffect(() => {
+    if (!moreOpen) return undefined
+    const onDown = (e) => {
+      if (!moreRef.current?.contains(e.target)) setMoreOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [moreOpen])
+  const fromMenu = (action) => () => {
+    setMoreOpen(false)
+    action()
+  }
+  // THE SEGMENTS IN SIGHT. Eight segments exist; the bar (and step 1) show the
+  // ones in use: a segment with a DR demand or DR on its boards, one given a
+  // name of its own, the one selected, and any brought in with "Add segment"
+  // (kept for the visit). Segment 1 is always there. Nothing is removed - a
+  // segment out of sight keeps whatever it holds and comes back the moment it
+  // is added or given a demand.
+  const [addedSegments, setAddedSegments] = useState(() => new Set())
+  const segmentInUse = (seg, i) =>
+    i === 0 ||
+    seg.main.targetSubsidy != null ||
+    seg.recompletion.targetSubsidy != null ||
+    seg.main.boards.some((b) => (b.blockedValue ?? 0) > 0) ||
+    (!!seg.name && seg.name !== DEFAULT_SEGMENT_NAMES[i])
+  const shownSegments = segments.map((_, i) => i).filter((i) => segmentInUse(segments[i], i) || i === activeSegmentIndex || addedSegments.has(i))
+  const nextHiddenSegment = segments.findIndex((_, i) => !shownSegments.includes(i))
+  // (From the bar the new segment is also selected, ready to be named; from step 1 it is only added as a row.)
+  const addSegment = (select = true) => {
+    if (nextHiddenSegment < 0) return
+    setAddedSegments((prev) => new Set(prev).add(nextHiddenSegment))
+    if (select) setActiveSegmentIndex(nextHiddenSegment)
+  }
   const importInputRef = useRef(null)
 
   // Board layout/rank rewards are read-only on every segment but the first
@@ -1246,8 +1318,46 @@ function EditorApp({ onHome }) {
     })
     .map(([, label]) => label)
 
+  // UNSAVED CHANGES. The project is written by Save only, and nothing used
+  // to say that what is on screen differs from what a reload would bring
+  // back. The whole project is compared with its last saved (or loaded) form
+  // a moment after the screen settles - not on every render: it is large.
+  // What counts as "saved" on arrival is the project as it stands shortly
+  // after it opened (once the loaded data has been brought up to date), taken
+  // on its own clock so a busy first second cannot push it past a first edit.
+  const savedSignature = useRef(null)
+  const latestSegments = useRef(segments)
+  latestSegments.current = segments
+  const [unsaved, setUnsaved] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (savedSignature.current != null) return
+      try {
+        savedSignature.current = JSON.stringify(buildSaveShape(latestSegments.current))
+      } catch {
+        // Left unset: the next comparison takes it.
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      let signature
+      try {
+        signature = JSON.stringify(buildSaveShape(segments))
+      } catch {
+        return
+      }
+      if (savedSignature.current == null) savedSignature.current = signature
+      setUnsaved(signature !== savedSignature.current)
+    }, 700)
+    return () => clearTimeout(timer)
+  })
   function handleSave() {
-    saveState(buildSaveShape(segments))
+    const shape = buildSaveShape(segments)
+    saveState(shape)
+    savedSignature.current = JSON.stringify(shape)
+    setUnsaved(false)
     setSavedAt(new Date())
   }
 
@@ -1282,7 +1392,7 @@ function EditorApp({ onHome }) {
     const unbuiltMain = main.boards.map((b, i) => (boardIsBuilt(b) ? null : i + 1)).filter(Boolean)
     if (unbuiltMain.length > 0) {
       setShareLink(null)
-      setShareWarning(`No link was made: Board ${unbuiltMain.join(', ')} has tiles but nothing under them, so it cannot be played. Build the event (Build event, steps 6 and 7) and share again.`)
+      setShareWarning(`No link was made: Board ${unbuiltMain.join(', ')} has tiles but nothing under them, so it cannot be played. Build the event (Build event, step 4) and share again.`)
       return
     }
     const unbuiltRc = activeRcBoards.map((b, i) => (boardIsBuilt(b) ? null : i + 1)).filter(Boolean)
@@ -1294,7 +1404,9 @@ function EditorApp({ onHome }) {
       setShareWarning(`The stage link could not be made: ${error?.message ?? error}`)
       return
     }
-    const fullUrl = `${PRODUCTION_ORIGIN}?play&stage=${encoded}`
+    // "?s=" and not "?play&stage=": nine characters less in every link (the
+    // older address still opens - see App below).
+    const fullUrl = `${PRODUCTION_ORIGIN}?s=${encoded}`
     setShareLink(fullUrl)
     if (!(await copyText(fullUrl))) {
       setShareWarning(`The browser did not allow copying. Select and copy the link here: ${fullUrl}`)
@@ -1384,7 +1496,14 @@ function EditorApp({ onHome }) {
   // already saved together. This is ADDITIONAL to handleSave/localStorage,
   // not a replacement for it.
   function handleExportBackup() {
-    const payload = buildSaveShape(segments)
+    // Besides the project: the drafts waiting in Build event and the effort
+    // shape typed in step 4 (both live outside the project save), so a file
+    // sent to reproduce an issue opens on the same draft, not on a new build.
+    const payload = {
+      ...buildSaveShape(segments),
+      ...(buildDrafts.main || buildDrafts.rc ? { buildDrafts: JSON.parse(serializeDrafts({ drafts: buildDrafts, validation: buildValidation })) } : {}),
+      effortTargets: { main: mainTargetPctInputs, rc: recompletionTargetPctInputs },
+    }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1441,6 +1560,20 @@ function EditorApp({ onHome }) {
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
     resetBuildWorkflow()
+    // A backup made since drafts travel with it brings them back, marked as
+    // restored (nothing is applied by that), and the effort distribution too.
+    if (parsed.buildDrafts) {
+      const restored = deserializeDrafts(JSON.stringify(parsed.buildDrafts))
+      setBuildDrafts(restored.drafts)
+      setBuildValidation(restored.validation)
+      setDraftNotice(restored.notice)
+    }
+    for (const [which, set] of [['main', setMainTargetPctInputs], ['rc', setRecompletionTargetPctInputs]]) {
+      const typed = parsed.effortTargets?.[which]
+      const blank = emptyTargetPctInputs()
+      if (typed && typeof typed === 'object') for (const rank of Object.keys(blank)) if (typeof typed[rank] === 'string') blank[rank] = typed[rank]
+      set(blank)
+    }
     setImportError(null)
   }
 
@@ -1463,12 +1596,16 @@ function EditorApp({ onHome }) {
   function handleClearData() {
     if (
       !window.confirm(
-        'Clear all saved data? This deletes every board (main and recompletion) across every segment, saved suggestions, and the subsidy/event settings. This cannot be undone.',
+        'Clear everything? This empties all 8 segments: demands, boards, rewards, Twister and the drafts.\n\nA backup file of what you have now is downloaded first, so you can bring it back with "Import backup".',
       )
     ) {
       return
     }
+    // The way back: what is being cleared, as a backup file.
+    handleExportBackup()
     clearState()
+    // What is left after clearing is the new starting point, not an unsaved change.
+    savedSignature.current = null
     segments.forEach((seg, i) => {
       seg.main.replaceAll({ boards: [createBoard('Board 1')], presets: [], targetSubsidy: null })
       seg.recompletion.replaceAll({ boards: [createBoard('Board 1')], presets: [], targetSubsidy: null })
@@ -1496,17 +1633,14 @@ function EditorApp({ onHome }) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen merge-app">
       <div className="app-backdrop" aria-hidden="true" />
 
       <header className="bg-white/80 backdrop-blur-md border-b border-white sticky top-0 z-30 shadow-sm shadow-purple-950/5">
-        {/* Three rows, none of which is ever asked to shrink its text: the
-            title + project actions, the mode tabs, then the segment switcher.
-            The tabs used to share the first row; with eight of them (Twister
-            was the eighth) that row ran out of width and the browser started
-            wrapping the title, the tab labels and the action buttons onto
-            several lines each. Every label is now whitespace-nowrap, and a
-            row that runs out of room wraps whole items instead. */}
+        {/* Two rows, none of which is ever asked to shrink its text: the title
+            with Share stage, the "More" menu and Save; then the tools and the
+            segments. Every label is whitespace-nowrap, and a row that runs
+            out of room wraps whole items instead. */}
         <div className="max-w-[1760px] mx-auto px-6 pt-3 pb-2 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap">
           <div className="flex items-center gap-3 shrink-0">
             <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onHome} className="whitespace-nowrap">
@@ -1515,44 +1649,53 @@ function EditorApp({ onHome }) {
             <div className="bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white rounded-xl p-2 shadow-md shadow-purple-500/30 shrink-0">
               <Puzzle size={20} strokeWidth={2.25} />
             </div>
-            <div className="shrink-0">
-              <h1 className="font-display text-lg font-bold text-slate-900 leading-tight tracking-tight whitespace-nowrap">Merge Mania Board Simulator</h1>
-              <p className="text-xs text-slate-400 leading-tight whitespace-nowrap">Board layout &amp; item-placement design tool</p>
-            </div>
+            <h1 className="font-display text-lg font-bold text-slate-900 leading-tight tracking-tight whitespace-nowrap">Merge Mania Board Simulator</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {savedAt && <span className="text-xs text-slate-400 whitespace-nowrap">Saved {savedAt.toLocaleTimeString()}</span>}
+            {unsaved ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 whitespace-nowrap" data-testid="unsaved-changes" title="The project is kept in this browser only when you press Save">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                Unsaved changes
+              </span>
+            ) : (
+              savedAt && <span className="text-xs text-slate-400 whitespace-nowrap">Saved {savedAt.toLocaleTimeString()}</span>
+            )}
             <Button variant="secondary" size="sm" icon={shareCopied ? Check : Share2} onClick={handleShare} className="whitespace-nowrap">
               {shareCopied ? 'Link copied!' : 'Share stage'}
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={planCopied ? Check : Eye}
-              onClick={handleSharePlan}
-              className="whitespace-nowrap"
-              title="A read-only link for coworkers to see every segment's design and run the full simulator — no editing"
-            >
-              {planCopied ? 'Link copied!' : 'Share planning'}
-            </Button>
-            <span className="flex flex-col items-center gap-0.5">
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Download}
-                onClick={handleExportBackup}
-                className="whitespace-nowrap"
-                title="Saves the applied project of every segment to a file. Build event drafts are not included."
-              >
-                Export backup
+            <div className="relative" ref={moreRef}>
+              <Button variant="secondary" size="sm" icon={Menu} onClick={() => setMoreOpen((v) => !v)} className="whitespace-nowrap" aria-expanded={moreOpen} aria-haspopup="true" data-testid="more-menu" title="Planning link, backup, clear data, and the advanced tools">
+                More
               </Button>
-              <span className="text-[10px] leading-none text-slate-400 whitespace-nowrap" data-testid="backup-excludes-drafts">
-                drafts not included
-              </span>
-            </span>
-            <Button variant="secondary" size="sm" icon={Upload} onClick={() => importInputRef.current?.click()} className="whitespace-nowrap">
-              Import backup
-            </Button>
+              {moreOpen && (
+                <div className="absolute right-0 top-full z-40 mt-2 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-purple-950/10" data-testid="more-menu-panel">
+                  <div className="px-2.5 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Project</div>
+                  <MenuItem icon={planCopied ? Check : Eye} onClick={fromMenu(handleSharePlan)} title="A read-only link for coworkers to see every segment's design and run the full simulator — no editing">
+                    Share planning
+                  </MenuItem>
+                  <MenuItem icon={Download} onClick={fromMenu(handleExportBackup)} title="Saves everything to a file: all 8 segments, the event in use, and the results of the last builds.">
+                    Export backup
+                  </MenuItem>
+                  <MenuItem icon={Upload} onClick={fromMenu(() => importInputRef.current?.click())}>
+                    Import backup
+                  </MenuItem>
+                  <MenuItem icon={Info} onClick={fromMenu(() => setBackupInfo(true))} data-testid="backup-contents-toggle">
+                    What a backup holds
+                  </MenuItem>
+                  <MenuItem icon={Trash2} danger onClick={fromMenu(handleClearData)}>
+                    Clear data
+                  </MenuItem>
+                  <div className="mt-1.5 border-t border-slate-100 px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400" data-testid="advanced-tools-label">
+                    Advanced tools
+                  </div>
+                  {MODES.filter((m) => m.advanced && m.id !== mode).map(({ id, label, icon, hint }) => (
+                    <MenuItem key={id} icon={icon} onClick={fromMenu(() => setMode(id))} title={hint} data-mode={id} data-advanced="yes" aria-pressed={false}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </div>
+              )}
+            </div>
             <input
               ref={importInputRef}
               type="file"
@@ -1560,27 +1703,25 @@ function EditorApp({ onHome }) {
               className="hidden"
               onChange={handleImportChange}
             />
-            <Button variant="danger" size="sm" icon={Trash2} onClick={handleClearData} className="ml-1 whitespace-nowrap">
-              Clear data
-            </Button>
             <Button variant="dark" size="sm" icon={Save} onClick={handleSave} className="whitespace-nowrap">
               Save
             </Button>
           </div>
         </div>
 
-        <div className="max-w-[1760px] mx-auto px-6 pb-2">
+        <div className="max-w-[1760px] mx-auto px-6 pb-3 flex items-center gap-x-6 gap-y-2 flex-wrap">
           <div className="inline-flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 flex-wrap max-w-full" aria-label="Tool">
-            {MODES.map(({ id, label, icon: Icon }) => (
+            {MODES.filter((m) => !m.advanced || m.id === mode).map(({ id, label, icon: Icon, advanced, hint }) => (
               <button
                 key={id}
                 type="button"
                 aria-pressed={mode === id}
                 onClick={() => setMode(id)}
+                title={hint}
+                data-mode={id}
+                data-advanced={advanced ? 'yes' : 'no'}
                 className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-all duration-150 ${
-                  mode === id
-                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm shadow-purple-500/30'
-                    : 'text-slate-500 hover:text-slate-700'
+                  mode === id ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm shadow-purple-500/30' : 'text-slate-600 hover:text-slate-800'
                 }`}
               >
                 <Icon size={14} strokeWidth={2.25} className="shrink-0" />
@@ -1588,44 +1729,72 @@ function EditorApp({ onHome }) {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="max-w-[1760px] mx-auto px-6 pb-3 flex items-center gap-3 flex-wrap">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">Segment</span>
-          {/* flex-wrap - 8 segment tabs (up from the original 4) no longer
-              reliably fit one row on a narrower viewport; wrapping keeps
-              every tab reachable without a horizontal scrollbar, at the
-              cost of the switcher sometimes taking two lines instead of one. */}
-          <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 flex-wrap">
-            {segments.map((seg, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setActiveSegmentIndex(i)}
-                title={i === activeSegmentIndex ? 'Editing this segment’s name' : `Switch to ${seg.name}`}
-                className={`flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-150 ${
-                  activeSegmentIndex === i
-                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm shadow-purple-500/30'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {activeSegmentIndex === i ? (
-                  <input
-                    value={seg.name}
-                    onChange={(e) => seg.setName(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder={DEFAULT_SEGMENT_NAMES[i]}
-                    className="bg-transparent outline-none w-28 text-white placeholder-white/60"
-                  />
-                ) : (
-                  seg.name
-                )}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">Segment</span>
+            <div className="flex items-center gap-1 bg-slate-100/80 rounded-xl p-1 flex-wrap" data-testid="segment-bar">
+              {shownSegments.map((i) => {
+                const seg = segments[i]
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setActiveSegmentIndex(i)}
+                    title={i === activeSegmentIndex ? 'Editing this segment’s name' : `Switch to ${seg.name}`}
+                    data-segment-tab={i}
+                    className={`flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-all duration-150 ${
+                      activeSegmentIndex === i ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-sm shadow-purple-500/30' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {activeSegmentIndex === i ? (
+                      <input
+                        value={seg.name}
+                        onChange={(e) => seg.setName(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder={DEFAULT_SEGMENT_NAMES[i]}
+                        className="bg-transparent outline-none w-28 text-white placeholder-white/60"
+                      />
+                    ) : (
+                      seg.name
+                    )}
+                  </button>
+                )
+              })}
+              {nextHiddenSegment >= 0 && (
+                <button
+                  type="button"
+                  onClick={() => addSegment(true)}
+                  title={`Bring in ${DEFAULT_SEGMENT_NAMES[nextHiddenSegment]}. A segment is shown once it has a DR demand; up to ${SEGMENT_COUNT}.`}
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg whitespace-nowrap text-purple-700 hover:bg-white"
+                  data-testid="add-segment"
+                >
+                  <Plus size={13} strokeWidth={2.5} /> Add segment
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
+      {backupInfo && (
+        <div className="mx-auto mt-2 mb-2 flex max-w-5xl flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-sm" data-testid="backup-contents">
+          <div className="min-w-[16rem] flex-1 leading-relaxed">
+            <div className="font-semibold text-slate-800">What a backup file holds</div>
+            <ul className="mt-1 ml-4 list-disc">
+              <li>All 8 segments: DR demand and board subsidy, board layouts, what is under every tile, reward targets and rules, rank values, the Twister, dates.</li>
+              <li>The event in use - the normal event and Recompletion, exactly as the Play tester and the exports use it.</li>
+              <li>The results of the last build of each phase with its test on players, the build before it (for &quot;Go back to the previous build&quot;), and the effort shape typed in step 4.</li>
+            </ul>
+            <div className="mt-1">
+              Not in it: results of the advanced Twister tool, and which tab or step you were on. <span className="font-semibold text-slate-700">To reproduce an issue</span>, export a backup right
+              when you see it and send the file - &quot;Import backup&quot; opens it on the same boards and the same build results. Importing replaces everything that is open; it is not saved in this
+              browser until you press Save.
+            </div>
+          </div>
+          <button type="button" className="rounded-lg px-2 py-1 font-semibold text-purple-700 hover:bg-purple-50" onClick={() => setBackupInfo(false)}>
+            Close
+          </button>
+        </div>
+      )}
       {shareLink && (
         <div className="mx-auto mb-2 flex max-w-5xl flex-wrap items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900" data-testid="share-link-box">
           <span className="font-semibold whitespace-nowrap">Link:</span>
@@ -1714,13 +1883,15 @@ function EditorApp({ onHome }) {
         </div>
       )}
 
-      <main className="max-w-[1760px] mx-auto px-6 py-6 flex gap-8">
+      <main className="max-w-[1760px] mx-auto px-6 py-4 flex gap-8">
         {mode === 'build' ? (
           <BuildEventPage
             key={dataEpoch}
             segments={segments}
             activeSegmentIndex={activeSegmentIndex}
             onSelectSegment={setActiveSegmentIndex}
+            shownSegments={shownSegments}
+            onAddSegment={nextHiddenSegment >= 0 ? () => addSegment(false) : null}
             phase={rewardsPhase}
             onPhaseChange={setRewardsPhase}
             step={buildStep}
@@ -1736,10 +1907,6 @@ function EditorApp({ onHome }) {
             draftNotice={draftNotice}
             targetPctInputs={rewardsPhase === 'main' ? mainTargetPctInputs : recompletionTargetPctInputs}
             onTargetPctInputsChange={rewardsPhase === 'main' ? setMainTargetPctInputs : setRecompletionTargetPctInputs}
-            onOpenTwister={(source) => {
-              setTwisterSource(source)
-              setMode('twister')
-            }}
             playOverride={playOverride}
             onPlay={(override) => {
               setPlayOverride(override)
@@ -1794,6 +1961,7 @@ function EditorApp({ onHome }) {
           </>
         ) : (
           <>
+            {mode !== 'syntax' && (
             <BoardList
               boards={main.boards}
               activeId={main.activeBoard?.id}
@@ -1805,7 +1973,9 @@ function EditorApp({ onHome }) {
               onUpdateBoard={main.updateBoard}
               targetSubsidy={main.targetSubsidy}
               layoutLocked={layoutLocked}
+              pickOnly={mode === 'play'}
             />
+            )}
             {main.activeBoard && mode === 'editor' && (
               <BoardEditor
                 key={main.activeBoard.id}
@@ -1848,19 +2018,48 @@ function EditorApp({ onHome }) {
                   <span className="flex-1 min-w-[16rem]">
                     {playOverride ? (
                       <>
-                        Playing <span className="font-semibold">{playOverride.label}</span>. This is not the applied design.
+                        Playing <span className="font-semibold">{playOverride.label}</span>
+                        {playOverride.builtAt ? `, built at ${new Date(playOverride.builtAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. The exports hold what is in use, not this - step 5 can
+                        put it in use.
                       </>
                     ) : (
-                      <>
-                        Playing the <span className="font-semibold">applied design</span> of {activeSegment.name || `Segment ${activeSegmentIndex + 1}`}.
-                      </>
+                      (() => {
+                        const design = designConsistency(main.boards)
+                        const builtTime = design.stamp?.builtAt ? new Date(design.stamp.builtAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
+                        return (
+                          <>
+                            Playing <span className="font-semibold">{activeSegment.name || `Segment ${activeSegmentIndex + 1}`}</span>
+                            <span data-play-design={design.state}>
+                              {design.state === 'consistent'
+                                ? `: the build${builtTime ? ` of ${builtTime}` : ''}, in use.`
+                                : design.state === 'stale'
+                                  ? `: the boards in use. They were edited after the build${builtTime ? ` of ${builtTime}` : ''}, so they no longer match it.`
+                                  : design.state === 'empty'
+                                    ? ': nothing is built on these boards yet. Build the event first (Build event, step 4).'
+                                    : ': the boards in use. They were made by hand, not by a build.'}
+                            </span>
+                            {pendingBuilds.includes('Normal') && <span className="font-semibold text-amber-700"> Another build is kept that is not in use (step 5) - this is not it.</span>}
+                          </>
+                        )
+                      })()
                     )}
                   </span>
                   {playOverride && (
                     <Button variant="secondary" size="sm" onClick={() => setPlayOverride(null)}>
-                      Switch to the applied design
+                      Play what is in use
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setBuildStep(playOverride || pendingBuilds.length > 0 ? 'finalize' : 'build')
+                      setMode('build')
+                    }}
+                    data-testid="play-back-to-build"
+                  >
+                    {playOverride || pendingBuilds.length > 0 ? 'Back to test and export (step 5)' : 'Back to the build results (step 4)'}
+                  </Button>
                 </div>
                 {playOverride ? (
                   <PlayTester key={`draft-${playOverride.builtAt}`} boards={playOverride.boards} boardIndex={0} rcBoards={playOverride.rcBoards} />
@@ -1871,7 +2070,7 @@ function EditorApp({ onHome }) {
             )}
             {mode === 'cc' && <CCManagement boards={main.boards} />}
             {mode === 'rewards' && (
-              <div className="flex flex-col gap-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-4">
                 {/* Phase tabs + (for RC) the variant picker - one phase on
                     screen at a time. RC targets are SHARED by variants A and
                     B (one rewardTargets.rc per segment); the variant picker
@@ -1927,7 +2126,7 @@ function EditorApp({ onHome }) {
               </div>
             )}
             {mode === 'twister' && (
-              <div className="flex flex-col gap-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-4">
                 <div className="flex flex-wrap items-center gap-2">
                   {[
                     { id: 'main', label: 'Normal phase' },
@@ -2000,7 +2199,7 @@ function EditorApp({ onHome }) {
 
 function App() {
   const params = new URLSearchParams(window.location.search)
-  const isPlayLink = params.has('play')
+  const isPlayLink = params.has('play') || params.has('s')
   const isPlanLink = params.has('plan')
   const [feature, setFeature] = useState(null)
 

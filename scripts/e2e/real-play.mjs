@@ -15,7 +15,7 @@ import { createBoard, withListPhase } from '../../src/features/merge/lib/core/bo
 import { withBlankCoinValues } from '../../src/features/merge/lib/rewards/rewardChain.js'
 import { buildEvent, segmentBuildInputs, rcInputsOnMainDraft, boardsWithDraftApplied } from '../../src/features/merge/lib/build/eventBuild.js'
 import { encodeStage } from '../../src/features/merge/lib/share/stageShare.js'
-import { BASE, createChecker, launch, openMerge, tab, ladderBoard } from './helpers.mjs'
+import { BASE, createChecker, launch, openMerge, tab, ladderBoard, syntaxView } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 const SHOT = process.env.E2E_SCREENSHOT_DIR ?? null
@@ -56,12 +56,13 @@ console.log('--- 1. Syntax: the normal list and Recompletion in the same sheets 
   await tab(page, 'Syntax').click()
   await page.waitForTimeout(400)
   const view = async (label) => {
-    await page.getByRole('button', { name: label, exact: true }).click()
+    await syntaxView(page, label)
     await page.waitForTimeout(250)
   }
   const rows = async () => page.locator('table tbody tr').evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.innerText.trim())))
   const head = async () => page.locator('table thead th').evaluateAll((ths) => ths.map((th) => th.innerText.trim()))
-  ok('one event: no "Recompletion Blocked Queue", "RC Small Rewards Bank" or "RC Small Reward Weights" tab', (await page.getByRole('button', { name: 'Recompletion Blocked Queue', exact: true }).count()) === 0 && (await page.getByRole('button', { name: /^RC Small/ }).count()) === 0 && (await page.getByRole('button', { name: 'Blocked Queue', exact: true }).count()) === 1)
+  const sheets = await page.getByTestId('syntax-view').locator('option').evaluateAll((options) => options.map((o) => o.textContent.trim()))
+  ok(`one event: no "Recompletion Blocked Queue", "RC Small Rewards Bank" or "RC Small Reward Weights" sheet (${sheets.length} sheets in the dropdown)`, !sheets.includes('Recompletion Blocked Queue') && !sheets.some((name) => /^RC Small/.test(name)) && sheets.filter((name) => name === 'Blocked Queue').length === 1)
 
   await view('Generator Weights')
   const gw = await rows()
@@ -115,6 +116,9 @@ console.log('--- 1. Syntax: the normal list and Recompletion in the same sheets 
   ok('the CC view says the lucky-drop bumps once, not under every board', (ccText.match(/EV \+8%/g) ?? []).length === 1 && (ccText.match(/QUEUE \+30%/g) ?? []).length === 3)
   // The all-segments workbook: what every segment shares is written once.
   const ExcelJS = (await import('exceljs')).default
+  // (A switch beside the export buttons says what a download holds: the segment shown, or all of them.)
+  await page.locator('[data-scope="all"]').click()
+  await page.waitForTimeout(150)
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download combined workbook' }).click()])
   const combined = new ExcelJS.Workbook()
   await combined.xlsx.readFile(await download.path())

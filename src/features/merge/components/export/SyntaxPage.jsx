@@ -164,6 +164,9 @@ export default function SyntaxPage({
   const canExportSegment = exportOverride || !designIssues.some((i) => i.segmentIndex === segmentIndex)
   const canExportAll = exportOverride || designIssues.length === 0
   const [view, setView] = useState('normal')
+  // What a download holds: the segment shown, or every segment in one file.
+  const [scope, setScope] = useState('segment')
+  const all = scope === 'all'
   const [copied, setCopied] = useState(false)
   const [gsLoading, setGsLoading] = useState(false)
   const [gsCopied, setGsCopied] = useState(false)
@@ -289,39 +292,62 @@ export default function SyntaxPage({
   return (
     <Card
       title="Syntax export"
-      subtitle="Draft export for the Ops handoff — being replaced sheet by sheet with the real spec (see eventSheets.js) as each one gets specced out"
+      subtitle="The Ops export of the event in use, sheet by sheet."
       icon={FileCode2}
       action={
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-            {VIEWS.map(({ id, label }) => (
+        <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="syntax-actions">
+          {/* The sheets in one dropdown (they were seventeen buttons), and one pair of
+              export buttons with a switch for what they hold (they were two pairs). */}
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap">
+            Sheet
+            <select value={view} onChange={(e) => setView(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800" data-testid="syntax-view">
+              {VIEWS.map(({ id, label }) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button variant="secondary" size="sm" icon={copied ? Check : Copy} onClick={handleCopy} disabled={!canExportSegment} title="Copies the sheet shown, tab-separated">
+            {copied ? 'Copied' : 'Copy as TSV'}
+          </Button>
+          <div className="inline-flex bg-slate-100 rounded-xl p-1" data-testid="syntax-scope">
+            {[
+              ['segment', 'This segment'],
+              ['all', 'All segments'],
+            ].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setView(id)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-150 ${
-                  view === id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
+                aria-pressed={scope === id}
+                onClick={() => setScope(id)}
+                data-scope={id}
+                title={id === 'all' ? 'The download holds every segment, in one file' : 'The download holds the segment picked in the bar at the top'}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-all duration-150 ${scope === id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <Button variant="secondary" size="sm" icon={copied ? Check : Copy} onClick={handleCopy} disabled={!canExportSegment}>
-            {copied ? 'Copied' : 'Copy as TSV'}
-          </Button>
-          <Button variant="secondary" size="sm" icon={Download} onClick={handleDownloadWorkbook} disabled={!canExportSegment} title="Only the currently active segment — see 'All segments' below for every segment at once">
-            Download workbook (this segment)
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Download}
+            onClick={all ? handleDownloadAllSegmentsWorkbook : handleDownloadWorkbook}
+            disabled={all ? !canExportAll : !canExportSegment}
+            aria-label={all ? 'Download combined workbook' : 'Download workbook (this segment)'}
+          >
+            Download workbook
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            icon={gsCopied ? Check : FileSpreadsheet}
-            onClick={handleCreateGoogleSheet}
-            disabled={gsLoading || !canExportSegment}
-            title="Only the currently active segment — see 'All segments' below for every segment at once"
+            icon={(all ? allGsCopied : gsCopied) ? Check : FileSpreadsheet}
+            onClick={all ? handleCreateAllSegmentsGoogleSheet : handleCreateGoogleSheet}
+            disabled={all ? allGsLoading || !canExportAll : gsLoading || !canExportSegment}
+            aria-label={all ? 'Create combined Google Sheet' : 'Create Google Sheet (this segment)'}
           >
-            {gsLoading ? 'Creating…' : gsCopied ? 'Link copied!' : 'Create Google Sheet (this segment)'}
+            {(all ? allGsLoading : gsLoading) ? 'Creating…' : (all ? allGsCopied : gsCopied) ? 'Link copied!' : 'Create Google Sheet'}
           </Button>
         </div>
       }
@@ -330,8 +356,8 @@ export default function SyntaxPage({
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="syntax-pending-build">
           <TriangleAlert size={16} className="shrink-0" />
           <span className="flex-1 min-w-[16rem]">
-            A newer build of the {pendingBuilds.join(' and ')} phase is waiting in Build event and is <span className="font-semibold">not applied</span>. These sheets show
-            the applied design, so they do not show that build - its containers, rank values and prices are not here yet. Apply it in step 7 to export it.
+            A build of the {pendingBuilds.join(' and ')} phase is kept in Build event and is <span className="font-semibold">not in use</span>. These sheets show
+            the event in use, so they do not show that build - its containers, rank values and prices are not here. Step 5 can put it in use.
           </span>
           {onOpenBuild && (
             <Button variant="secondary" size="sm" onClick={onOpenBuild}>
@@ -344,7 +370,7 @@ export default function SyntaxPage({
         <ExportGate issues={designIssues} override={exportOverride} onOverride={onExportOverride} onRebuild={onRebuild}>
           {() => (
             <p className="text-xs text-slate-500" data-testid="syntax-export-source">
-              These exports are of the <span className="font-semibold text-slate-700">applied design</span>. A draft from Build event is never exported until it is applied.
+              These exports are of the <span className="font-semibold text-slate-700">event in use</span>: your last build, as soon as it finished.
             </p>
           )}
         </ExportGate>
@@ -367,25 +393,6 @@ export default function SyntaxPage({
           </button>
         </div>
       )}
-      {/* Everything above exports whichever segment is currently active in
-          the header switcher (App.jsx) - these two act on every segment at
-          once instead, bundled into one file/spreadsheet (see
-          buildAllSegmentsWorkbook/buildAllSegmentsSheetsAsValueRows). */}
-      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">All segments</span>
-        <Button variant="secondary" size="sm" icon={Download} onClick={handleDownloadAllSegmentsWorkbook} disabled={!canExportAll}>
-          Download combined workbook
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={allGsCopied ? Check : FileSpreadsheet}
-          onClick={handleCreateAllSegmentsGoogleSheet}
-          disabled={allGsLoading || !canExportAll}
-        >
-          {allGsLoading ? 'Creating…' : allGsCopied ? 'Link copied!' : 'Create combined Google Sheet'}
-        </Button>
-      </div>
       <p className="text-xs text-slate-400 mb-3">{DESCRIPTIONS[view]}</p>
       {sheet?.source === 'model' && (
         <p className="text-xs text-emerald-700 mb-3" data-testid="containers-source">
@@ -401,7 +408,7 @@ export default function SyntaxPage({
       )}
       {sheet?.source === 'none' && (
         <p className="text-sm text-amber-700 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2" data-testid="containers-source">
-          No containers yet: nothing drops from merges in this segment's applied design. Build the event in Build event (step 6) and apply it - the containers the build makes, and
+          No containers yet: nothing drops from merges in this segment's boards. Build the event in Build event (step 4) - the containers the build makes, and
           their weights, then appear here.
         </p>
       )}

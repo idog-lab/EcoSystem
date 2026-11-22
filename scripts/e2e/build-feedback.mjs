@@ -9,7 +9,7 @@
 //   - the Twister page says how to use it.
 // See helpers.mjs for how to run.
 import { createBoard } from '../../src/features/merge/lib/core/board.js'
-import { SAVE_KEY, createChecker, launch, openMerge, tab } from './helpers.mjs'
+import { SAVE_KEY, createChecker, launch, openMerge, tab, syntaxView } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 const SHOT = process.env.E2E_SCREENSHOT_DIR ?? null
@@ -43,10 +43,10 @@ const { browser, page, errors } = await launch({
 await openMerge(page)
 
 // ---- The editor, as steps of the flow ----
-ok('the flow has a step for each part of the editor', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,generator,rewards,effort,build,finalize')
+ok('the flow has five steps; the generator and the effort shape are sections of step 1 and step 4', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,rewards,build,finalize')
 
-// Step 3: generator multipliers and lucky drops
-await step(page, 'generator').click()
+// Step 1, its last section: generator multipliers, lucky drops, dates and CC
+await step(page, 'setup').click()
 await page.waitForTimeout(200)
 const tiersText = await page.getByTestId('generator-tiers').innerText()
 ok('the three multipliers are shown with what they cost and give', /×1/.test(tiersText) && /×2/.test(tiersText) && /×4/.test(tiersText) && /4 DR/.test(tiersText) && /a rank-3 item/.test(tiersText) && /always open/.test(tiersText))
@@ -63,15 +63,14 @@ ok('lucky drops say when they start (the rank that opens ×2)', (await page.getB
 await set(page.locator('[data-field="target-ev"]'), 1.2)
 await page.waitForTimeout(200)
 ok(`the chances follow the value (${await chance(1)} for +1 at 1.2)`, num(await chance(1)) > 5.7)
-await page.getByTestId('lucky-sim').click()
 await page.waitForTimeout(300)
-ok('the lucky-drop simulation shows averages and how many players never got one', /in 450 taps/i.test(await page.getByTestId('lucky-probs').innerText()) && /of 1000/.test(await page.locator('[data-lucky-outcome="2"]').innerText()))
+ok('there is no "try it" button: the chance table is what the setting gives', (await page.getByTestId('lucky-sim').count()) === 0 && (await page.locator('[data-lucky-outcome]').count()) === 3)
 await set(page.locator('[data-field="target-ev"]'), 1.1)
 ok('event dates and CC are here too', (await page.locator('[data-field="event-start"]').isVisible()) && (await page.locator('[data-field="cc"]').count()) === 2)
 await shot(page, 'f0-generator')
 
-// Step 4: effort distribution
-await step(page, 'effort').click()
+// Step 4, above the Build button: the effort shape
+await step(page, 'build').click()
 await page.waitForTimeout(200)
 ok('with nothing typed there is nothing to suggest', await page.getByTestId('effort-suggest').isDisabled())
 await page.getByTestId('effort-current').click()
@@ -113,11 +112,11 @@ ok('the table says how amounts are rounded', (await page.getByTestId('derived-ta
 
 const problem = page.locator('[data-ladder-problem="puzzles"]')
 ok('the puzzle rank values are flagged with every problem and why it matters', (await problem.innerText()).includes('merging does not pay off') && (await problem.locator('li').count()) >= 2 && (await problem.innerText()).includes('Why it matters'))
-ok('two ready-made fixes are offered, with the values they would set', (await page.locator('[data-ladder-fix="puzzles-raise"]').innerText()).includes('5 / 15 / 30 / 65') && (await page.locator('[data-ladder-fix="puzzles-lower"]').innerText()).includes('3 / 7 / 15 / 40'))
+ok('two ready-made fixes are offered, with the values they would set (every rank more than double the one below)', (await page.locator('[data-ladder-fix="puzzles-raise"]').innerText()).includes('5 / 15 / 35 / 75') && (await page.locator('[data-ladder-fix="puzzles-lower"]').innerText()).includes('3 / 7 / 15 / 40'))
 await shot(page, 'f1-ladder-problem')
 await page.locator('[data-ladder-fix="puzzles-raise"]').click()
 await page.waitForTimeout(300)
-ok('choosing a fix writes the values and clears the warning', (await page.locator('[data-definition="puzzles"]').innerText()).includes('5 / 15 / 30 / 65') && (await page.locator('[data-ladder-problem="puzzles"]').count()) === 0)
+ok('choosing a fix writes the values and clears the warning', (await page.locator('[data-definition="puzzles"]').innerText()).includes('5 / 15 / 35 / 75') && (await page.locator('[data-ladder-problem="puzzles"]').count()) === 0)
 ok('rank values can still be typed by hand', (await page.locator('[data-edit-ranks="puzzles"]').count()) === 1)
 ok('coins are set by the build, with nothing to type', (await page.locator('[data-definition="coins"]').getAttribute('data-coin-mode')) === 'auto' && (await page.getByTestId('coin-values').innerText()).includes('appear here after the build'))
 ok('the rewards step states the two rules: every merge drops a container, and tile rewards start semi-blocked', /every merge drops/.test(await page.getByTestId('drop-rules').locator('xpath=..').innerText()) && /container can hold several rewards/.test(await page.getByTestId('drop-rules').locator('xpath=..').innerText()) && (await page.getByTestId('tile-reward-rule').innerText()).includes('semi-blocked when its tile opens'))
@@ -132,7 +131,7 @@ ok('a milestone reward can be set in the flow (rank 5)', (await page.locator('[d
 // ---- Step 4: one action builds the whole event ----
 await step(page, 'build').click()
 await page.waitForTimeout(200)
-ok('the readiness list says the build sets the coin values', (await page.getByTestId('build-readiness').innerText()).includes('the build sets the coin rank values'))
+ok('nothing is listed as missing before the build: the coin values are the build\'s to set', (await page.getByTestId('build-readiness').count()) === 0 && (await page.getByTestId('build-whole-event').isEnabled()))
 await page.getByTestId('build-whole-event').click()
 await page.getByTestId('build-all-result').waitFor({ state: 'visible', timeout: 480000 })
 await page.waitForTimeout(300)
@@ -143,17 +142,22 @@ const coverage = page.getByTestId('build-coverage')
 const header = (await coverage.locator('thead').innerText()).toLowerCase()
 ok('the per-segment table uses plain column names', header.includes('dr you gave the boards') && header.includes('taken off for merge energy') && header.includes('dr placed under tiles') && header.includes('what to look at'))
 ok('...and explains each of them above the table', (await page.getByTestId('coverage-legend').innerText()).includes('free generator taps'))
-const coverageText = await page.locator('section', { has: coverage }).first().innerText()
-ok('no solver jargon in the per-segment results', !/infeasible|coarse|eligible tile capacity|shared drop odds|energy credit|ladder/i.test(coverageText))
+// (The accounting table sits in a folded section now; the summary above it is read too.)
+const coverageText = (await page.locator('details', { has: coverage }).first().innerText()) + ' ' + (await page.getByTestId('build-summary').innerText())
+const jargon = coverageText.match(/.{0,70}(infeasible|coarse|eligible tile capacity|shared drop odds|energy credit|ladder).{0,50}/i)
+ok(`no solver jargon in the per-segment results${jargon ? ` (found: "...${jargon[0].replace(/\s+/g, ' ')}...")` : ''}`, !jargon)
 const given = num(await coverage.locator('[data-coverage-segment="0"] td').nth(2).innerText())
 const taken = num(await coverage.locator('[data-coverage-segment="0"] td').nth(3).innerText())
-const placed = num(await coverage.locator('[data-coverage-segment="0"] td').nth(4).innerText())
+// (signed: "−" taken off, "+" added)
+const calibrationText = (await coverage.locator('[data-coverage-segment="0"] [data-cell="calibration"]').innerText()).trim()
+const calibrated = (calibrationText.startsWith('+') ? -1 : 1) * num(calibrationText)
+const placed = num(await coverage.locator('[data-coverage-segment="0"] td').nth(5).innerText())
 // (Drops start at rank 9 here - about 15 merges - so merge energy comes in a few whole prizes and the passes of a build
 // settle to within a few DR, not always within four. The DR box shows that difference.)
-ok(`the three numbers add up for the base segment (${given} - ${taken} ≈ ${placed})`, given === 750 && Math.abs(given - taken - placed) <= 8)
+ok(`the numbers add up for the base segment: what you gave, less the merge-energy credit, less what was taken off so the player pays the demand (${given} - ${taken} - ${calibrated} ≈ ${placed})`, given === 750 && Math.abs(given - taken - calibrated - placed) <= 8)
 await shot(page, 'f2-coverage')
 
-ok('the review states which reward ranks each board may hold', /Board 1 none, Board 2 rank 1 and 2/.test(await page.locator('section', { has: page.getByTestId('built-boards') }).first().innerText()))
+ok('the review states which reward ranks each board may hold', /Board 1 none, Board 2 rank 1 and 2/.test(await page.locator('details', { has: page.getByTestId('built-boards') }).first().innerText()))
 {
   const chips = async (board) => page.locator(`[data-built-board="${board}"] [data-cell="queue"] span[title^="Reward item"]`).evaluateAll((els) => els.map((e) => e.title))
   const b1 = await chips(0)
@@ -175,7 +179,8 @@ ok('the review states which reward ranks each board may hold', /Board 1 none, Bo
   ok(`the build shows its containers (${keys.join(', ')}): ${syntaxes.join(' | ')}`, keys[0] === 'ContA' && keys.at(-1) === 'NoDrop' && keys.length >= 3 && syntaxes.every((s) => /^[a-z-]+-r\d(\+[a-z-]+-r\d)*$/.test(s)))
   ok('...each a different drop', new Set(syntaxes).size === syntaxes.length)
   const weightCells = await containers.locator('[data-container="ContA"] td').evaluateAll((els) => els.map((e) => e.innerText.trim()))
-  ok(`...with a weight (ContA: ${weightCells.at(-1)})`, /^\d+ \(\d+(\.\d)?%\)$/.test(weightCells.at(-1)))
+  const weightShown = weightCells.find((cell) => /^\d+ \(\d+(\.\d)?%\)$/.test(cell))
+  ok(`...with a weight per merge rank (ContA: ${weightShown ?? weightCells.slice(-3).join(' / ')})`, !!weightShown)
   globalThis.__builtContainers = syntaxes
 }
 ok('the built boards are shown in the review: every tile and the blocked queue', (await page.locator('[data-built-board]').count()) === 2 && (await page.locator('[data-built-board="1"] [data-cell="queue"] span').count()) > 4)
@@ -192,22 +197,20 @@ const puzzleCell = (await page.locator('[data-testid="review-resources"] [data-r
 ok(`puzzles are shown as a whole number (${puzzleCell})`, puzzleCell === '188')
 await coverage.locator('[data-coverage-segment="0"]').click()
 
-// Recompletion is a draft built on the Normal draft.
+// Recompletion was built on the Normal build, and both are in use.
 await page.getByTestId('build-scope').getByRole('button', { name: 'Recompletion', exact: true }).click()
 await page.waitForTimeout(300)
-ok('the Recompletion draft says it was built on the Normal draft', await page.getByTestId('rc-on-main-draft').isVisible())
+ok('Recompletion is in use together with the Normal build it was made on', (await page.getByTestId('rc-on-main-draft').count()) === 0 && (await page.locator('[data-testid="build-scope"] [data-status="applied"]').count()) === 1)
 ok('...and is not called out of date', (await page.getByTestId('build-needs-rebuild').count()) === 0)
 
-// ---- Step 5: apply the whole event ----
+// ---- Step 7: the whole event is in use ----
 await step(page, 'finalize').click()
 await page.waitForTimeout(200)
 const whole = page.getByTestId('finalize-whole-event')
-ok(`step 5 shows both phases and one apply for the whole event ("${(await whole.innerText()).replace(/\s+/g, ' ').slice(0, 90)}")`, /Normal: built, not applied/.test(await whole.innerText()) && /Recompletion: built, not applied/.test(await whole.innerText()) && (await page.getByTestId('finalize-apply-all').innerText()).includes('Normal + Recompletion'))
+ok(`step 7 shows both phases in use, with nothing to apply ("${(await whole.innerText()).replace(/\s+/g, ' ').slice(0, 90)}")`, /Normal: in use/.test(await whole.innerText()) && /Recompletion: in use/.test(await whole.innerText()) && (await page.getByTestId('finalize-apply').count()) === 0 && (await page.getByTestId('finalize-in-use').getAttribute('data-state')) === 'in-use')
 await shot(page, 'f3-finalize')
-await page.getByTestId('finalize-apply-all').click()
 await page.waitForTimeout(800)
-ok('one click applies both phases', /Normal: applied/.test(await whole.innerText()) && /Recompletion: applied/.test(await whole.innerText()) && (await page.getByTestId('finalize-apply-all').isDisabled()))
-ok('after applying, the Recompletion draft can be tested on its own', (await page.getByTestId('finalize-validate').isEnabled()) && (await page.getByTestId('finalize-rc-on-main-draft').count()) === 0)
+ok('the Recompletion build can be tested on its own', (await page.getByTestId('finalize-validate').isEnabled()) && (await page.getByTestId('finalize-rc-on-main-draft').count()) === 0)
 
 // The coin values are per segment and survive the sync between segments.
 await page.getByTestId('build-scope').getByRole('button', { name: 'Normal', exact: true }).click()
@@ -228,8 +231,8 @@ const puzzle4 = (seg) => saved.segments[seg].boards[0].rewardChainConfig.puzzles
 // (The build may change a reward's rank values to reach its amount: what was typed is kept beside the value in force.)
 const puzzlesOf = (seg) => saved.segments[seg].boards[0].rewardChainConfig.puzzles
 // (Every segment has its own values now - round ones that reward merging - and the typed value is kept as the definition for all.)
-ok(`saved: every segment has its own puzzle values, round and rewarding merging, with the typed definition kept (${[0, 1, 2].map((i) => puzzlesOf(i).map((r) => r.prizeAmount).join('/')).join(' | ')}; typed rank 4: ${puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount})`, [0, 1, 2].every((i) => { const v = puzzlesOf(i).map((r) => r.prizeAmount); return v.every((x) => Number.isInteger(x) && (x < 10 || x % 5 === 0)) && v[1] >= 2 * v[0] && v[2] >= 2 * v[1] && v[3] > 2 * v[2] && (puzzlesOf(i)[3].typed?.prizeAmount ?? v[3]) === 65 }))
-ok('saved: the puzzle item syntax follows the value in force, and the typed one is kept', puzzle4(0).syntax === `[dynamic(dr-puzzle:${puzzle4(0).prizeAmount})]` && (puzzle4(0).typed?.syntax ?? puzzle4(0).syntax) === '[dynamic(dr-puzzle:65)]')
+ok(`saved: every segment has its own puzzle values, round and rewarding merging, with the typed definition kept (${[0, 1, 2].map((i) => puzzlesOf(i).map((r) => r.prizeAmount).join('/')).join(' | ')}; typed rank 4: ${puzzle4(0).typed?.prizeAmount ?? puzzle4(0).prizeAmount})`, [0, 1, 2].every((i) => { const v = puzzlesOf(i).map((r) => r.prizeAmount); return v.every((x) => Number.isInteger(x) && (x < 10 || x % 5 === 0)) && v[1] > 2 * v[0] && v[2] > 2 * v[1] && v[3] > 2 * v[2] && (puzzlesOf(i)[3].typed?.prizeAmount ?? v[3]) === 75 }))
+ok('saved: the puzzle item syntax follows the value in force, and the typed one is kept', puzzle4(0).syntax === `[dynamic(dr-puzzle:${puzzle4(0).prizeAmount})]` && (puzzle4(0).typed?.syntax ?? puzzle4(0).syntax) === '[dynamic(dr-puzzle:75)]')
 ok('saved: the milestone reward is on every segment', saved.segments.slice(0, 3).every((s) => s.boards[0].rewardRanks.includes(5) && s.boards[0].rewardSyntax[5] === 'coins:50'))
 ok('saved: both phases are built for every segment', [0, 1, 2].every((i) => saved.segments[i].boards.every((b) => b.blockedQueue.length > 0) && saved.segments[i].recompletionBoards.every((b) => b.blockedQueue.length > 0)))
 
@@ -237,12 +240,12 @@ ok('saved: both phases are built for every segment', [0, 1, 2].every((i) => save
 {
   await page.locator('header').getByRole('button', { name: 'Syntax', exact: true }).click()
   await page.waitForTimeout(400)
-  await page.getByRole('button', { name: 'Small Rewards Bank', exact: true }).click()
+  await syntaxView(page, 'Small Rewards Bank')
   await page.waitForTimeout(300)
   const bankRows = await page.locator('table tbody tr').evaluateAll((els) => els.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.innerText.trim())))
   ok(`Syntax, Small Rewards Bank: the model's containers (${bankRows.map((r) => r.join('=')).join(', ')})`, bankRows[0]?.[0] === 'ContA' && bankRows.every((r) => /^Cont[A-Z]+$/.test(r[0]) && /-r\d/.test(r[1])) && /From the model/.test(await page.getByTestId('containers-source').innerText()))
   ok('...the same containers the build showed, in the same order', JSON.stringify(bankRows.map((r) => r[1])) === JSON.stringify(globalThis.__builtContainers))
-  await page.getByRole('button', { name: 'Small Reward Weights', exact: true }).click()
+  await syntaxView(page, 'Small Reward Weights')
   await page.waitForTimeout(300)
   const head = await page.locator('table thead th').evaluateAll((els) => els.map((e) => e.innerText.trim()))
   const body = await page.locator('table tbody tr').evaluateAll((els) => els.map((tr) => [...tr.querySelectorAll('td')].map((td) => Number(td.innerText.trim()))))
@@ -293,7 +296,7 @@ await browser.close()
   await openMerge(page)
   await step(page, 'rewards').click()
   await page.waitForTimeout(200)
-  ok('the targets step says a result within 15% counts as met', (await page.getByText('within 15% of it').count()) === 1)
+  ok('the targets step says a result within 15% counts as met', /A build counts an amount as met within 15%/.test((await page.getByTestId('reward-targets-intro').innerText()).replace(/\s+/g, ' ')))
   // 85 asked, rank 4 pays 75 at a time -> 75 is inside the margin.
   await set(page.locator('[data-target="energy"]'), 85)
   await step(page, 'build').click()

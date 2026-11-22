@@ -4,6 +4,7 @@ import { createRewardChainConfig, DEFAULT_LEFTOVER_POLICY } from '../rewards/rew
 import { createDropGroupsConfig, DEFAULT_MIN_DROP_RANK } from '../rewards/dropGroups'
 import { createSmallRewardsBankConfig, createSmallRewardWeightsConfig } from '../rewards/smallRewardsBank'
 import { RC_MAX_RANK } from './ranks'
+import { effectiveMinRank } from './rankWindow'
 
 export function emptyTiles(rows, cols) {
   return Array.from({ length: rows }, () => Array.from({ length: cols }, () => 'open'))
@@ -29,6 +30,28 @@ export function resizeTiles(tiles, rows, cols) {
 // computation can never disagree about what this cell is.
 export const FORCED_SEMI_CELL = { row: 2, col: 4 }
 export const FORCED_SEMI_RANK = 2
+
+// THE TWO TUTORIAL CELLS (economist: "the 2 cells in the rightest column in
+// the bottom of the column should always be empty. those are used in the
+// tutorial of any board in the game itself"). On the first board of the
+// normal event the two bottom cells of the rightmost column are always open:
+// no tile, nothing under them. Held where layouts are edited (layoutEdits.js)
+// and by every layout of the bank (boardBank.js); a first board saved before
+// the rule is not rewritten - step 2 says so and offers to empty them.
+export function tutorialCells(rows, cols) {
+  return rows >= 2 && cols >= 1
+    ? [
+        { row: rows - 1, col: cols - 1 },
+        { row: rows - 2, col: cols - 1 },
+      ]
+    : []
+}
+export function applyTutorialCells(tiles) {
+  const next = tiles.map((row) => [...row])
+  for (const { row, col } of tutorialCells(next.length, next[0]?.length ?? 0)) next[row][col] = 'open'
+  return next
+}
+export const tutorialCellsAreOpen = (tiles) => tutorialCells(tiles?.length ?? 0, tiles?.[0]?.length ?? 0).every(({ row, col }) => tiles[row][col] === 'open')
 
 // Board 1 never carries more than this many DR of a segment's own total
 // subsidy, once a target subsidy is set - by explicit economist report:
@@ -207,7 +230,7 @@ export function createBoard(name, { rows = 5, cols = 8 } = {}) {
     rankValuesByBuild: null,
     tileRewardType: null,
     // True when the BUILD puts the Twister item into the containers and
-    // sizes it for the twists asked (Build event, step 4: "Add a Twister").
+    // sizes it for the twists asked (Build event, step 3: "Add a Twister").
     // False when the Twister drops are a rule written by hand in the Twister
     // tool. Shared per list.
     twisterByBuild: null,
@@ -216,7 +239,7 @@ export function createBoard(name, { rows = 5, cols = 8 } = {}) {
     // may make them bigger (rank 3 at most) so every segment's typical player
     // finishes a few Twister items. Shared per list.
     twisterSteady: null,
-    // "Every merge of a rank drops the same items" (step 4): null/true = the
+    // "Every merge of a rank drops the same items" (step 3): null/true = the
     // build makes steady containers (rewardTargeting.js), false = the varied
     // ones of before. One shared value per list.
     steadyDrops: null,
@@ -290,6 +313,18 @@ export const RC_MIN_RANK_UNDER_TILES = 3
 // arrives holding a rank 12; there is nothing to onboard), and its margins
 // are 25% (smallRewardsWorkflow.js / eventBuild.js: ...ToleranceFor(phase)).
 export const isRecompletionBoard = (board) => board?.listPhase === 'rc'
+// THE LOWEST MAIN RANK A BOARD MAY HOLD: its own typed lowest rank, its
+// position's floor (Board 2 no rank 1, Board 3 no ranks 1-2) and - on a
+// Recompletion board - never under rank 3, WHATEVER THE DATA SAYS (economist,
+// a hard rule: "in the RC boards ... no ranks 1 and 2. u keep on generating RC
+// boards with rank1 and 2 in them"). The rule used to live on the data only:
+// the Recompletion list's boards were given a lowest rank of 3 whenever the
+// list was written. A list that reached a build with its lowest rank still 1
+// - one that had never been written since it was made - was then generated
+// from rank 1, and its boards came out with rank 1 and 2 items. Every
+// generator, allocation and capacity figure reads the floor through here now,
+// so no state of the data can produce such a board.
+export const boardMinRank = (board, boardIndex) => Math.max(effectiveMinRank(board?.minRank ?? 1, boardIndex), isRecompletionBoard(board) ? RC_MIN_RANK_UNDER_TILES : 1)
 export function withListPhase(board, phase) {
   if (!phase || board.listPhase === phase) return board
   return { ...board, listPhase: phase }

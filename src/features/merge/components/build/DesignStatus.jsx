@@ -11,11 +11,16 @@ const STATE_TEXT = {
   empty: 'Nothing has been generated for these boards yet.',
 }
 
-function describeIssue(state, changed) {
-  if (state === 'unaccounted') return 'these boards pay merge energy but no energy credit was ever taken off them (they were not produced by Build configuration)'
+// What is wrong, in plain words (economist, of the older wording - "the
+// boards are allocated for an energy income they no longer have": "i cant
+// understand what that means").
+// (`short`: in a list under a heading that already says what follows from it.)
+function describeIssue(state, changed, short = false) {
+  if (state === 'unaccounted') return 'these boards were made by hand, not by a build. They give merge energy, and nothing was taken off their subsidy for it'
   const parts = (changed ?? []).map((p) => DESIGN_PART_LABELS[p]).filter(Boolean)
-  return `changed since it was built: ${parts.length ? parts.join(', ') : 'the design'} - so the boards are allocated for an energy income they no longer have`
+  return `${parts.length ? parts.join(', ') : 'something'} changed after the last build${short ? '' : ', so what is under the tiles was worked out for something else'}`
 }
+const sentence = (text) => text.charAt(0).toUpperCase() + text.slice(1)
 
 export function DesignStatusBanner({ consistency, onRebuild, scopeLabel = 'This design', className = '' }) {
   const bad = consistency.state === 'stale' || consistency.state === 'unaccounted'
@@ -31,7 +36,7 @@ export function DesignStatusBanner({ consistency, onRebuild, scopeLabel = 'This 
         <span className="font-semibold">
           {scopeLabel}: {bad ? 'out of date - needs a rebuild' : consistency.state === 'consistent' ? (validated ? 'built, simulation validated' : 'built (estimated, not yet validated)') : consistency.state === 'manual' ? 'hand-built' : 'not built'}.
         </span>{' '}
-        {bad ? `It has ${describeIssue(consistency.state, consistency.changed)}. Board subsidy, energy accounting and any earlier validation no longer describe it.` : STATE_TEXT[consistency.state]}
+        {bad ? `${sentence(describeIssue(consistency.state, consistency.changed))}. The numbers of the last build no longer describe these boards: build again to bring them in line.` : STATE_TEXT[consistency.state]}
       </span>
       {bad && onRebuild && (
         <Button variant="primary" size="sm" icon={Hammer} onClick={onRebuild} data-testid="design-rebuild">
@@ -53,27 +58,30 @@ export function ExportGate({ issues, override, onOverride, onRebuild, children }
       {blocked && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="export-blocked">
           <div className="font-semibold flex items-center gap-1.5">
-            <TriangleAlert size={15} className="shrink-0" /> The applied design is not ready to export as finished
+            <TriangleAlert size={15} className="shrink-0" /> The event was changed after its last build
           </div>
+          <p className="mt-1 text-xs" data-testid="export-blocked-why">
+            A download would hold boards that no longer match what was built for them. Build again and they are in line.
+          </p>
           <ul className="mt-1 list-disc ml-5 text-xs">
             {issues.map((issue) => (
               <li key={`${issue.segmentIndex}-${issue.phase}`}>
                 <span className="font-semibold">
                   {issue.name}, {issue.phase === 'rc' ? 'Recompletion' : 'Normal'}:
                 </span>{' '}
-                {describeIssue(issue.state, issue.changed)}.
+                {describeIssue(issue.state, issue.changed, true)}.
               </li>
             ))}
           </ul>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             {onRebuild && (
               <Button variant="primary" size="sm" icon={Hammer} onClick={onRebuild}>
-                Rebuild in Build event
+                Build again
               </Button>
             )}
             <label className="flex items-center gap-2 text-xs font-medium">
               <input type="checkbox" checked={override} onChange={(e) => onOverride?.(e.target.checked)} data-testid="export-override" />
-              Export anyway. I understand this configuration is out of date and has not been validated.
+              Download anyway - I know these boards do not match their last build.
             </label>
           </div>
         </div>
@@ -81,7 +89,7 @@ export function ExportGate({ issues, override, onOverride, onRebuild, children }
       {children(!blocked || override)}
       {blocked && override && (
         <p className="text-xs font-semibold text-amber-700" data-testid="export-override-active">
-          Override on: exports are of an out-of-date, unvalidated configuration.
+          Downloading anyway: the files hold boards that do not match their last build.
         </p>
       )}
     </div>

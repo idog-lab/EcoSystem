@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Hammer, Square, TriangleAlert, CircleCheck, Play, FlaskConical, Check, Undo2, Download, Gamepad2, Tornado, Wrench } from 'lucide-react'
+import { Hammer, Square, TriangleAlert, CircleCheck, FlaskConical, Check, Undo2, Download, Gamepad2, Wrench } from 'lucide-react'
 import Button from '../../../../components/ui/Button'
-import { StatusChip, SharedTag, SegmentTag, Panel, CheckLine, LinkButton } from './buildUi'
+import { StatusChip, SharedTag, SegmentTag, Panel, CheckLine, LinkButton, Collapsible, ProgressBar } from './buildUi'
+import BuildSummary from './BuildSummary'
 import { REWARD_TYPES, REWARD_TARGET_LABELS, REWARD_TYPE_LABELS, COIN_TYPE, formatRewardAmount } from '../../lib/rewards/rewardChain'
 import { allowedRewardRanks } from '../../lib/rewards/rewardPlacement'
 import { buildEvent, buildReadiness, boardsWithDraftApplied, draftSegmentIsApplied, mainChainSum, validateDraftSegment, rcInputsOnMainDraft, draftIsUsable, INPUT_PART_LABELS, MAX_PASSES, DEFAULT_VALIDATION_RUNS, DEFAULT_VALIDATION_SEED, DEDUCTION_POLICY } from '../../lib/build/eventBuild'
 import { ExportGate } from './DesignStatus'
+import TwisterTimingPanel from './TwisterTimingPanel'
 import { offTargetToleranceFor } from '../../lib/rewards/smallRewardsWorkflow'
 import { invalidateLayout } from '../../lib/core/board'
 import { setRankWindow } from '../../lib/core/layoutEdits'
 import { spreadSubsidy } from '../../lib/core/subsidyBudget'
-import { BuiltBoards, BuiltEffort } from './BuildEventSteps'
+import { BuiltBoards, BuiltEffort, EffortStep } from './BuildEventSteps'
 import { buildAllSegmentsWorkbook } from '../../lib/export/eventSheets'
-import { twisterIsConfigured, hasTwisterDrops, PACE_MARKS, TWISTER_ON_TRACK_WINDOW_PCT } from '../../lib/rewards/twisterEconomy'
 import { EndlessPreview } from '../play/EndlessMode'
 import ContainersTable from './ContainersTable'
 
@@ -91,43 +92,6 @@ function CauseList({ causes, goTo, onFix, fixedIds, onRebuild }) {
 }
 
 // The review of ONE built segment: concise first, detail on demand.
-// One short line per segment in the Twister price table.
-function twisterNote(row, sizing) {
-  if (row.cost == null || row.spinsMedian == null) return row.message ?? ''
-  if (row.tooLow) {
-    return sizing?.byBuild
-      ? `Too little Twister DR for ${row.twists} twists: at the lowest price a typical player gets ${row.spinsMedian}.`
-      : `Too little Twister DR for ${row.twists} twists: at the lowest price a typical player gets ${row.spinsMedian}. The drop chance here is your own fixed one - "Let the build set the Twister drops" in step 4 lets the build raise it.`
-  }
-  const step = row.step > 1 ? ` Prices move in steps of ${row.step} Twister DR; a smaller step lands closer.` : ''
-  const items = row.collectsMedian != null ? Math.round(row.collectsMedian) : null
-  const inSteps = items != null ? `Its Twister DR comes in ${items} finished Twister item${items === 1 ? '' : 's'}` : null
-  if (row.pace === 'late') return `A typical player gets ${row.spinsMedian} of ${row.twists}.${step}`
-  if (row.pace === 'early') {
-    if (items != null && items <= 2) return `${inSteps}, so the twists come in ${items === 1 ? 'one jump' : 'two jumps'} wherever ${items === 1 ? 'it is' : 'they are'} finished.${sizing?.byBuild && sizing?.steady === false ? ' "Keep every segment\'s Twister steady" in step 4 fixes this.' : ''}`
-    return `At this price a typical player ends with ${row.spinsMedian}, so the ${row.twists} asked are reached early; the next price up gives fewer than ${row.twists}.${step}`
-  }
-  return inSteps ? `${inSteps}.` : 'On target.'
-}
-
-// "Are we on track": one line for the whole Twister of a build.
-function twisterTrack(twister) {
-  const asked = (twister?.rows ?? []).filter((r) => r.twists > 0 && r.cost != null && r.pace)
-  if (asked.length === 0) return null
-  const off = asked.filter((r) => r.pace !== 'on-track')
-  const finishes = asked.map((r) => r.finishPct).filter((v) => v != null)
-  if (off.length === 0) {
-    const from = Math.min(...finishes)
-    const to = Math.max(...finishes)
-    return { ok: true, text: `On track: in ${asked.length === 1 ? 'this segment' : `all ${asked.length} segments`} the typical player has the last twist ${from === to ? `at ${from}%` : `between ${from}% and ${to}%`} of the phase.` }
-  }
-  const early = off.filter((r) => r.pace === 'early')
-  const late = off.filter((r) => r.pace === 'late')
-  const parts = []
-  if (early.length) parts.push(`${early.map((r) => `${r.name} (at ${r.finishPct}%)`).join(', ')} ${early.length === 1 ? 'has' : 'have'} all the twists early`)
-  if (late.length) parts.push(`${late.map((r) => `${r.name} (${r.spinsMedian} of ${r.twists})`).join(', ')} ${late.length === 1 ? 'does' : 'do'} not get them all`)
-  return { ok: false, text: `Not on track yet: ${parts.join('; ')}. The other ${asked.length - off.length} ${asked.length - off.length === 1 ? 'segment is' : 'segments are'} on track.` }
-}
 // THE SAME EVENT, PLAYED THREE WAYS. What a player collects depends on what
 // they do with a reward item - merge it on, or tap it to collect it - and the
 // build sizes the rewards for the first. The other two are played as well so
@@ -160,11 +124,15 @@ function PlayStylesPanel({ v, segmentName, phase, goTo }) {
   // gets more for another reason - they spend more DR - said below the table.)
   const anyOver = over(best)
   return (
-    <Panel
+    <Collapsible
+      id={`finalize-styles-${phase}`}
+      className="xl:open:col-span-3"
       title={`The same event, played by different players: ${segmentName}`}
-      subtitle={`What a player ends up with depends on how they play: whether they open the semi-blocked items first, and whether they merge a reward item on or tap it. The build sizes the rewards for a careful player who merges; the others are played on ${v.styleRuns} to ${Math.max(v.styleRuns, 100)} simulated players each.`}
+      summary="The careful player the build is sized for, one who merges without looking, one who taps when it pays, and one who taps everything."
       tag={<StatusChip kind={anyOver ? 'review' : 'validated'}>{anyOver ? 'Tapping pays more' : 'Merging pays best'}</StatusChip>}
+      openWhen={anyOver || tapNames.length > 0}
     >
+      <p className="mb-3 text-xs text-slate-500">{`What a player ends up with depends on how they play: whether they open the semi-blocked items first, and whether they merge a reward item on or tap it. The build sizes the rewards for a careful player who merges; the others are played on ${v.styleRuns} to ${Math.max(v.styleRuns, 100)} simulated players each.`}</p>
       <table className="w-full text-sm tabular-nums" data-testid="play-styles">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -213,10 +181,10 @@ function PlayStylesPanel({ v, segmentName, phase, goTo }) {
           <TriangleAlert size={13} className="mt-0.5 shrink-0" />
           <span className="flex-1">
             With these rank values a tap pays more than a merge for {tapNames.join(', ')}: the item is worth more per piece there than a rank 4 is. A player who notices gets the second row. Let the build give
-            the rank values (step 4: &quot;The build may change a reward&apos;s rank values&quot;) - its values always reward merging - or fix them there yourself, and the first two rows become the same.{' '}
+            the rank values (step 3: &quot;The build may change a reward&apos;s rank values&quot;) - its values always reward merging - or fix them there yourself, and the first two rows become the same.{' '}
             {goTo && (
               <LinkButton className="text-xs" onClick={() => goTo('rewards')}>
-                Go to step 4
+                Go to step 3
               </LinkButton>
             )}
           </span>
@@ -234,14 +202,13 @@ function PlayStylesPanel({ v, segmentName, phase, goTo }) {
           subsidy, never arrive. In the game that costs them DR. On a shared play link taps are free, so nothing stops them - that is how a run on a link can end with far more than the amounts above.
         </p>
       )}
-    </Panel>
+    </Collapsible>
   )
 }
 
-const PACE_LABEL = { 'on-track': 'On track', early: 'Early', late: 'Short' }
-const PACE_CHIP = { 'on-track': 'validated', early: 'review', late: 'infeasible' }
 
-function SegmentReview({ seg, appliedBoards, goTo, onFix, fixedIds, onRebuild }) {
+// (What there is to look at - the causes with their quick fixes - is shown above the folded details, by the Build step.)
+function SegmentReview({ seg, appliedBoards }) {
   const phase = seg.phase ?? 'main'
   const MARGIN_PCT = Math.round(offTargetToleranceFor(phase) * 100)
   const sub = seg.subsidy
@@ -249,8 +216,6 @@ function SegmentReview({ seg, appliedBoards, goTo, onFix, fixedIds, onRebuild })
   const anyTarget = seg.resources.some((r) => r.target > 0)
   return (
     <div className="flex flex-col gap-4" data-testid="segment-review">
-      <CauseList causes={seg.causes} goTo={goTo} onFix={onFix} fixedIds={fixedIds} onRebuild={onRebuild} />
-
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-slate-100 p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Small rewards: asked for and expected</div>
@@ -344,6 +309,14 @@ function SegmentReview({ seg, appliedBoards, goTo, onFix, fixedIds, onRebuild })
                   − {dr1(rec.creditCalculated)}
                 </td>
               </tr>
+              {seg.demandFit?.calibrated && (
+                <tr>
+                  <td className="py-0.5 pr-3 text-slate-500">{seg.demandFit.calibration >= 0 ? 'Taken off so the player pays the demand' : 'Added so the player pays the demand'}</td>
+                  <td className="py-0.5 text-right text-slate-700" data-cell="calibration" data-sign={seg.demandFit.calibration >= 0 ? 'off' : 'on'}>
+                    {seg.demandFit.calibration >= 0 ? '−' : '+'} {dr1(Math.abs(seg.demandFit.calibration))}
+                  </td>
+                </tr>
+              )}
               <tr className="border-t border-slate-200">
                 <td className="py-0.5 pr-3 text-slate-600">DR to place under tiles</td>
                 <td className="py-0.5 text-right font-semibold text-slate-700" data-cell="unrounded">
@@ -370,6 +343,39 @@ function SegmentReview({ seg, appliedBoards, goTo, onFix, fixedIds, onRebuild })
               : `The boards hold ${Math.abs(Math.round(rec.residual * 10) / 10)} DR ${rec.residual > 0 ? 'more' : 'less'} than the exact figure - a board can only hold whole item values.`}
             {!seg.converged && ' The merge-energy figure was still moving slightly between build passes.'}
           </p>
+          {seg.demandFit?.paid && (
+            <div className={`mt-2 rounded-xl border px-3 py-2 text-xs ${(seg.demandFit.inMargin ?? seg.demandFit.within) ? 'border-emerald-200 bg-emerald-50/60 text-slate-700' : 'border-amber-200 bg-amber-50/60 text-amber-800'}`} data-testid="review-demand" data-within={seg.demandFit.within ? 'yes' : 'no'} data-passes={(seg.demandFit.inMargin ?? seg.demandFit.within) ? 'yes' : 'no'}>
+              <div className="font-semibold">What the player pays in this phase{seg.phase === 'rc' ? ' (counted from the moment Recompletion begins)' : ''}</div>
+              <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums">
+                <span>DR demand you typed</span>
+                <span className="text-right font-semibold" data-cell="demand">{dr(seg.demandFit.configured)}</span>
+                <span>Average player pays</span>
+                <span className="text-right font-semibold" data-cell="paid">{dr(Math.round(seg.demandFit.paid.mean))}</span>
+                <span>Middle player pays</span>
+                <span className="text-right" data-cell="paid-median">{dr(Math.round(seg.demandFit.paid.p50))}</span>
+                <span>Difference</span>
+                <span className="text-right" data-cell="demand-difference">
+                  {signed1(seg.demandFit.difference)} ({seg.demandFit.differencePct >= 0 ? '+' : ''}
+                  {seg.demandFit.differencePct.toFixed(1)}%)
+                </span>
+                <span>Finish the phase</span>
+                <span className="text-right">{seg.demandFit.completionRate == null ? '—' : pct(seg.demandFit.completionRate * 100)}</span>
+              </div>
+              <p className="mt-1 text-[11px]">
+                {seg.demandFit.calibration >= 0
+                  ? `The build took ${dr1(seg.demandFit.calibration)} more off the later boards`
+                  : `The build put ${dr1(Math.abs(seg.demandFit.calibration))} back on the later boards`}{' '}
+                (besides the merge-energy 80%) until the average of {seg.demandFit.players} simulated players paid the demand. Those players all have average luck; step 5 shows the spread with real luck.
+                {seg.demandFit.constraint === 'no-subsidy-left' && ' A proven limit: the later boards have no more subsidy to give within their rank limits, so the player cannot be made to pay more.'}
+                {seg.demandFit.constraint === 'boards-full' && ' A proven limit: the later boards hold all the subsidy their tiles can, so the player cannot be made to pay less.'}
+                {seg.demandFit.constraint === 'not-settled' && !seg.demandFit.jump && ' Not a limit: the search did not settle closer than this in its passes; building again usually does.'}
+                {seg.demandFit.constraint === 'not-settled' &&
+                  seg.demandFit.jump &&
+                  ` Not a limit of the boards - the spend moves in jumps here: two sets of boards with almost the same subsidy (${dr(Math.round(seg.demandFit.jump.subsidyApart))} apart) had the player pay ${dr(Math.round(seg.demandFit.jump.paidUnder))} and ${dr(Math.round(seg.demandFit.jump.paidOver))}, so the search did not settle on the demand. Building again draws other boards and can land closer.`}
+                {seg.demandFit.constraint && seg.demandFit.spendRange && ` The passes found a player paying between ${dr(Math.round(seg.demandFit.spendRange.low))} and ${dr(Math.round(seg.demandFit.spendRange.high))}.`}
+              </p>
+            </div>
+          )}
           <details className="mt-2" data-testid="review-how">
             <summary className="cursor-pointer select-none text-xs font-semibold text-slate-500 hover:text-purple-700">How these numbers were worked out</summary>
           {/* Two different things, kept visibly apart:
@@ -559,7 +565,7 @@ function CoverageTable({ result, activeSegmentIndex, onSelectSegment }) {
   const MARGIN_PCT = Math.round(offTargetToleranceFor(result?.phase ?? 'main') * 100)
   return (
     <div className="overflow-x-auto">
-      <div className="mb-3 grid grid-cols-1 lg:grid-cols-3 gap-2 text-xs text-slate-600" data-testid="coverage-legend">
+      <div className="mb-3 grid grid-cols-1 lg:grid-cols-4 gap-2 text-xs text-slate-600" data-testid="coverage-legend">
         <div className="rounded-xl bg-slate-50 px-3 py-2">
           <span className="font-semibold text-slate-700">DR you gave the boards</span> - the subsidy from step 1: what the chase has to cover, minus the segment&apos;s total demand.
         </div>
@@ -569,17 +575,24 @@ function CoverageTable({ result, activeSegmentIndex, onSelectSegment }) {
         </div>
         <div className="rounded-xl bg-slate-50 px-3 py-2">
           <span className="font-semibold text-slate-700">DR placed under tiles</span> - what the built boards really hold in main-chain items. It should be the first number
-          minus the second.
+          minus what was taken off for merge energy, minus or plus the demand calibration.
+        </div>
+        <div className="rounded-xl bg-slate-50 px-3 py-2">
+          <span className="font-semibold text-slate-700">Player pays</span> - the demand is the DR a player really pays. Lucky drops and free taps change what a player pays, so the
+          build moves the subsidy on the later boards down (−) or up (+) until the average simulated player pays the demand. The amounts you typed are never rewritten.
         </div>
       </div>
-      <table className="w-full min-w-[40rem] text-sm tabular-nums" data-testid="build-coverage">
+      <table className="w-full min-w-[58rem] text-sm tabular-nums" data-testid="build-coverage">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
             <th className="py-2 pr-3">Segment</th>
             <th className="py-2 pr-3">Result</th>
             <th className="py-2 pr-3">DR you gave the boards</th>
             <th className="py-2 pr-3">Taken off for merge energy</th>
+            <th className="py-2 pr-3">Demand calibration</th>
             <th className="py-2 pr-3">DR placed under tiles</th>
+            <th className="py-2 pr-3">DR demand</th>
+            <th className="py-2 pr-3">Player pays</th>
             <th className="py-2 pr-3">What to look at</th>
           </tr>
         </thead>
@@ -600,10 +613,15 @@ function CoverageTable({ result, activeSegmentIndex, onSelectSegment }) {
               </td>
               <td className="py-1.5 pr-3">{s.subsidy ? dr(s.subsidy.budget) : '—'}</td>
               <td className="py-1.5 pr-3">{s.reconciliation ? `− ${dr1(s.reconciliation.creditCalculated)}` : '—'}</td>
+              <td className="py-1.5 pr-3" data-cell="calibration">{s.demandFit?.calibrated ? `${s.demandFit.calibration >= 0 ? '−' : '+'} ${dr1(Math.abs(s.demandFit.calibration))}` : '—'}</td>
               <td className="py-1.5 pr-3 font-semibold text-slate-700">{s.reconciliation ? dr1(s.reconciliation.generatedDr) : '—'}</td>
+              <td className="py-1.5 pr-3" data-cell="demand">{s.demandFit ? dr(s.demandFit.configured) : '—'}</td>
+              <td className={`py-1.5 pr-3 font-semibold ${s.demandFit?.paid && !(s.demandFit.inMargin ?? s.demandFit.within) ? 'text-amber-700' : 'text-slate-700'}`} data-cell="paid" data-within={s.demandFit?.within ? 'yes' : 'no'} data-passes={(s.demandFit?.inMargin ?? s.demandFit?.within) ? 'yes' : 'no'}>
+                {s.demandFit?.paid ? `${dr(Math.round(s.demandFit.paid.mean))} (${s.demandFit.differencePct >= 0 ? '+' : ''}${s.demandFit.differencePct.toFixed(1)}%)` : '—'}
+              </td>
               <td className="py-1.5 pr-3 text-xs text-slate-600" data-cell="notes">
                 {s.status === 'skipped' ? (
-                  <span className="text-slate-400">{s.skipReason.startsWith('No amount entered') ? 'No amount entered in step 1' : s.skipReason}</span>
+                  <span className="text-slate-400">{s.skipReason.startsWith('No amount entered') ? 'No DR demand typed in step 1' : s.skipReason}</span>
                 ) : s.causes?.length ? (
                   <ul className="list-disc ml-4">
                     {s.causes.slice(0, 4).map((c, i) => (
@@ -627,11 +645,13 @@ function CoverageTable({ result, activeSegmentIndex, onSelectSegment }) {
 }
 
 // ---------------------------------------------------------------- Step 4
-export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegment, phase, phaseLabel, goTo, segInputs, draft, draftCurrent, changedParts, applied, onDraft, rawSegs, inputsFor, drafts, onDraftsChange, rcOnMainDraft, fixed, setFixed }) {
+export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegment, shownSegments = null, phase, phaseLabel, goTo, targetPctInputs, onTargetPctInputsChange, segInputs, draft, draftCurrent, changedParts, applied, onUse, rawSegs, inputsFor, drafts, onDraftsChange, rcOnMainDraft, fixed, setFixed }) {
   const [progress, setProgress] = useState(null)
   const [failed, setFailed] = useState(null)
   const [error, setError] = useState(null)
   const [allNote, setAllNote] = useState(null)
+  // (A segment that is not in the segment bar is not counted as left out: only the ones in sight.)
+  const skippedInSight = (r) => r.segments.filter((x) => x.status === 'skipped' && (!shownSegments || shownSegments.includes(x.index))).length
 
   // A quick fix changes an INPUT - the same state the steps edit - and never
   // the draft. Layout fixes go to the base segment's board, because layouts
@@ -692,45 +712,46 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
 
   // One action for the whole event: the Normal phase, then Recompletion built
   // on top of that Normal draft (Recompletion is played after it). Both come
-  // back as drafts; step 7 applies them together.
+  // back as drafts; step 5 puts them in use together.
   async function handleBuildAll() {
     cancelRef.current = false
     setError(null)
     setFailed(null)
     setAllNote(null)
     const isCancelled = () => cancelRef.current
-    const count = (r) => `${r.builtCount} segment${r.builtCount === 1 ? '' : 's'} built${r.skippedCount ? `, ${r.skippedCount} without an amount` : ''}`
-    setProgress({ label: 'Starting', segment: inputsFor.main[0].name, segmentsDone: 0, segmentsTotal: 1, phaseLabel: 'Normal' })
+    const count = (r) => `${r.builtCount} segment${r.builtCount === 1 ? '' : 's'} built${skippedInSight(r) ? `, ${skippedInSight(r)} without a DR demand` : ''}`
+    setProgress({ label: 'Starting', segment: inputsFor.main[0].name, segmentsDone: 0, segmentsTotal: 1, phaseLabel: 'Normal event', phaseIndex: 0, phaseCount: 2 })
     try {
-      const mainResult = await buildEvent({ phase: 'main', segments: inputsFor.main, onProgress: (p) => setProgress({ ...p, phaseLabel: 'Normal' }), isCancelled })
+      const mainResult = await buildEvent({ phase: 'main', segments: inputsFor.main, onProgress: (p) => setProgress({ ...p, phaseLabel: 'Normal event', phaseIndex: 0, phaseCount: 2 }), isCancelled })
       if (!mainResult) {
         setProgress(null)
         return
       }
       if (!draftIsUsable(mainResult)) {
-        // A failed build never replaces a usable draft.
+        // A build that needs a fix is never put in use, and never replaces
+        // the results of one that is.
         if (draftIsUsable(drafts.main)) {
           if (phase === 'main') setFailed(mainResult)
         } else {
           onDraftsChange({ ...drafts, main: mainResult })
         }
-        setAllNote({ ok: false, text: 'The Normal phase needs a fix first, so Recompletion was not built. Switch to the Normal phase to see what to change.' })
+        setAllNote({ ok: false, text: 'The Normal phase needs a fix first, so Recompletion was not built and nothing was put in use. Switch to the Normal phase to see what to change.' })
         setProgress(null)
         return
       }
-      const next = { ...drafts, main: mainResult }
-      const rcResult = await buildEvent({ phase: 'rc', segments: rcInputsOnMainDraft(rawSegs, mainResult), onProgress: (p) => setProgress({ ...p, phaseLabel: 'Recompletion' }), isCancelled })
-      if (rcResult && rcResult.builtCount > 0) next.rc = rcResult
-      onDraftsChange(next)
+      const rcResult = await buildEvent({ phase: 'rc', segments: rcInputsOnMainDraft(rawSegs, mainResult), onProgress: (p) => setProgress({ ...p, phaseLabel: 'Recompletion', phaseIndex: 1, phaseCount: 2 }), isCancelled })
+      // Both go into use in the same moment (a Recompletion that needs a fix
+      // is kept to say what to fix, and is not put in use).
+      onUse({ main: mainResult, ...(rcResult && rcResult.builtCount > 0 ? { rc: rcResult } : {}) })
       setAllNote({
         ok: !rcResult || rcResult.builtCount === 0 || draftIsUsable(rcResult),
         text: `Normal: ${count(mainResult)}. ${
           !rcResult
             ? 'Recompletion: cancelled.'
             : rcResult.builtCount === 0
-              ? 'Recompletion: no amount entered for any segment, so only the Normal phase was built.'
+              ? 'Recompletion: no DR demand for any segment, so only the Normal phase was built.'
               : `Recompletion: ${count(rcResult)}${draftIsUsable(rcResult) ? '' : ' - it needs a fix (switch to the Recompletion phase to see what)'}.`
-        } Both are drafts - apply them together in step 7.`,
+        } ${!rcResult || rcResult.builtCount === 0 || !draftIsUsable(rcResult) ? 'The normal event is in use' : 'Both are in use'}.`,
       })
     } catch (e) {
       setError(e?.message ?? String(e))
@@ -752,11 +773,11 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
     try {
       const result = await buildEvent({ phase, segments: segInputs, onProgress: (p) => setProgress(p), isCancelled: () => cancelRef.current })
       if (result) {
-        // A failed build never replaces a usable draft, and no build ever
-        // touches the applied design.
+        // A build that needs a fix is not put in use and does not replace the
+        // results of one that is; any other build is in use at once.
         const usableDraft = draft && draft.status !== 'infeasible' && draft.status !== 'nothing-built'
         if ((result.status === 'infeasible' || result.status === 'nothing-built') && usableDraft) setFailed(result)
-        else onDraft(result)
+        else onUse({ [phase]: result })
       }
     } catch (e) {
       setError(e?.message ?? String(e))
@@ -766,33 +787,66 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
 
   const shown = failed ?? draft
   const shownSeg = shown?.segments.find((s) => s.index === activeSegmentIndex)
+  // How far a running build is: the phases of a whole-event build are halves,
+  // a phase is its segments, a segment its tries (a try often ends early, so
+  // the bar can jump ahead - it never goes back).
+  const progressShare = !progress
+    ? 0
+    : ((progress.phaseIndex ?? 0) + Math.min(1, ((progress.segmentsDone ?? 0) + (progress.pass ? (progress.pass - 1) / (progress.maxPasses ?? 1) : 0)) / Math.max(1, progress.segmentsTotal ?? 1))) / (progress.phaseCount ?? 1)
+  // (The segment's detail is folded while there is nothing to look at: open it on the way.)
+  const showSegmentDetail = () =>
+    setTimeout(() => {
+      const fold = document.querySelector(`details[data-collapsible="build-segment-${phase}"]`)
+      if (fold) fold.open = true
+      fold?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+  const shapeTyped = Object.values(targetPctInputs ?? {}).some((v) => Number(v) > 0)
+  const missing = readiness.items.filter((item) => !item.ok)
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="6. Build boards" subtitle={`One build for the whole ${phaseLabel.toLowerCase()} phase: what sits under every tile, the reward items, the merge drops and the merge-energy deduction, worked out together.`}>
-        <div className="flex flex-col gap-1.5 mb-4" data-testid="build-readiness">
-          {readiness.items.map((item, i) => (
-            <CheckLine key={i} ok={item.ok} action={!item.ok && <LinkButton className="text-xs" onClick={() => goTo(item.step)}>Fix this</LinkButton>}>
-              {item.label}
-              {!item.ok && !item.blocking && <span className="ml-1 text-xs text-slate-400">(does not stop the build)</span>}
-            </CheckLine>
-          ))}
-          {!hasTargets && (
-            <CheckLine ok>
-              No small-reward target is set - the build will fill the boards with main-chain items only. <LinkButton className="text-xs" onClick={() => goTo('rewards')}>Add targets</LinkButton>
-            </CheckLine>
-          )}
-        </div>
+      <Panel>
+        {/* What is ready is not listed: only what is missing, or worth knowing before the build. */}
+        {(missing.length > 0 || !hasTargets) && (
+          <div className="flex flex-col gap-1.5 mb-4" data-testid="build-readiness">
+            {missing.map((item, i) => (
+              <CheckLine key={i} ok={false} action={<LinkButton className="text-xs" onClick={() => goTo(item.step)}>Fix this</LinkButton>}>
+                {item.label}
+                {!item.blocking && <span className="ml-1 text-xs text-slate-400">(does not stop the build)</span>}
+              </CheckLine>
+            ))}
+            {!hasTargets && (
+              <CheckLine ok>
+                No small-reward target is set - the build will fill the boards with main-chain items only. <LinkButton className="text-xs" onClick={() => goTo('rewards')}>Add targets</LinkButton>
+              </CheckLine>
+            )}
+          </div>
+        )}
 
+
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_minmax(0,1fr)] xl:items-center">
         <div className="flex flex-wrap items-center gap-3">
           {!running ? (
             <>
-              <Button variant="primary" icon={Hammer} onClick={handleBuildAll} disabled={!mainReadiness.ready} data-testid="build-whole-event">
-                Build whole event (Normal + Recompletion)
+              <Button
+                variant="primary"
+                icon={Hammer}
+                onClick={handleBuildAll}
+                disabled={!mainReadiness.ready}
+                data-testid="build-whole-event"
+                title="Builds the normal event and then Recompletion on top of it, for every segment that has a DR demand. Everything you pinned or limited by hand is kept."
+              >
+                {draft && !draftCurrent ? 'Build the event again' : 'Build the event'}
               </Button>
-              <Button variant="secondary" icon={Hammer} onClick={handleBuild} disabled={!readiness.ready} data-testid="build-configuration">
-                {draft && !draftCurrent ? `Rebuild ${phaseLabel} only` : `Build ${phaseLabel} only`}
-              </Button>
+              {/* (One phase alone is the smaller choice: one click away.) */}
+              <details className="text-xs" data-collapsible="build-one-phase">
+                <summary className="cursor-pointer list-none font-semibold text-purple-700 hover:underline [&::-webkit-details-marker]:hidden">or one phase only</summary>
+                <div className="mt-2">
+                  <Button variant="secondary" size="sm" icon={Hammer} onClick={handleBuild} disabled={!readiness.ready} data-testid="build-configuration">
+                    {draft && !draftCurrent ? `Rebuild ${phaseLabel} only` : `Build ${phaseLabel} only`}
+                  </Button>
+                </div>
+              </details>
             </>
           ) : (
             <Button variant="dark" icon={Square} onClick={() => (cancelRef.current = true)} data-testid="build-cancel">
@@ -800,19 +854,44 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
             </Button>
           )}
           {running && (
-            <span className="text-sm text-slate-600" data-testid="build-progress">
-              {progress.phaseLabel ? `${progress.phaseLabel}: ` : ''}
-              {progress.segment} - {progress.label}
-              {progress.pass ? ` (pass ${progress.pass} of ${progress.maxPasses})` : ''} · segment {Math.min((progress.segmentsDone ?? 0) + 1, progress.segmentsTotal ?? 1)} of {progress.segmentsTotal ?? 1}
-            </span>
+            <div className="flex min-w-[18rem] flex-1 flex-col gap-1.5" data-testid="build-progress">
+              <ProgressBar value={progressShare} label="Build progress" />
+              <span className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-800">{Math.round(progressShare * 100)}%</span> · {progress.phaseLabel ? `${progress.phaseLabel} · ` : ''}
+                {progress.segment} (segment {Math.min((progress.segmentsDone ?? 0) + 1, progress.segmentsTotal ?? 1)} of {progress.segmentsTotal ?? 1}) · {progress.label}
+                {progress.pass ? ` · try ${progress.pass} of up to ${progress.maxPasses}` : ''}
+              </span>
+              <span className="text-[11px] text-slate-400">A whole event usually takes a few minutes. You can cancel; nothing is changed until a build finishes.</span>
+            </div>
           )}
           {!running && draft && (
             <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500" data-testid="build-status">
               <StatusChip kind={!draftCurrent ? 'stale' : draft.status === 'infeasible' ? 'infeasible' : applied ? 'applied' : 'draft'} />
-              {draftCurrent ? `${draft.builtCount} segment${draft.builtCount === 1 ? '' : 's'} built${draft.skippedCount ? `, ${draft.skippedCount} not configured` : ''}.` : null}
-              {draftCurrent && !applied && draft.status !== 'infeasible' && ' This is a draft - your applied design is unchanged until you apply it in step 7.'}
+              {draftCurrent ? `${draft.builtCount} segment${draft.builtCount === 1 ? '' : 's'} built${skippedInSight(draft) ? `, ${skippedInSight(draft)} without a DR demand` : ''}.` : null}
+              {draftCurrent && !applied && draft.status !== 'infeasible' && ' This build is not in use - step 5 can put it in use.'}
+              {draftCurrent && draft.status === 'infeasible' && ' It is not in use.'}
             </span>
           )}
+        </div>
+        <Collapsible
+          id="build-effort-shape"
+          tone="inner"
+          className="xl:open:col-span-2"
+          title="Optional: shape how the player's DR is spread over the ranks"
+          summary={shapeTyped ? 'A shape is typed: of the boards it makes, the build picks the ones closest to it.' : 'No shape typed - the build keeps the split from step 1.'}
+        >
+          <EffortStep
+            segments={segments}
+            activeSeg={segments[activeSegmentIndex]}
+            activeSegmentIndex={activeSegmentIndex}
+            onSelectSegment={onSelectSegment}
+            phase={phase}
+            phaseLabel={phaseLabel}
+            listOf={listOf}
+            targetPctInputs={targetPctInputs}
+            onTargetPctInputsChange={onTargetPctInputsChange}
+          />
+        </Collapsible>
         </div>
         {allNote && !running && (
           <div className={`mt-3 rounded-2xl border px-3 py-2 text-sm ${allNote.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`} data-testid="build-all-result">
@@ -821,14 +900,9 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
         )}
         {phase === 'rc' && rcOnMainDraft && !running && (
           <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="rc-on-main-draft">
-            This Recompletion draft was built on top of the Normal draft, which is not applied yet. Apply the whole event in step 7 to use them together.
+            This Recompletion build was made on top of a Normal build that is not in use yet. Put the whole event in use in step 5 to use them together.
           </div>
         )}
-        <p className="mt-2 text-xs text-slate-500 max-w-3xl">
-          &quot;Build whole event&quot; builds the Normal phase and then Recompletion on top of it, for every segment that has an amount.{' '}
-          The build never writes to your design. It produces a draft you review here and apply in step 7. Pinned contents, locked drop groups, rank limits, the
-          Board 1 cap and onboarding goals are kept. Twister is never placed under a tile.
-        </p>
 
         {draft && !draftCurrent && !running && (
           <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="build-needs-rebuild">
@@ -838,26 +912,102 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
         )}
         {error && (
           <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="build-error">
-            The build stopped with an error: {error}. Your draft and applied design are unchanged.
+            The build stopped with an error: {error}. Nothing was changed: your event is as it was.
           </div>
         )}
         {failed && (
           <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 flex flex-wrap items-center gap-2" data-testid="build-failed">
             <span className="flex-1 min-w-[16rem]">
-              This build could not produce a workable configuration, so it did not replace your earlier draft. The reasons are below. Your applied design is unchanged.
+              This build needs a fix, so it was not put in use: your event is still the build from before. The reasons are below.
             </span>
             <Button variant="secondary" size="sm" onClick={() => setFailed(null)}>
-              Show the earlier draft
+              Show the build in use
             </Button>
           </div>
         )}
       </Panel>
 
       {shown && shown.segments.length > 0 && (
-        <Panel title="Result for each segment" subtitle="One row per segment. Click a row to see that segment in detail below." tag={<SegmentTag />}>
+        <BuildSummary
+          result={shown}
+          shownSegments={shownSegments}
+          phase={phase}
+          activeSegmentIndex={activeSegmentIndex}
+          onSelectSegment={onSelectSegment}
+          current={!!failed || draftCurrent}
+          applied={!failed && applied}
+          tested={false}
+          running={running}
+          onNext={() => goTo('finalize')}
+          onRebuild={mainReadiness.ready ? handleBuildAll : handleBuild}
+          onShowSegment={showSegmentDetail}
+        />
+      )}
+
+      {/* WHAT TO LOOK AT stays in sight: a cause, with its quick fix, is never inside a folded section. (The segment's
+          whole detail opened by itself for this, and a segment whose twists land a few points late made the page three
+          screens tall.) */}
+      {shownSeg && shownSeg.status !== 'skipped' && (shownSeg.causes?.length ?? 0) > 0 && (
+        <Panel title={`${shownSeg.name}: what to look at`} tag={<StatusChip kind={segmentChip(shownSeg).kind}>{segmentChip(shownSeg).label}</StatusChip>} data-testid="segment-causes">
+          <CauseList
+            causes={shownSeg.causes}
+            goTo={goTo}
+            onFix={(f) => applyFix(f, shown.builtAt)}
+            fixedIds={new Set([...fixed].filter((id) => id.startsWith(`${shown.builtAt}:`)).map((id) => id.slice(String(shown.builtAt).length + 1)))}
+            onRebuild={running ? null : mainReadiness.ready ? handleBuildAll : handleBuild}
+          />
+        </Panel>
+      )}
+      {/* The details: two in a row on a wide window, and one that is opened takes the full width. */}
+      <div className="grid grid-cols-1 gap-4 empty:hidden xl:grid-cols-2 xl:items-start">
+      {shownSeg && shownSeg.status !== 'skipped' && (
+        <Collapsible
+          id={`build-segment-${phase}`}
+          className="scroll-mt-44 xl:open:col-span-2"
+          title={`${shownSeg.name} in detail`}
+          summary={
+            shownSeg.status === 'infeasible'
+              ? 'Something you asked for does not fit - see above. The full figures are here.'
+              : segmentChip(shownSeg).kind === 'review'
+                ? 'Built and usable. What is outside what you asked for is listed above; the full figures are here.'
+                : 'Everything you asked for was met: rewards asked for and expected, the DR on the boards, what the player pays, board by board.'
+          }
+          tag={<StatusChip kind={segmentChip(shownSeg).kind}>{segmentChip(shownSeg).label}</StatusChip>}
+          data-testid="segment-detail-fold"
+        >
+          <SegmentReview seg={shownSeg} appliedBoards={listOf(segments[shownSeg.index]).boards} />
+          {(shownSeg.tileHold?.keptOff ?? []).some((n) => n > 0) && (
+            <p className="mt-2 text-xs text-slate-600" data-testid="tile-hold-note">
+              A reward item under a tile is semi-blocked when its tile opens, and its board waits until a matching item dropped from a merge opens it. The build kept{' '}
+              {shownSeg.tileHold.keptOff
+                .map((n, i) => (n > 0 ? `${n} reward item${n === 1 ? '' : 's'} off Board ${i + 1}` : null))
+                .filter(Boolean)
+                .join(', ')}
+              , because there the match often came too late and the next board with it. Those rewards come from merge drops instead.
+            </p>
+          )}
+          {shownSeg.tileHold?.holds && (
+            <p className="mt-2 text-xs text-amber-700" data-testid="tile-hold-warning">
+              Every board keeps some reward items under its tiles, and a board waits for them. With them a player reaches{' '}
+              {Math.round((shownSeg.tileHold.reachedShare ?? 0) * 100)}% of this phase's DR under tiles, against {Math.round((shownSeg.tileHold.baselineShare ?? 0) * 100)}%
+              with no reward item under tiles: sometimes the match for one comes late, and the next board with it. Taking more of those rewards from merge drops makes the
+              match come sooner.
+            </p>
+          )}
+        </Collapsible>
+      )}
+
+      {shown && shown.segments.length > 0 && (
+        <Collapsible
+          id={`build-accounting-${phase}`}
+          className="xl:open:col-span-2"
+          title="How the board subsidy was worked out"
+          summary="Per segment: the subsidy you gave, what was taken off for merge energy, the demand calibration, and what the boards hold. Plus the drop rules in force."
+          tag={<SegmentTag />}
+        >
           <CoverageTable result={shown} activeSegmentIndex={activeSegmentIndex} onSelectSegment={onSelectSegment} />
           {shown.shared?.dropStartRank != null && (
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid="drop-start">
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid="drop-start" data-note>
               <span className="font-semibold">Merge drops:</span> every merge that makes a rank {shown.shared.dropStartRank} or higher item drops{' '}
               {shown.shared.oneItemOnly ? 'exactly one item' : 'one container of reward items'} ({shown.shared.dropGroups.filter((g) => g.auto).length} different
               {shown.shared.oneItemOnly ? ' items' : ' containers'}, the same for every segment).
@@ -904,7 +1054,7 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
             </div>
           )}
           {Object.keys(shownSeg?.rankValues ?? {}).length > 0 && (
-            <div className="mt-3 rounded-2xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900" data-testid="rank-values-note">
+            <div className="mt-3 rounded-2xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-900" data-testid="rank-values-note" data-note>
               <span className="font-semibold">Rank values the build gave {shownSeg.name}.</span> The drop rules stayed exactly as you set them. The build gives every segment its own
               four rank values for each reward - round amounts, each rank worth more than the items it is made of, so merging always pays - sized so this segment&apos;s average lands on
               its amount:
@@ -916,227 +1066,70 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
                   </li>
                 ))}
               </ul>
-              Your typed values stay in step 4 as the definition. To keep them whatever happens, switch off &quot;The build may change a reward&apos;s rank values&quot; there.
+              Your typed values stay in step 3 as the definition. To keep them whatever happens, switch off &quot;The build may change a reward&apos;s rank values&quot; there.
             </div>
           )}
           {(shown.adjustments ?? []).length > 0 && (
-            <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" data-testid="build-adjustments">
+            <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" data-testid="build-adjustments" data-note>
               <span className="font-semibold">The build adjusted where rewards come from, so every segment could land on its target:</span>{' '}
               {shown.adjustments.map((a) => `${REWARD_TARGET_LABELS[a.type].toLowerCase()} ${a.usedTilePct}% under tiles (you asked for ${a.askedTilePct}%)`).join('; ')}. Merge drops
               are the same for every segment, and a segment with less DR on its boards merges more, so it collects more drops - {shown.adjustments[0].segment} was getting
-              more than its target from drops alone. Your own setting in step 4 is unchanged.
+              more than its target from drops alone. Your own setting in step 3 is unchanged.
             </div>
           )}
-        </Panel>
+        </Collapsible>
       )}
 
       {shown && (shown.shared?.dropGroups ?? []).length > 0 && (
-        <Panel
-          title="Containers: what a merge drops"
-          subtitle="The build made these and gave each a weight. Every container is a different drop. They are what the model plays and simulates, and what the Small Rewards Bank and Small Reward Weights sheets export once the build is applied."
+        <Collapsible
+          id={`build-containers-${phase}`}
+          className="xl:open:col-span-2"
+          title="What a merge drops (containers)"
+          summary={`${shown.shared.dropGroups.filter((g) => g.auto).length} containers, each with a weight per merge rank - what the simulator plays and the Small Rewards Bank and Weights sheets export.`}
           tag={<SharedTag />}
         >
+          <p className="mb-3 text-xs text-slate-500">
+            The build made these and gave each a weight. Every container is a different drop. They are what the model plays and simulates, and what the Small Rewards Bank and Small
+            Reward Weights sheets export.
+          </p>
           <ContainersTable dropGroups={shown.shared.dropGroups} dropGroupsConfig={shown.shared.dropGroupsConfig} minDropRank={shown.shared.dropStartRank ?? listOf(segments[0]).boards[0]?.minDropRank} phase={phase} testid="build-containers" />
-        </Panel>
+        </Collapsible>
       )}
 
       {shown?.twister && (
-        <Panel
-          title="Twister: the price of a twist, and whether it is on track"
-          subtitle={`Worked out for each segment from the twists you typed in step 4, by playing these boards (${shown.twister.runs} simulated players each). Applying the build sets these prices. The "At ..." columns are the twists a typical player of the segment can have bought that far into the phase.`}
+        <Collapsible
+          id={`build-twister-${phase}`}
+          className="xl:open:col-span-2"
+          title="Twister in detail: values, the price of a twist, timing and chances to spin"
+          summary="Each segment's four Twister values and price, when the twists are reached and how they arrive - and an experiment with bigger Twister items."
           tag={<SegmentTag />}
         >
-          {(() => {
-            const track = twisterTrack(shown.twister)
-            return track ? (
-              <p className={`mb-2 rounded-xl border px-3 py-2 text-sm font-semibold ${track.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`} data-testid="twister-track" data-on-track={track.ok ? 'yes' : 'no'}>
-                {track.text}
-              </p>
-            ) : null
-          })()}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[64rem] text-sm tabular-nums" data-testid="build-twister-prices">
-              <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                  <th className="py-1.5 pr-3">Segment</th>
-                  <th className="py-1.5 pr-3 text-right">Twists you asked for</th>
-                  <th className="py-1.5 pr-3 text-right">Price of a twist</th>
-                  <th className="py-1.5 pr-3 text-right">Twists a typical player gets</th>
-                  {PACE_MARKS.map((pct) => (
-                    <th key={pct} className="py-1.5 pr-3 text-right whitespace-nowrap" title={`What a typical player of the segment has collected when they are ${pct}% through the phase, and the twists that buys`}>
-                      At {pct}%
-                    </th>
-                  ))}
-                  <th className="py-1.5 pr-3 text-right whitespace-nowrap" title="How far into the phase the typical player is when they can buy the last of the twists you asked for">
-                    Has them all at
-                  </th>
-                  <th className="py-1.5 pr-3">Pace</th>
-                  <th className="py-1.5 pr-3">Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.twister.rows.map((row) => (
-                  <tr key={row.index} className="border-b border-slate-100 align-top" data-twister-price={row.index}>
-                    <td className="py-1.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">{row.name}</td>
-                    <td className="py-1.5 pr-3 text-right">{row.twists ?? '—'}</td>
-                    <td className="py-1.5 pr-3 text-right font-semibold text-purple-700" data-field="price">
-                      {row.cost == null ? '—' : `${row.cost} Twister DR`}
-                    </td>
-                    <td className="py-1.5 pr-3 text-right" data-field="typical">
-                      {row.spinsMedian == null ? '—' : `${row.spinsMedian}${row.attainment != null ? ` · ${Math.round(row.attainment * 100)}% get all ${row.twists}` : ''}`}
-                    </td>
-                    {PACE_MARKS.map((pct) => {
-                      const at = row.incomeAtMarks?.[pct]
-                      const typical = at?.p50
-                      const twistsThere = row.cost > 0 && typical != null ? Math.floor(typical / row.cost) : null
-                      return (
-                        <td key={pct} className="py-1.5 pr-3 text-right whitespace-nowrap" data-mark={pct}>
-                          {at === undefined ? (
-                            <span className="text-slate-400">—</span>
-                          ) : typical == null ? (
-                            <span className="text-slate-400">not reached</span>
-                          ) : (
-                            <>
-                              {twistsThere != null && (
-                                <span className={`block font-semibold ${row.twists > 0 && twistsThere >= row.twists ? 'text-emerald-700' : 'text-slate-700'}`} data-field="twists">
-                                  {twistsThere} twist{twistsThere === 1 ? '' : 's'}
-                                </span>
-                              )}
-                              <span className="block text-xs text-slate-500" data-field="dr">
-                                {formatRewardAmount('twister', typical)} DR
-                              </span>
-                            </>
-                          )}
-                        </td>
-                      )
-                    })}
-                    <td className="py-1.5 pr-3 text-right whitespace-nowrap" data-field="finish">
-                      {row.cost == null || !(row.twists > 0) ? '—' : row.finishPct == null ? <span className="text-amber-700">not by the end</span> : `${row.finishPct}%`}
-                    </td>
-                    <td className="py-1.5 pr-3 whitespace-nowrap" data-field="pace" data-pace={row.pace ?? ''}>
-                      {row.pace ? <StatusChip kind={PACE_CHIP[row.pace]}>{PACE_LABEL[row.pace]}</StatusChip> : '—'}
-                    </td>
-                    <td className={`py-1.5 pr-3 text-xs max-w-md ${row.tooLow || (row.pace && row.pace !== 'on-track') ? 'text-amber-700' : 'text-slate-500'}`} data-field="note">
-                      {twisterNote(row, shown.twister.sizing)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {shown.twister.sizing?.byBuild && (
-            <p className="mt-2 text-xs text-slate-600" data-testid="twister-sized">
-              {shown.shared?.oneItemOnly
-                ? `${Math.round(shown.twister.sizing.minShare * 100)}% of the merges that drop, drop a Twister item`
-                : `The build put a Twister item into ${shown.twister.sizing.minShare >= 0.999 ? 'every drop' : `at least ${Math.round(shown.twister.sizing.minShare * 100)}% of the drops`}`}
-              {shown.twister.sizing.higher > 0
-                ? `, at rank ${shown.twister.sizing.rank} or ${shown.twister.sizing.rank + 1}`
-                : `, at rank ${shown.twister.sizing.rank}`}
-              {shown.twister.sizing.rounds > 0
-                ? shown.twister.sizing.steady
-                  ? ` - the items were made bigger so that every segment's Twister DR arrives in enough steps for its typical player to get the last twist near the end${shown.twister.sizing.collectsMin != null ? ` (the fewest finished Twister items in a segment now: ${Math.round(shown.twister.sizing.collectsMin)})` : ''}. With one or two, all the twists arrive in one or two jumps ("Keep every segment's Twister steady", step 4).`
-                  : ' - the items were made bigger, because otherwise the typical player of one segment would not have finished a single Twister item by the time twists are counted.'
-                : '.'}{' '}
-              You can see it in the containers above.
-              {shown.twister.sizing.valuesByBuild && shown.twister.sizing.values && (
-                <span data-testid="twister-values">
-                  {' '}
-                  {shown.twister.sizing.higher > 0 || shown.twister.sizing.rank > 1 ? 'Twister drops stay small items the player merges up.' : 'Every Twister drop stays a rank-1 item the player merges up.'} The build set the four Twister DR values to{' '}
-                  {shown.twister.sizing.values.join(' / ')} (ranks 1 to 4){shown.twister.sizing.valueFactor > 1 ? `, ${shown.twister.sizing.valueFactor} times the starting 2 / 5 / 12 / 30, as round numbers` : ''} - the smallest values at which
-                  every segment has a price, in your price steps, that fits its twists. Type your own values in the reward definitions and the build keeps them.
-                </span>
-              )}
-              {shown.twister.sizing.minShare >= 0.999 && ' With a Twister item in every drop, every drop that holds a reward holds two items, at every rank.'}
-            </p>
-          )}
-          {shown.twister.rows.some((r) => r.cost != null && r.twists > 0 && !r.pace) && (
-            <p className="mt-1 text-xs text-amber-700" data-testid="twister-no-pace">
-              This build was made before the tool checked the Twister's pace. Build again to see when each segment's player has the last twist.
-            </p>
-          )}
-          {shown.twister.sizing?.short && (
-            <p className="mt-1 text-xs text-amber-700" data-testid="twister-short">
-              Even with the biggest Twister item the build uses (rank 3 - it stays an item the player merges) in this many drops, a segment collects too little for its
-              twists. Ask for fewer twists, use a smaller price step, count the twists
-              later in the phase, or raise the Twister rank values (step 4).
-            </p>
-          )}
-          {shown.twister.sizing?.needsRebuild && (
-            <p className="mt-1 text-xs text-amber-700" data-testid="twister-needs-rebuild">
-              The twists you typed since this build do not fit the Twister it sized (its items and values were made for the twists it was given). Build again and the build sizes the Twister for these twists.
-            </p>
-          )}
-          <p className="mt-2 text-[11px] text-slate-500">
-            Counted when the player is {shown.twister.checkpointPct}% through the phase{shown.twister.checkpointPct >= 100 ? ' (by the end)' : ''}. The price is the highest one, in your price steps, at
-            which the typical player still gets the twists you asked for. "On track" means that player can buy the last of them in the {TWISTER_ON_TRACK_WINDOW_PCT} points of progress before
-            twists are counted ({TWISTER_ON_TRACK_WINDOW_PCT} is this tool's own number); "Early" means sooner; "Short" means not all of them. The price is in Twister DR, the Twister's own
-            currency - not merge energy and not the DR of the boards. Twister DR arrives in whole item collects, so twists come in steps: the typical player lands on your number, not every player.
-          </p>
-        </Panel>
+          <TwisterTimingPanel phase={phase} draft={shown} segments={segments} activeSegmentIndex={activeSegmentIndex} embedded />
+        </Collapsible>
       )}
 
       {shownSeg && shownSeg.status !== 'skipped' && (
-        <Panel
-          title={`Review: ${shownSeg.name}`}
-          subtitle={
-            shownSeg.status === 'infeasible'
-              ? 'Something you asked for does not fit. Each problem below comes with a quick fix.'
-              : segmentChip(shownSeg).kind === 'review'
-                ? 'Built and usable. Something is outside what you asked for - a quick fix is offered below.'
-                : 'Everything you asked for was met.'
-          }
-          tag={<StatusChip kind={segmentChip(shownSeg).kind}>{segmentChip(shownSeg).label}</StatusChip>}
-        >
-          <SegmentReview
-            seg={shownSeg}
-            appliedBoards={listOf(segments[shownSeg.index]).boards}
-            goTo={goTo}
-            onFix={(f) => applyFix(f, shown.builtAt)}
-            fixedIds={new Set([...fixed].filter((id) => id.startsWith(`${shown.builtAt}:`)).map((id) => id.slice(String(shown.builtAt).length + 1)))}
-            onRebuild={running ? null : mainReadiness.ready ? handleBuildAll : handleBuild}
-          />
-          {(shownSeg.tileHold?.keptOff ?? []).some((n) => n > 0) && (
-            <p className="mt-2 text-xs text-slate-600" data-testid="tile-hold-note">
-              A reward item under a tile is semi-blocked when its tile opens, and its board waits until a matching item dropped from a merge opens it. The build kept{' '}
-              {shownSeg.tileHold.keptOff
-                .map((n, i) => (n > 0 ? `${n} reward item${n === 1 ? '' : 's'} off Board ${i + 1}` : null))
-                .filter(Boolean)
-                .join(', ')}
-              , because there the match often came too late and the next board with it. Those rewards come from merge drops instead.
-            </p>
-          )}
-          {shownSeg.tileHold?.holds && (
-            <p className="mt-2 text-xs text-amber-700" data-testid="tile-hold-warning">
-              Every board keeps some reward items under its tiles, and a board waits for them. With them a player reaches{' '}
-              {Math.round((shownSeg.tileHold.reachedShare ?? 0) * 100)}% of this phase's DR under tiles, against {Math.round((shownSeg.tileHold.baselineShare ?? 0) * 100)}%
-              with no reward item under tiles: sometimes the match for one comes late, and the next board with it. Taking more of those rewards from merge drops makes the
-              match come sooner.
-            </p>
-          )}
-        </Panel>
-      )}
-      {shownSeg && shownSeg.status !== 'skipped' && (
-        <Panel
-          title={`The built boards: ${shownSeg.name}`}
-          subtitle={`What is under every tile, and the order the blocked tiles hand their items out. A reward item under a tile is semi-blocked until a matching dropped item opens it, and the board waits for it; Reward items under tiles: ${shownSeg.boards
-            .map((_, i) => (i === 0 && shownSeg.boards.length > 1 ? 'Board 1 none' : `Board ${i + 1} rank ${allowedRewardRanks(i, shownSeg.boards.length).join(' and ')}`))
-            .join(', ')}. On Board 2 they come as a rank 1 and a rank 2 together, so one dropped rank-1 item opens both.`}
-        >
+        <Collapsible id={`build-boards-${phase}`} className="xl:open:col-span-2" title={`The built boards: ${shownSeg.name}`} summary="What is under every tile, and the order the blocked tiles hand their items out.">
+          <p className="mb-3 text-xs text-slate-500">
+            {`What is under every tile, and the order the blocked tiles hand their items out. A reward item under a tile is semi-blocked until a matching dropped item opens it, and the board waits for it; Reward items under tiles: ${shownSeg.boards
+              .map((_, i) => (i === 0 && shownSeg.boards.length > 1 ? 'Board 1 none' : `Board ${i + 1} rank ${allowedRewardRanks(i, shownSeg.boards.length).join(' and ')}`))
+              .join(', ')}. On Board 2 they come as a rank 1 and a rank 2 together, so one dropped rank-1 item opens both.`}
+          </p>
           <BuiltBoards boards={shownSeg.boards} />
-        </Panel>
+        </Collapsible>
       )}
       {shownSeg && shownSeg.status !== 'skipped' && (phase === 'main' || !rcOnMainDraft) && (
-        <Panel title={`Effort distribution of this build: ${shownSeg.name}`} subtitle="Where the player's own DR goes, rank by rank - one playthrough of exactly these boards.">
+        <Collapsible id={`build-effort-${phase}`} className="xl:open:col-span-2" title={`Effort distribution of this build: ${shownSeg.name}`} summary="Where the player's own DR goes, rank by rank - one playthrough of exactly these boards.">
           {phase === 'main' && shownSeg.effortFit && (
             <p className="mb-2 text-xs text-slate-600" data-testid="effort-fit-note">
-              You asked for an effort distribution in step 5, so the build generated these boards several times - same DR, same reward items - and kept the layout closest to
+              You typed an effort shape (above the Build button), so the build generated these boards several times - same DR, same reward items - and kept the layout closest to
               it: rank 12 takes {Math.round(shownSeg.effortFit.curve?.[12] ?? 0)}% of the effort here, against {Math.round(shownSeg.effortFit.target?.[12] ?? 0)}% asked
               {shownSeg.effortFit.startDistance > shownSeg.effortFit.distance + 1e-9 ? ' (the first layout was further off)' : ''}.
             </p>
           )}
           {phase === 'main' && !shownSeg.effortFit && (
             <p className="mb-2 text-xs text-slate-500" data-testid="effort-fit-note">
-              No effort distribution was typed in step 5 for this build, so the boards were generated once and this is simply what they give.
+              No effort shape was typed for this build, so the boards were generated once and this is simply what they give.
             </p>
           )}
           <BuiltEffort
@@ -1144,12 +1137,14 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
             mainBoards={phase === 'rc' ? segments[shownSeg.index].main.boards : null}
             cacheKey={`${phase}:${shown.builtAt}:${shownSeg.index}`}
           />
-        </Panel>
+        </Collapsible>
       )}
+      </div>
       {shownSeg && shownSeg.status === 'skipped' && (
-        <Panel title={`Review: ${shownSeg.name}`}>
+        <Panel title={`${shownSeg.name} in detail`}>
           <p className="text-sm text-slate-600" data-testid="segment-skipped">
-            Not built: {shownSeg.skipReason} <LinkButton onClick={() => goTo('setup')}>Open Event setup</LinkButton>
+            Not built: {shownSeg.skipReason.startsWith('No amount entered') ? 'no DR demand was typed for this segment (step 1).' : shownSeg.skipReason}{' '}
+            <LinkButton onClick={() => goTo('setup')}>Go to step 1</LinkButton>
           </p>
         </Panel>
       )}
@@ -1158,40 +1153,18 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
 }
 
 // ---------------------------------------------------------------- Step 5
-export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase, phaseLabel, goTo, onOpenTool, draft, draftCurrent, applied, validation, onValidation, onDraft, onPlay, playOverride, designIssues = [], exportOverride = false, onExportOverride, onOpenTwister, drafts = {}, onDraftsChange, currentFor = {}, appliedFor = {}, validationAll = {}, rcOnMainDraft = false }) {
+export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase, phaseLabel, goTo, draft, draftCurrent, applied, validation, onValidation, onUse, onGoBack, onPlay, designIssues = [], exportOverride = false, onExportOverride, drafts = {}, currentFor = {}, appliedFor = {}, rcOnMainDraft = false }) {
   const [validating, setValidating] = useState(false)
   // Phases with a draft that can be applied right now and is not yet.
   const PHASE_NAMES = { main: 'Normal', rc: 'Recompletion' }
   const pendingPhases = ['main', 'rc'].filter((p) => draftIsUsable(drafts[p]) && currentFor[p] && !appliedFor[p])
-  const readyPhases = ['main', 'rc'].filter((p) => draftIsUsable(drafts[p]) && currentFor[p])
 
-  // Applies every pending phase: Normal first, then Recompletion (which was
-  // built on top of it). Each phase keeps its own snapshot, so each can be
-  // reverted on its own.
-  function handleApplyAll() {
-    const next = { ...drafts }
-    for (const p of pendingPhases) {
-      const d = drafts[p]
-      const v = validationAll[p]?.builtAt === d.builtAt ? validationAll[p] : null
-      const snapshot = {}
-      for (const s of d.segments.filter((x) => x.status !== 'skipped')) {
-        const list = p === 'main' ? segments[s.index].main : segments[s.index].recompletion
-        snapshot[s.index] = list.boards
-        const sv = v?.bySegment?.[s.index]
-        boardsWithDraftApplied(list.boards, s, d.shared, { draft: d, validation: sv ? { runs: v.runs, seed: v.seed, ok: sv.allWithinTolerance } : null }).forEach((b) => list.updateBoard(b))
-      }
-      next[p] = { ...d, applied: { snapshot, at: Date.now() } }
-    }
-    onDraftsChange(next)
-  }
   const builtSegments = draft ? draft.segments.filter((s) => s.status !== 'skipped') : []
   const draftSeg = draft?.segments.find((s) => s.index === activeSegmentIndex && s.status !== 'skipped') ?? null
   // A Recompletion draft built on the not-yet-applied Normal draft can be
   // applied (together with it) but not tested on its own: testing plays the
   // applied Normal boards first, and those are not this build's yet.
   const usable = !!draft && draftCurrent && draft.status !== 'infeasible' && draft.status !== 'nothing-built' && !rcOnMainDraft
-  const board0 = listOf(base).boards[0]
-  const twisterReady = twisterIsConfigured(board0?.rewardChainConfig) && hasTwisterDrops(board0?.dropGroups, board0?.dropGroupsConfig, board0?.minDropRank)
 
   // Draft boards as they would be once applied: the shared drops on every board.
   const withShared = (boards) => boards.map((b) => ({ ...b, dropGroups: draft.shared?.dropGroups ?? b.dropGroups, dropGroupsConfig: draft.shared?.dropGroupsConfig ?? b.dropGroupsConfig }))
@@ -1227,30 +1200,13 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
     }
   }
 
-  function handleApply() {
-    const snapshot = {}
-    for (const s of builtSegments) snapshot[s.index] = listOf(segments[s.index]).boards
-    writeApplied(validation)
-    onDraft({ ...draft, applied: { snapshot, at: Date.now() } })
-  }
-
-  function handleRevert() {
-    if (!draft?.applied) return
-    for (const [index, boards] of Object.entries(draft.applied.snapshot)) {
-      const list = listOf(segments[Number(index)])
-      boards.forEach((b) => list.updateBoard(b))
-    }
-    const { applied: _applied, ...rest } = draft
-    onDraft(rest)
-  }
-
   function handlePlayDraft() {
     const seg = segments[activeSegmentIndex]
     const boards = withShared(draftSeg.boards)
     onPlay(
       phase === 'main'
-        ? { boards, rcBoards: seg.recompletion.boards, label: `the DRAFT ${phaseLabel.toLowerCase()} build of ${draftSeg.name}`, builtAt: draft.builtAt }
-        : { boards: seg.main.boards, rcBoards: boards, label: `the applied Normal boards with the DRAFT Recompletion build of ${draftSeg.name}`, builtAt: draft.builtAt },
+        ? { boards, rcBoards: seg.recompletion.boards, label: `a ${phaseLabel.toLowerCase()} build of ${draftSeg.name} that is NOT in use`, builtAt: draft.builtAt }
+        : { boards: seg.main.boards, rcBoards: boards, label: `the Normal boards in use with a Recompletion build of ${draftSeg.name} that is NOT in use`, builtAt: draft.builtAt },
     )
   }
 
@@ -1269,116 +1225,120 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
   }
 
   const v = validation?.bySegment?.[activeSegmentIndex]
-  const playingDraft = !!playOverride && playOverride.builtAt === draft?.builtAt
+  // WHAT IS IN USE, in one of five states (BuildEventPage.jsx: a finished
+  // build is in use at once; "not in use" is left for a build kept from an
+  // earlier session, one that came with a backup, or boards edited by hand
+  // after the build).
+  const builtTime = draft?.builtAt ? new Date(draft.builtAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
+  const useState_ = !draft ? 'none' : !draftCurrent ? 'stale' : !draftIsUsable(draft) ? 'needs-fix' : applied ? 'in-use' : 'not-in-use'
+  const phaseState = (p) => (!drafts[p] ? 'not built' : !currentFor[p] ? 'out of date' : !draftIsUsable(drafts[p]) ? 'needs a fix' : appliedFor[p] ? 'in use' : 'built, not in use')
+  // Applying everything at once is THE action when another phase waits too;
+  // applying this phase alone is then the smaller choice.
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel title="7. Test and finalize" subtitle="Check the draft, then apply it. Nothing reaches the Play Tester default or the exports until it is applied.">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="finalize-sources">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">The draft</div>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {!draft ? (
-                <StatusChip kind="none">No draft built</StatusChip>
-              ) : (
-                <>
-                  <StatusChip kind={!draftCurrent ? 'stale' : draft.status === 'infeasible' ? 'infeasible' : applied ? 'applied' : 'draft'} />
-                  {draftCurrent && draft.status !== 'infeasible' && <StatusChip kind={validation ? 'validated' : 'estimated'} />}
-                </>
-              )}
+      <Panel>
+        <div
+          className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${useState_ === 'in-use' ? 'border-emerald-200 bg-emerald-50' : useState_ === 'none' ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50'}`}
+          data-testid="finalize-in-use"
+          data-state={useState_}
+          data-built-at={draft?.builtAt ?? ''}
+        >
+          {useState_ !== 'in-use' && useState_ !== 'none' && <TriangleAlert size={16} className="shrink-0 text-amber-700" />}
+          <div className="min-w-[16rem] flex-1">
+            <div className="text-sm font-semibold text-slate-800">
+              {useState_ === 'none'
+                ? 'Nothing is built yet.'
+                : useState_ === 'stale'
+                  ? 'Your inputs changed after the last build.'
+                  : useState_ === 'needs-fix'
+                    ? 'The last build needs a fix, so it is not in use.'
+                    : useState_ === 'in-use'
+                      ? `In use: the ${phaseLabel.toLowerCase()} build of ${builtTime} (${builtSegments.length} segment${builtSegments.length === 1 ? '' : 's'}).`
+                      : 'This build is not in use.'}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {!draft
-                ? 'Build a configuration in step 6 first.'
-                : !draftCurrent
-                  ? 'Inputs changed since it was built. Rebuild before testing or applying.'
-                  : applied
-                    ? 'This draft is the applied design.'
-                    : draft.status === 'infeasible'
-                      ? 'This build has a problem that needs a fix - step 6 says what to change.'
-                      : 'Built and ready to test. Not applied yet.'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3" data-testid="source-play">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Play Tester is using</div>
-            <div className="mt-1 text-sm font-semibold text-slate-700">{playingDraft ? 'The draft' : 'The applied design'}</div>
-            <p className="mt-1 text-xs text-slate-500">{playingDraft ? `It is playing ${playOverride.label}.` : 'It plays whatever is applied unless you open it on the draft below.'}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3" data-testid="source-export">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Exports are using</div>
-            <div className="mt-1 text-sm font-semibold text-slate-700">The applied design</div>
-            <p className="mt-1 text-xs text-slate-500">
-              {applied && draftCurrent ? 'That is this draft.' : draft && draftCurrent ? 'Not this draft - apply it first if you want it exported.' : 'A draft is never exported.'}
-            </p>
-          </div>
-        </div>
-
-        {readyPhases.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-purple-200 bg-purple-50/70 px-4 py-3 flex flex-wrap items-center gap-3" data-testid="finalize-whole-event">
-            <div className="flex-1 min-w-[16rem] text-sm text-slate-700">
-              <div className="font-semibold text-purple-900">The whole event</div>
-              <div className="text-xs text-slate-600">
-                {['main', 'rc']
-                  .map((p) => `${PHASE_NAMES[p]}: ${!drafts[p] ? 'not built' : !currentFor[p] ? 'out of date' : !draftIsUsable(drafts[p]) ? 'needs a fix' : appliedFor[p] ? 'applied' : 'built, not applied'}`)
-                  .join(' · ')}
-                . Applying writes the built boards, reward items, merge drops and coin values into your design; the export below then holds every sheet.
-              </div>
+            <div className="mt-0.5 text-xs text-slate-600">
+              {useState_ === 'none'
+                ? 'Build the event in step 4. It is in use as soon as it finishes.'
+                : useState_ === 'stale'
+                  ? 'What is in use is still the build from before the change. Build again in step 4 to bring it up to date.'
+                  : useState_ === 'needs-fix'
+                    ? 'Step 4 says what to change. Until then your event is whatever was in use before.'
+                    : useState_ === 'in-use'
+                      ? 'The Play tester plays it and the Syntax export holds it. Nothing else has to be done for that.'
+                      : draft.applied
+                        ? `${appliedSegments === 0 ? 'The boards no longer match this build' : `Only ${appliedSegments} of ${builtSegments.length} segments still match this build`}: they were edited after it went into use, or the project was reloaded from an earlier save.`
+                        : 'It was kept from an earlier session or came with a backup file. The Play tester and Syntax still use what was in use before.'}
             </div>
-            <Button variant="primary" icon={Check} onClick={handleApplyAll} disabled={pendingPhases.length === 0} data-testid="finalize-apply-all">
-              {pendingPhases.length === 0 ? 'Whole event applied' : `Apply whole event (${pendingPhases.map((p) => PHASE_NAMES[p]).join(' + ')})`}
+            <div className="mt-1 text-[11px] text-slate-500" data-testid="finalize-whole-event">
+              Normal: {phaseState('main')} · Recompletion: {phaseState('rc')}
+            </div>
+          </div>
+          {pendingPhases.length > 0 && (
+            <Button variant="primary" icon={Check} onClick={() => onUse(Object.fromEntries(pendingPhases.map((p) => [p, drafts[p]])))} data-testid="finalize-apply">
+              {pendingPhases.length > 1 ? 'Put the whole event in use' : `Put this ${PHASE_NAMES[pendingPhases[0]].toLowerCase()} build in use`}
             </Button>
-          </div>
-        )}
+          )}
+          {(useState_ === 'none' || useState_ === 'stale' || useState_ === 'needs-fix') && (
+            <Button variant="secondary" onClick={() => goTo('build')} data-testid="finalize-to-build">
+              Go to step 4
+            </Button>
+          )}
+        </div>
         {rcOnMainDraft && (
           <div className="mt-3 text-sm text-sky-800" data-testid="finalize-rc-on-main-draft">
-            This Recompletion draft was built on the Normal draft, which is not applied yet. Apply the whole event above; after that it can be validated and played here.
-          </div>
-        )}
-        {!usable && !rcOnMainDraft && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-amber-700" data-testid="finalize-blocked">
-            <TriangleAlert size={15} className="shrink-0" />
-            <span>{!draft ? 'There is no draft to test yet.' : !draftCurrent ? 'The draft is out of date.' : 'The last build needs a fix first (see step 6), so there is nothing to apply.'}</span>
-            <LinkButton onClick={() => goTo('build')}>Go to Build boards</LinkButton>
+            This Recompletion build was made on a Normal build that is not in use yet. Put the whole event in use above; after that it can be tested and played here.
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button variant="secondary" icon={FlaskConical} onClick={handleValidate} disabled={!usable || validating} data-testid="finalize-validate">
-            {validating ? 'Simulating…' : `Run seeded validation (${DEFAULT_VALIDATION_RUNS} players)`}
+        {/* Three things to do with a build, as three buttons (each said what it does in a card of its own; that is in the hover now). */}
+        <div className="mt-4 flex flex-wrap items-center gap-3" data-testid="finalize-actions">
+          <Button
+            variant="primary"
+            icon={FlaskConical}
+            onClick={handleValidate}
+            disabled={!usable || validating}
+            data-testid="finalize-validate"
+            title={`${DEFAULT_VALIDATION_RUNS} simulated players, each with their own luck. Says how many of them land near what you asked - not only the average.`}
+          >
+            {validating ? 'Playing…' : validation ? `Test again on ${DEFAULT_VALIDATION_RUNS} players` : `Test on ${DEFAULT_VALIDATION_RUNS} simulated players`}
           </Button>
-          <Button variant="secondary" icon={Gamepad2} onClick={handlePlayDraft} disabled={!usable || !draftSeg} data-testid="finalize-play">
-            Open Play Tester on the draft
+          <Button
+            variant="secondary"
+            icon={Gamepad2}
+            onClick={() => (applied || !usable || !draftSeg ? onPlay(null) : handlePlayDraft())}
+            data-testid="finalize-play"
+            title={`Opens the Play tester on ${segments[activeSegmentIndex]?.name || `Segment ${activeSegmentIndex + 1}`}. It says at the top what it is playing.`}
+          >
+            {usable && !applied && draftSeg ? 'Play this build (not in use)' : 'Play it'}
           </Button>
-          <span className="flex-1" />
-          <Button variant="primary" icon={Check} onClick={handleApply} disabled={!usable || applied} data-testid="finalize-apply">
-            {applied ? 'Applied' : `Apply to ${builtSegments.length} segment${builtSegments.length === 1 ? '' : 's'}`}
-          </Button>
-          <Button variant="ghost" icon={Undo2} onClick={handleRevert} disabled={!draft?.applied} data-testid="finalize-revert">
-            Revert the application
+          <Button
+            variant="secondary"
+            icon={Undo2}
+            onClick={() => onGoBack(phase)}
+            disabled={!draft?.applied}
+            data-testid="finalize-revert"
+            title="Puts back what was in use before this build: the build before it, or the boards as they were. One step back."
+          >
+            Go back to the previous build
           </Button>
         </div>
-        {draft?.applied && !applied && (
-          <p className="mt-2 text-xs text-amber-700" data-testid="finalize-edited-after-apply">
-            {appliedSegments === 0 ? 'The applied design no longer matches this draft' : `Only ${appliedSegments} of ${builtSegments.length} segments still match this draft`} - it was edited after
-            it was applied (or the project was reloaded from an earlier save). Reverting restores the design from before the application.
-          </p>
-        )}
       </Panel>
 
       {v && draftSeg && (
         <Panel
-          title={`Seeded validation: ${draftSeg.name}`}
-          subtitle={`${validation.runs} simulated players, each rolling their own lucky drops like a real one (seed ${validation.seed}) - an independent run, not the one the build scored itself on.`}
-          tag={<StatusChip kind={v.allWithinTolerance ? 'validated' : 'review'}>{v.allWithinTolerance ? 'Simulation validated' : 'Validated - off target'}</StatusChip>}
+          title={`Tested on players: ${draftSeg.name}`}
+          subtitle={`${validation.runs} simulated players, each rolling their own lucky drops like a real one - a separate run, not the one the build measured itself on. (Run number ${validation.seed}: the same test gives the same players again.)`}
+          tag={<StatusChip kind={v.allWithinTolerance ? 'validated' : 'review'}>{v.allWithinTolerance ? 'Averages within margin' : 'Tested - an average is off target'}</StatusChip>}
         >
           <table className="w-full text-sm tabular-nums" data-testid="validation-table">
             <thead>
               <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 <th className="py-1 pr-3">Resource</th>
-                <th className="py-1 pr-3">Requested</th>
-                <th className="py-1 pr-3">Build estimate</th>
-                <th className="py-1 pr-3">Validated average</th>
-                <th className="py-1 pr-3">Range (p10 – p90)</th>
+                <th className="py-1 pr-3">You asked for</th>
+                <th className="py-1 pr-3">The build expected</th>
+                <th className="py-1 pr-3">Average of these players</th>
+                <th className="py-1 pr-3">8 in 10 players land between</th>
                 <th className="py-1 pr-3">Players within {Math.round((v.margin ?? (phase === 'rc' ? 0.25 : 0.15)) * 100)}%</th>
               </tr>
             </thead>
@@ -1406,7 +1366,7 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
                 ))}
             </tbody>
           </table>
-          {v.resources.every((r) => !(r.target > 0)) && <p className="text-sm text-slate-500">No reward targets to validate for this segment.</p>}
+          {v.resources.every((r) => !(r.target > 0)) && <p className="text-sm text-slate-500">This segment has no reward amounts to test.</p>}
           {v.allNearShare != null && (
             <p className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" data-testid="validation-closeness">
               <span className="font-semibold" data-field="all-near">
@@ -1415,61 +1375,44 @@ export function FinalizeStep({ segments, base, listOf, activeSegmentIndex, phase
               end within {Math.round((v.margin ?? 0.15) * 100)}% of the amount asked on every reward at once. The average says where the middle player lands; this says how many players are near it.
               {draft?.shared?.steadyDrops
                 ? ' Every merge of a rank drops the same items in this build, so what still differs between two players is their luck with the generator.'
-                : ' The containers of this build are picked at random at each merge, so two players can end far apart - step 4 has "Every merge of a rank drops the same items".'}
+                : ' The containers of this build are picked at random at each merge, so two players can end far apart - step 3 has "Every merge of a rank drops the same items".'}
             </p>
           )}
           <p className="mt-2 text-xs text-slate-500">
             {phase === 'rc' ? `${pct(v.entryRate * 100)} of players reached Recompletion; ` : ''}
-            {pct(v.completionRate * 100)} finished the phase. Average player spend {dr(v.drSpent.mean)}. Energy collected {Math.round(v.energyMean)} - that implies a credit of{' '}
-            {dr(v.creditFromValidation)} against the {dr(draftSeg.subsidy.creditApplied)} the boards were built with.
+            {pct(v.completionRate * 100)} finished the phase. The average player spent {dr(v.drSpent.mean)}
+            {draftSeg.demandFit?.configured > 0 ? ` against a DR demand of ${dr(draftSeg.demandFit.configured)}` : ''}. Merge energy collected: {Math.round(v.energyMean)} - 80% of that is{' '}
+            {dr(v.creditFromValidation)}, against the {dr(draftSeg.subsidy.creditApplied)} taken off the boards for it.
           </p>
         </Panel>
       )}
 
+      {/* Under the test: the other players, endless mode and the export, side by side on a wide window. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-start">
       {v && draftSeg && (v.styles?.length ?? 0) > 1 && <PlayStylesPanel v={v} segmentName={draftSeg.name} phase={phase} goTo={goTo} />}
 
-      <Panel title="Twister spin costs" subtitle="Optional. If you typed twists in step 4, the build has already priced them and Apply sets the prices. The Twister tool is for a closer look." tag={<SharedTag />}>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600" data-testid="finalize-twister">
-          <Tornado size={16} className="text-teal-600 shrink-0" />
-          <span className="flex-1 min-w-[16rem] text-xs text-slate-500">
-            {!twisterReady
-              ? 'Twister is not set up for this phase. That does not affect this build - set it up whenever you need it.'
-              : 'Twister income is measured on exactly the configuration you pick. A proposal does not have to be applied to see its Twister economy.'}
-          </span>
-          {twisterReady && (
-            <Button variant="secondary" size="sm" onClick={() => onOpenTwister('draft')} disabled={!usable} data-testid="finalize-twister-draft">
-              Analyze Twister on the draft
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => (twisterReady ? onOpenTwister('applied') : onOpenTool('twister'))} data-testid="finalize-open-twister">
-            {twisterReady ? 'Analyze Twister on the applied design' : 'Set up Twister'}
-          </Button>
-        </div>
-      </Panel>
-
-      <Panel title="After rank 14: endless mode" subtitle="What play becomes once the second grand prize is won. Read from this segment's applied Recompletion design; you can play it in the Play Tester.">
+      <Collapsible id="finalize-endless" className="xl:open:col-span-3" title="After rank 14: endless mode" summary="What play becomes once the second grand prize is won. You can play it in the Play Tester.">
+        <p className="mb-3 text-xs text-slate-500">What play becomes once the second grand prize is won. Read from this segment&apos;s Recompletion boards in use; you can play it in the Play tester.</p>
         <EndlessPreview mainBoards={segments[activeSegmentIndex]?.main?.boards} rcBoards={segments[activeSegmentIndex]?.recompletion?.boards} />
-      </Panel>
+      </Collapsible>
 
-      <Panel title="Export" subtitle="The Ops workbook for every segment, from the applied design.">
+      <Panel title="Export" subtitle="The Ops workbook for every segment, from the event in use.">
         <ExportGate issues={designIssues} override={exportOverride} onOverride={onExportOverride} onRebuild={() => goTo('build')}>
           {(allowed) => (
             <div className="flex flex-wrap items-center gap-3" data-testid="finalize-export">
               <Button variant="secondary" icon={Download} onClick={handleExport} disabled={!allowed} data-testid="finalize-download">
-                Download the applied configuration (all segments)
-              </Button>
-              <Button variant="ghost" size="sm" icon={Play} onClick={() => onOpenTool('syntax')}>
-                Open the Syntax tool
+                Download the event (all segments)
               </Button>
               {draft && draftCurrent && !applied && draft.status !== 'infeasible' && (
                 <span className="text-xs text-amber-700" data-testid="export-warning">
-                  The draft you are reviewing is NOT applied, so it is not what this downloads.
+                  A download holds the event in use, and the last build is not in use - so it is not what this downloads.
                 </span>
               )}
             </div>
           )}
         </ExportGate>
       </Panel>
+      </div>
     </div>
   )
 }

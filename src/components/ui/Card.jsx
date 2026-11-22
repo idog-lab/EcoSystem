@@ -4,7 +4,7 @@ export default function Card({ title, subtitle, action, icon: Icon, className = 
       className={`min-w-0 bg-white/90 backdrop-blur-sm border border-white shadow-lg shadow-purple-950/5 rounded-3xl ring-1 ring-slate-200/70 ${className}`}
     >
       {(title || action) && (
-        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-slate-100">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-slate-100">
           <div className="flex items-start gap-2.5 min-w-0">
             {Icon && (
               <span className="mt-0.5 shrink-0 grid place-items-center w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow-sm">

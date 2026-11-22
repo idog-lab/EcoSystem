@@ -43,7 +43,9 @@ function stage() {
   return boards
 }
 
-const url = `${BASE}?play&stage=${encodeStage(stage())}`
+// (The address a link has today. The one it had before, "?play&stage=", is opened in 4d.)
+const code = encodeStage(stage())
+const url = `${BASE}?s=${code}`
 
 // Every phone here is a FIRST VISIT: a fresh browser with nothing stored -
 // what the people a link is sent to have.
@@ -287,7 +289,10 @@ console.log('--- 4c. Jump ahead, on the shared stage ---')
 
 console.log('--- 4d. Links: the new writing, and one sent before it ---')
 {
-  ok(`a link is letters and digits only after the address (${url.length} characters)`, /[?&]stage=[0-9A-Za-z]+$/.test(url))
+  ok(`a link is letters and digits only after the address (${url.length} characters)`, /\?s=[0-9A-Za-z]+$/.test(url))
+  const before = await open({ width: 844, height: 390, link: `${BASE}?play&stage=${code}` })
+  ok('the same stage behind the address links had before ("?play&stage=") still opens and plays', (await before.page.locator('[data-cell]').count()) === 40 && (await before.page.locator('[data-tutorial="generate-button"]').isEnabled()) && before.errors.length === 0)
+  await before.browser.close()
   // A link as it was written before (base64url, with "-" and "_" in it) still opens.
   const { gzipSync, strToU8 } = await import('fflate')
   const oldCode = Buffer.from(gzipSync(strToU8(JSON.stringify(stage())))).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -295,7 +300,7 @@ console.log('--- 4d. Links: the new writing, and one sent before it ---')
   ok(`a link sent before the change (it has ${(oldCode.match(/[-_]/g) ?? []).length} "-" and "_" in it) still opens and plays`, /[-_]/.test(oldCode) && (await old.page.locator('[data-cell]').count()) === 40 && (await old.page.locator('[data-tutorial="generate-button"]').isEnabled()) && old.errors.length === 0)
   await old.browser.close()
   // A link that lost its end on the way says so, and does not open as something else.
-  const cut = await open({ width: 844, height: 390, link: url.slice(0, url.length - 400) })
+  const cut = await open({ width: 844, height: 390, link: url.slice(0, url.length - Math.floor(code.length / 2)) })
   const cutText = (await cut.page.locator('body').innerText()).replace(/\s+/g, ' ')
   ok(`a link that lost its end on the way says so instead of opening as half a stage ("${cutText.slice(0, 70)}...")`, /This share link looks broken/.test(cutText) && cut.errors.length === 0)
   await cut.browser.close()

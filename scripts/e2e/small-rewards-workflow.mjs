@@ -3,7 +3,7 @@
 // Generate, Apply, regeneration, all-segments, persistence, backup, Clear
 // data and Share planning. See helpers.mjs for how to run.
 import fs from 'node:fs'
-import { BASE, createChecker, generatedBoard, launch, openMerge, openAdvanced, tab } from './helpers.mjs'
+import { BASE, createChecker, generatedBoard, launch, openMerge, openAdvanced, selectSegment, tab } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 
@@ -120,7 +120,7 @@ ok(`re-solving the already-applied base segment does not stack (${statuses[0]})`
 await page.getByRole('button', { name: 'Apply to all generated segments' }).click()
 await page.waitForTimeout(500)
 ok('Apply to all offers a revert', await page.getByRole('button', { name: 'Revert apply to all' }).isVisible())
-await tab(page, 'Segment 2').click()
+await selectSegment(page, 2)
 await page.waitForTimeout(400)
 ok('a derived segment explains that drop odds are shared and set on Segment 1', await page.getByText(/Merge-drop odds are one shared configuration/).isVisible())
 await openAdvanced(page)
@@ -136,7 +136,7 @@ await page.waitForTimeout(300)
 // switch resets - re-run it to exercise the revert itself.
 await page.getByRole('button', { name: /Generate for all 8 segments/ }).click()
 await page.waitForSelector('text=Apply to all generated segments', { timeout: 180000 })
-await tab(page, 'Segment 2').click()
+await selectSegment(page, 2)
 await page.waitForTimeout(300)
 await openAdvanced(page)
 const seg2Before = await page.locator('#reward-items span[title*="Placed by the solver"]').count()
@@ -149,7 +149,7 @@ await page.waitForTimeout(400)
 await page.getByRole('button', { name: 'Revert apply to all' }).click()
 await page.waitForTimeout(500)
 ok('reverting restores the apply-to-all button', await page.getByRole('button', { name: 'Apply to all generated segments' }).isEnabled())
-await tab(page, 'Segment 2').click()
+await selectSegment(page, 2)
 await page.waitForTimeout(300)
 await openAdvanced(page)
 ok('revert leaves Segment 2 exactly as it was before that apply', (await page.locator('#reward-items span[title*="Placed by the solver"]').count()) === seg2Before)
@@ -194,7 +194,7 @@ await openAdvanced(page)
 ok('generated drop groups survive save and reload', (await page.locator('#drop-groups button', { hasText: 'Generated' }).count()) >= 1)
 
 const downloadPromise = page.waitForEvent('download')
-await page.getByRole('button', { name: 'Export backup' }).click()
+await tab(page, 'Export backup').click()
 const download = await downloadPromise
 const backupPath = await download.path()
 const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'))
@@ -211,7 +211,7 @@ ok(
 )
 
 page.once('dialog', (d) => d.accept())
-await page.getByRole('button', { name: 'Clear data' }).click()
+await tab(page, 'Clear data').click()
 await page.waitForTimeout(500)
 ok('Clear data resets the targets', (await page.locator('#small-rewards-targets input').nth(2).inputValue()) === '0')
 await openAdvanced(page)
@@ -231,7 +231,7 @@ await page.waitForTimeout(300)
 ok('...and the targets', (await page.locator('#small-rewards-targets input').nth(2).inputValue()) === '300')
 
 // ---- 6. Share planning carries the reward economy ---------------------
-await page.getByRole('button', { name: /Share planning|Link copied/ }).click()
+await tab(page, 'Share planning').click()
 await page.waitForTimeout(400)
 const planUrl = await page.evaluate(() => navigator.clipboard.readText())
 ok('Share planning copies a plan link', planUrl.includes('?plan='))

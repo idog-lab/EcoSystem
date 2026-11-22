@@ -121,7 +121,9 @@ export function openingRun(slots, budget, minRank, maxRank) {
 }
 
 function generatePlacement(board, { isFirstBoard = false, noise = 0.15, onboarding = null, boardIndex = null, rcEvent = false, openingFirst = true } = {}) {
-  const { minRank } = board
+  // (A Recompletion board is generated from rank 3 up even when its own
+  // lowest rank says less - board.js: boardMinRank.)
+  const minRank = isRecompletionBoard(board) ? Math.max(board.minRank ?? 1, RC_MIN_RANK_UNDER_TILES) : board.minRank
   // The board's built allocation when it has one, else its budget.
   const blockedValue = generationTargetOf(board)
   // Board-position hard ceiling (Board 1 / Board 2 - see rankWindow.js),

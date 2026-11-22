@@ -7,16 +7,42 @@
 // contents no longer fit and are cleared (invalidateLayout) - that one
 // board's, never any other board's. Pins (forced ranks, pinned reward items),
 // budgets and every other board are left alone.
-import { invalidateLayout, applyForcedSemiCell, applyForcedHighestRankCell, resizeTiles, FORCED_SEMI_CELL, FORCED_HIGHEST_RANK_CELL } from './board'
+import { invalidateLayout, applyForcedSemiCell, applyForcedHighestRankCell, resizeTiles, FORCED_SEMI_CELL, FORCED_HIGHEST_RANK_CELL, applyTutorialCells, tutorialCells, isRecompletionBoard } from './board'
+
+// The first board of the normal event keeps its two tutorial cells empty
+// (board.js); Recompletion's first board is not a tutorial board.
+export const hasTutorialCells = (board, isFirstBoard) => isFirstBoard && !isRecompletionBoard(board)
 
 function forceCells(board, isFirstBoard, tiles) {
   if (!isFirstBoard) return tiles
-  const withSemi = applyForcedSemiCell(tiles)
+  // (The fixed cell is forced last: on a board too small for both it wins.)
+  const withSemi = applyForcedSemiCell(hasTutorialCells(board, isFirstBoard) ? applyTutorialCells(tiles) : tiles)
   return board.rcEvent ? applyForcedHighestRankCell(withSemi) : withSemi
 }
 
 function withLayout(board, isFirstBoard, patch) {
-  return invalidateLayout(board, patch.tiles ? { ...patch, tiles: forceCells(board, isFirstBoard, patch.tiles) } : patch)
+  if (!patch.tiles) return invalidateLayout(board, patch)
+  const tiles = forceCells(board, isFirstBoard, patch.tiles)
+  // Nothing stays pinned to a cell that is kept empty.
+  const kept = hasTutorialCells(board, isFirstBoard) ? tutorialCells(tiles.length, tiles[0]?.length ?? 0) : []
+  const free = (it) => !kept.some((cell) => cell.row === it.row && cell.col === it.col)
+  return invalidateLayout(board, {
+    ...patch,
+    tiles,
+    ...(kept.length > 0 ? { forcedSemiRanks: (patch.forcedSemiRanks ?? board.forcedSemiRanks ?? []).filter(free), rewardSemiItems: (patch.rewardSemiItems ?? board.rewardSemiItems ?? []).filter(free) } : {}),
+  })
+}
+
+// A whole layout at once - a pick from the bank (boardBank.js). The board
+// takes the layout's size and tiles; pins go with the tiles they were on.
+export function applyLayout(board, isFirstBoard, layout) {
+  return withLayout(board, isFirstBoard, { rows: layout.tiles.length, cols: layout.tiles[0].length, tiles: layout.tiles.map((row) => [...row]), forcedSemiRanks: [], rewardSemiItems: [] })
+}
+
+// Empties the two tutorial cells of a first board drawn before the rule, and
+// changes nothing else about its layout.
+export function openTutorialCells(board) {
+  return withLayout(board, true, { tiles: board.tiles })
 }
 
 // `semiRank` (only with state 'semi'): pin that main-chain rank to the cell.

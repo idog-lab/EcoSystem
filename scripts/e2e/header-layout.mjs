@@ -29,7 +29,14 @@ for (const width of [1920, 1700, 1440, 1280, 1100]) {
   if (SHOT) await page.screenshot({ path: `${SHOT}/header-${width}.png`, clip: { x: 0, y: 0, width, height: Math.min(900, report.height + 20) } })
 }
 
-ok('all eight tools are reachable as tabs', (await page.locator('header [aria-pressed]').count()) === 8)
+ok('the three tools of the main path are tabs', (await page.locator('header [data-mode]').count()) === 3)
+await page.getByTestId('more-menu').click()
+await page.waitForTimeout(200)
+ok('...and the five advanced tools are one click away, in the "More" menu, with the project actions', (await page.getByTestId('more-menu-panel').locator('[data-mode]').count()) === 5 && (await page.getByTestId('more-menu-panel').getByRole('button').count()) === 10)
+{
+  const box = await page.getByTestId('more-menu-panel').boundingBox()
+  ok('...which opens inside the window', !!box && box.x >= 0 && box.x + box.width <= 1100 + 1)
+}
 ok('zero page errors', errors.length === 0)
 await browser.close()
 const fails = finish('Header layout E2E')

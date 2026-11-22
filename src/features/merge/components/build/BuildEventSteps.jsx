@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Dices, LineChart, Wand2, Check } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { LineChart, Wand2, Check } from 'lucide-react'
 import Button from '../../../../components/ui/Button'
 import BoardGrid from '../editor/BoardGrid'
 import EffortDistributionChart from '../editor/EffortDistributionChart'
-import { CommitNumber, SharedTag, SegmentTag, Panel, FieldLabel, LinkButton } from './buildUi'
+import { CommitNumber, SharedTag, SegmentTag, FieldLabel, LinkButton } from './buildUi'
 import { MAX_RANK, MIN_RANK, colorForRank } from '../../lib/core/ranks'
 import { FIRST_BOARD_SUBSIDY_CAP_DR } from '../../lib/core/board'
 import { buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../../lib/core/generatorTier'
-import { computeProbs, simulateLuckyDrops, DEFAULT_TARGET_EV, MIN_TARGET_EV, MAX_TARGET_EV } from '../../lib/core/luckyDrop'
+import { computeProbs, DEFAULT_TARGET_EV, MIN_TARGET_EV, MAX_TARGET_EV } from '../../lib/core/luckyDrop'
 import { regenerateBoard, suggestBoardValuesForEffortTarget } from '../../lib/simulation/effortTargeting'
 import { simulatePlaythrough } from '../../lib/simulation/mergeSimulation'
 import { buildSimulationRows, RANKS } from '../../lib/simulation/simulationRows'
@@ -25,7 +25,25 @@ const dr = (v) => (v == null || !Number.isFinite(v) ? '—' : `${Math.round(v).t
 const sum = (xs) => xs.reduce((s, v) => s + v, 0)
 const CHART_CAPTION = 'For each rank: the DR the player has spent by then, what that rank cost, its share of all their effort, and the generator taps it took'
 
+// A part of a folded section: a heading and what belongs to it, without a card
+// of its own (these were whole steps once, each a row of cards).
+function Section({ title, subtitle, tag, children, first = false }) {
+  return (
+    <section className={first ? '' : 'border-t border-slate-100 pt-4'}>
+      <header className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-slate-800">{title}</h4>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        {tag}
+      </header>
+      {children}
+    </section>
+  )
+}
+
 // ---------------------------------------------------------------- Generator and lucky drops
+// (The bottom section of step 1, folded: every value here has a working default.)
 export function GeneratorStep({ segments, base, baseList, activeSeg, activeList, activeSegmentIndex, phase, phaseLabel, listOf }) {
   const board0 = activeList.boards[0]
   const t2 = board0?.tier2UnlockRank ?? DEFAULT_TIER2_UNLOCK_RANK
@@ -34,8 +52,6 @@ export function GeneratorStep({ segments, base, baseList, activeSeg, activeList,
   const targetEv = baseList.boards[0]?.targetEv ?? DEFAULT_TARGET_EV
   const probs = computeProbs(targetEv)
   const segName = activeSeg.name || `Segment ${activeSegmentIndex + 1}`
-  const [sim, setSim] = useState(null)
-  useEffect(() => setSim(null), [targetEv])
   const others = segments.filter((seg) => seg !== activeSeg)
   const tiersDiffer = others.some((seg) => (listOf(seg).boards[0]?.tier2UnlockRank ?? DEFAULT_TIER2_UNLOCK_RANK) !== t2 || (listOf(seg).boards[0]?.tier4UnlockRank ?? DEFAULT_TIER4_UNLOCK_RANK) !== t4)
   const copyToAll = () => others.forEach((seg) => listOf(seg).syncGeneratorTiers({ tier2UnlockRank: t2, tier4UnlockRank: t4 }))
@@ -43,8 +59,9 @@ export function GeneratorStep({ segments, base, baseList, activeSeg, activeList,
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel
-        title="3. Generator multipliers"
+      <Section
+        first
+        title="Generator multipliers"
         subtitle={`What a tap on the generator costs and gives, and when the bigger multipliers open - ${phaseLabel.toLowerCase()} phase.`}
         tag={<SegmentTag>{segName}</SegmentTag>}
       >
@@ -95,9 +112,9 @@ export function GeneratorStep({ segments, base, baseList, activeSeg, activeList,
             Use these unlock ranks for every segment
           </LinkButton>
         )}
-      </Panel>
+      </Section>
 
-      <Panel title="Lucky drops" subtitle="Sometimes a tap gives a higher rank than it should. One setting, the same for every segment and every multiplier." tag={<SharedTag />}>
+      <Section title="Lucky drops" subtitle="Sometimes a tap gives a higher rank than it should. One setting, the same for every segment and every multiplier." tag={<SharedTag />}>
         <div className="flex flex-wrap items-start gap-8">
           <label className="flex flex-col gap-1">
             <FieldLabel hint={`(${MIN_TARGET_EV} to ${MAX_TARGET_EV.toFixed(2)})`}>Average value of a tap</FieldLabel>
@@ -112,40 +129,24 @@ export function GeneratorStep({ segments, base, baseList, activeSeg, activeList,
               <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
                 <th className="py-2 pr-8">A tap gives</th>
                 <th className="py-2 pr-8">Chance</th>
-                {sim && <th className="py-2 pr-8">In {sim.taps} taps (average, lowest - highest)</th>}
-                {sim && <th className="py-2 pr-8">Players who never got one</th>}
               </tr>
             </thead>
             <tbody>
-              {OUTCOMES.map((label, i) => {
-                const s = sim ? [sim.normal, sim.plus1, sim.plus2][i] : null
-                return (
-                  <tr key={label} className="border-b border-slate-100" data-lucky-outcome={i}>
-                    <td className="py-1.5 pr-8 text-slate-700">{label}</td>
-                    <td className="py-1.5 pr-8 font-semibold text-slate-800">{pctText(probs[i])}</td>
-                    {s && (
-                      <td className="py-1.5 pr-8">
-                        {s.mean.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-slate-400">({s.min} - {s.max})</span>
-                      </td>
-                    )}
-                    {s && <td className="py-1.5 pr-8">{i === 0 ? '—' : `${s.zeroCount} of ${sim.runs}`}</td>}
-                  </tr>
-                )
-              })}
+              {OUTCOMES.map((label, i) => (
+                <tr key={label} className="border-b border-slate-100" data-lucky-outcome={i}>
+                  <td className="py-1.5 pr-8 text-slate-700">{label}</td>
+                  <td className="py-1.5 pr-8 font-semibold text-slate-800">{pctText(probs[i])}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button variant="secondary" size="sm" icon={Dices} onClick={() => setSim(simulateLuckyDrops(targetEv))} data-testid="lucky-sim">
-            Try it: 450 taps for 1,000 players
-          </Button>
-          <span className="text-xs text-slate-500">
-            Lucky drops start once the player holds a rank-{t2} item (the rank that opens ×2 for {segName}).
-          </span>
-        </div>
-      </Panel>
+        <p className="mt-3 text-xs text-slate-500" data-testid="lucky-start">
+          Lucky drops start once the player holds a rank-{t2} item (the rank that opens ×2 for {segName}).
+        </p>
+      </Section>
 
-      <Panel title="Event dates and CC" subtitle="Dates name the export file. CC raises or lowers a board's subsidy before the merge-energy deduction.">
+      <Section title="Event dates and CC" subtitle="Dates name the export file. CC raises or lowers a board's subsidy before the merge-energy deduction.">
         <div className="flex flex-wrap items-end gap-5">
           {phase === 'main' && (
             <>
@@ -167,7 +168,7 @@ export function GeneratorStep({ segments, base, baseList, activeSeg, activeList,
           ))}
         </div>
         <p className="mt-2 text-xs text-slate-500">Subsidy after CC = the board&apos;s DR × (1 + CC). Leave CC at 0 if you do not use it.</p>
-      </Panel>
+      </Section>
     </div>
   )
 }
@@ -257,19 +258,17 @@ export function EffortStep({ segments, activeSeg, activeSegmentIndex, onSelectSe
 
   return (
     <div className="flex flex-col gap-4">
-      <Panel
-        title="5. Effort distribution"
+      <Section
+        first
+        title="The effort shape"
         subtitle={`Where the player's own DR goes: the share of it spent to climb from each rank to the next - ${phaseLabel.toLowerCase()} phase.`}
         tag={<SharedTag />}
       >
-        <p className="text-xs text-slate-500 max-w-3xl mb-3">
-          Type the shape you want - for example 2 for the early ranks and 30 for rank 12. Only the proportions matter, so the numbers do not have to add up to 100. Then
-          let the tool move each segment&apos;s subsidy between its boards to get as close as it can. A segment&apos;s total never changes, and Board 1 stays within{' '}
-          {FIRST_BOARD_SUBSIDY_CAP_DR} DR. Leave this step empty to keep the split from step 1.
-        </p>
         <p className="text-xs text-slate-500 max-w-3xl mb-3" data-testid="effort-scope">
-          This step looks at the main-chain items only, to choose how the DR is divided. The build in step 6 then adds the reward items from step 4 and takes the
-          merge-energy deduction off the boards, and shows the final distribution for exactly what it built.
+          Type the shape you want - for example 2 for the early ranks and 30 for rank 12; only the proportions matter. The build then picks the boards closest to it. You can
+          also let the tool move each segment&apos;s subsidy between its boards first: a segment&apos;s total never changes, and Board 1 stays within {FIRST_BOARD_SUBSIDY_CAP_DR} DR.
+          That search looks at the main-chain items only; the build adds the reward items and shows the final distribution of what it built. Leave it empty to keep the split
+          from step 1.
         </p>
         <div className="flex flex-wrap gap-2" data-testid="effort-target">
           {RANKS.map((rank) => (
@@ -299,19 +298,19 @@ export function EffortStep({ segments, activeSeg, activeSegmentIndex, onSelectSe
             Show the distribution of the current split
           </Button>
           {!hasTarget && <span className="text-xs text-slate-400">Type at least one number above to get a suggestion.</span>}
-          {withAmount.length === 0 && <span className="text-xs text-amber-700">No segment has an amount yet - enter them in step 1.</span>}
+          {withAmount.length === 0 && <span className="text-xs text-amber-700">No segment has a DR demand yet - type them in step 1.</span>}
         </div>
-      </Panel>
+      </Section>
 
       {currentShown && (
-        <Panel title={`Current split: ${segName(activeSeg, activeSegmentIndex)}`} subtitle={`Boards hold ${budgetsOf(activeSeg).join(' / ')} DR. The best of ${CURRENT_SPLIT_TRIES} generated layouts - the order of items under the tiles is partly random.`} tag={<SegmentTag />}>
+        <Section title={`Current split: ${segName(activeSeg, activeSegmentIndex)}`} subtitle={`Boards hold ${budgetsOf(activeSeg).join(' / ')} DR. The best of ${CURRENT_SPLIT_TRIES} generated layouts - the order of items under the tiles is partly random.`} tag={<SegmentTag />}>
           <div className="mb-3 text-sm text-slate-600" data-testid="effort-current-summary">
             The player spends <span className="font-semibold">{dr(currentShown.result.drSpent)}</span> of their own to{' '}
             {currentShown.result.reachedAt[MAX_RANK] !== undefined ? `reach rank ${MAX_RANK}` : `get as far as rank ${currentShown.result.maxRankReached}`}. {dr(currentShown.result.subsidyDelivered)} of{' '}
             {dr(currentShown.result.subsidyConfigured)} subsidy reaches them, over {currentShown.result.boardsReached} of {currentShown.result.boardsTotal} boards.
           </div>
           <EffortDistributionChart result={currentShown.result} subtitle={CHART_CAPTION} />
-        </Panel>
+        </Section>
       )}
 
       {suggestion && !suggestionFresh && (
@@ -321,7 +320,7 @@ export function EffortStep({ segments, activeSeg, activeSegmentIndex, onSelectSe
       )}
 
       {suggestionFresh && (
-        <Panel
+        <Section
           title="Suggested split"
           subtitle="Each segment keeps its total; only how it is divided between the boards changes."
           tag={applied ? <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1"><Check size={13} /> Applied</span> : <SegmentTag />}
@@ -370,7 +369,7 @@ export function EffortStep({ segments, activeSeg, activeSegmentIndex, onSelectSe
               {applied ? 'Split applied' : 'Use this split'}
             </Button>
             <span className="text-xs text-slate-500">
-              {applied ? 'The board amounts in step 1 now hold this split. The build in step 6 uses them.' : 'This changes the board amounts in step 1. Nothing is built yet.'}
+              {applied ? 'The board amounts in step 1 now hold this split. The build uses them.' : 'This changes the board amounts in step 1. Nothing is built yet.'}
             </span>
           </div>
           {achieved && (
@@ -394,7 +393,7 @@ export function EffortStep({ segments, activeSeg, activeSegmentIndex, onSelectSe
               <EffortDistributionChart result={activeItem.result.result} subtitle={CHART_CAPTION} />
             </div>
           )}
-        </Panel>
+        </Section>
       )}
     </div>
   )

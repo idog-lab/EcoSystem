@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, TriangleAlert, ClipboardPaste } from 'lucide-react'
 import Button from '../../../../components/ui/Button'
 import BoardGrid from '../editor/BoardGrid'
-import { CommitNumber, StatusChip, SharedTag, SegmentTag, Panel, FieldLabel, CheckLine, LinkButton } from './buildUi'
+import { CommitNumber, StatusChip, SharedTag, SegmentTag, Panel, FieldLabel, CheckLine, LinkButton, Collapsible } from './buildUi'
 import { BuildStep, FinalizeStep } from './BuildEventReview'
-import ContainersTable from './ContainersTable'
-import { GeneratorStep, EffortStep } from './BuildEventSteps'
+import { GeneratorStep } from './BuildEventSteps'
+import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../../lib/core/generatorTier'
+import { DEFAULT_TARGET_EV } from '../../lib/core/luckyDrop'
 import {
   REWARD_TYPES,
   REWARD_TARGET_LABELS,
@@ -31,31 +32,37 @@ import {
 } from '../../lib/rewards/rewardChain'
 import { MAX_RANK, MIN_RANK, RC_MAX_RANK, colorForRank } from '../../lib/core/ranks'
 import { MIN_DROP_RANK, multiDropRankOf, tripleDropRankOf, soloDropRankOf, tileRewardTypeOf, TILE_REWARD_FOCUS_SHARE } from '../../lib/rewards/dropGroups'
-import { firstBoardCapFor, RC_MIN_RANK_UNDER_TILES, invalidateLayout } from '../../lib/core/board'
-import { paintTile, fillAllTiles, resizeBoard, setRankWindow } from '../../lib/core/layoutEdits'
+import { firstBoardCapFor, RC_MIN_RANK_UNDER_TILES, invalidateLayout, tutorialCells, tutorialCellsAreOpen } from '../../lib/core/board'
+import { paintTile, fillAllTiles, resizeBoard, setRankWindow, applyLayout, openTutorialCells, hasTutorialCells } from '../../lib/core/layoutEdits'
+import BoardBank from './BoardBank'
+import { bankLayoutOf } from '../../lib/core/boardBank'
 import { parseRewardDefinitionRows } from '../../lib/rewards/rewardDefinitionsPaste'
-import { buildInputsKey, buildInputParts, changedInputParts, draftSegmentIsApplied, segmentBuildInputs, rcInputsOnMainDraft, layoutCapacity, ladderAdvisories, splitTargets, twisterInputsKey, repriceTwister, INPUT_PART_LABELS } from '../../lib/build/eventBuild'
-import { TWISTER_MIN_COLLECTS, twisterIsConfigured, hasTwisterDrops, applyTwisterDropRule, readTwisterDropRule, removeGeneratedTwister, withDefaultTwisterValues, targetSpinsForSegment, TWISTER_EASY_CHECKPOINT_PCT, DEFAULT_CHECKPOINT_PCT } from '../../lib/rewards/twisterEconomy'
+import { buildInputsKey, buildInputParts, changedInputParts, draftSegmentIsApplied, segmentBuildInputs, rcInputsOnMainDraft, layoutCapacity, ladderAdvisories, splitTargets, twisterInputsKey, repriceTwister, withTwisterMarks, draftStatusOf, INPUT_PART_LABELS, boardsWithDraftApplied, draftIsUsable } from '../../lib/build/eventBuild'
+import { twisterIsConfigured, hasTwisterDrops, applyTwisterDropRule, readTwisterDropRule, removeGeneratedTwister, withDefaultTwisterValues, targetSpinsForSegment, TWISTER_EASY_CHECKPOINT_PCT, DEFAULT_CHECKPOINT_PCT } from '../../lib/rewards/twisterEconomy'
 import { chaseValue, subsidyForDemand, demandForSubsidy, fillLastBoard, spreadSubsidy, budgetGap } from '../../lib/core/subsidyBudget'
 
 // The board editor, broken into steps (by explicit economist request): the
-// amounts, the boards, the generator and lucky drops, the effort distribution,
-// the rewards - then one build and the tests.
+// amounts, the boards, the rewards - then one build and the tests. Each step
+// is named for what is entered or done in it, and says in a line what it is
+// for (`purpose`, shown under the steps).
+// FIVE STEPS (economist: "the app is very heavy in text and buttons" - and of
+// the list of things it can do without: "lets go with ur suggestions"). The
+// two steps that had working defaults are sections now, folded where they
+// belong: the generator, lucky drops and dates at the bottom of step 1, the
+// effort shape in step 4 above the Build button. Old names for them still
+// lead there (`STEP_ALIAS`, `STEP_FOLD`).
 const STEPS = [
-  { id: 'setup', label: 'Segment amounts' },
-  { id: 'layouts', label: 'Board layouts' },
-  { id: 'generator', label: 'Generator and lucky drops' },
-  // Rewards come BEFORE the effort distribution: reward items take tiles and
-  // merge energy takes DR off the boards, so the effort picture is only worth
-  // looking at once the rewards are known.
-  { id: 'rewards', label: 'Small rewards' },
-  { id: 'effort', label: 'Effort distribution' },
-  { id: 'build', label: 'Build boards' },
-  { id: 'finalize', label: 'Test and finalize' },
+  { id: 'setup', label: 'DR demand', purpose: 'Type what each segment\'s player should spend. The board subsidy follows from it.' },
+  { id: 'layouts', label: 'Board layouts', purpose: 'Pick each board\'s layout. The same boards for every segment; the build fills what goes under the tiles.' },
+  { id: 'rewards', label: 'Rewards and Twister', purpose: 'Type what a player should collect, and the twists. The rules behind them have working defaults.' },
+  { id: 'build', label: 'Build', purpose: 'One click builds the event from what you entered, puts it in use and shows how it turned out.' },
+  { id: 'finalize', label: 'Test and export', purpose: 'Your last build is in use. Test it on players, play it, then export.' },
 ]
+const STEP_ALIAS = { generator: 'setup', effort: 'build', definitions: 'rewards', phase: 'setup' }
+const STEP_FOLD = { generator: 'setup-generator', effort: 'build-effort-shape' }
 const PHASES = [
-  { id: 'main', label: 'Normal' },
-  { id: 'rc', label: 'Recompletion' },
+  { id: 'main', label: 'Normal', hint: 'The normal event: ranks 1 to 12' },
+  { id: 'rc', label: 'Recompletion', hint: 'Recompletion: from rank 12 to rank 14, after the normal event' },
 ]
 
 // The guided Build Event workflow: one workspace, five steps, all editing the
@@ -67,6 +74,8 @@ export default function BuildEventPage({
   segments,
   activeSegmentIndex,
   onSelectSegment,
+  shownSegments = null,
+  onAddSegment = null,
   phase,
   onPhaseChange,
   step,
@@ -81,7 +90,6 @@ export default function BuildEventPage({
   designIssues = [],
   exportOverride = false,
   onExportOverride,
-  onOpenTwister,
   draftNotice = null,
   targetPctInputs,
   onTargetPctInputsChange,
@@ -163,7 +171,12 @@ export default function BuildEventPage({
       const inputs = p === 'rc' && rcOnMainDraft ? rcInputsOnMainDraft(rawSegs, drafts.main) : inputsFor[p]
       repriceTwister({ phase: p, draft: d, segments: inputs, isCancelled: () => repricing.current[p] !== token }).then((next) => {
         if (repricing.current[p] !== token) return
-        onDraftsChange((latest) => (latest[p]?.builtAt === d.builtAt ? { ...latest, [p]: { ...latest[p], twister: next.twister, twisterKey: next.twisterKey } } : latest))
+        // (The Twister's pass mark follows the new prices: the cause is put on a segment or taken off it.)
+        onDraftsChange((latest) => {
+          if (latest[p]?.builtAt !== d.builtAt) return latest
+          const marked = withTwisterMarks(latest[p].segments, next.twister)
+          return { ...latest, [p]: { ...latest[p], segments: marked, status: draftStatusOf(marked), twister: next.twister, twisterKey: next.twisterKey } }
+        })
         if (appliedFor[p]) {
           for (const row of next.twister?.rows ?? []) {
             if (row.cost == null) continue
@@ -176,6 +189,61 @@ export default function BuildEventPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [twisterWants.main, twisterWants.rc, drafts.main?.builtAt, drafts.rc?.builtAt, currentFor.main, currentFor.rc])
 
+  // A FINISHED BUILD IS IN USE AT ONCE (economist: "i dont understand the
+  // things with the draft all the time. draft vs applied" - asked, and chose
+  // "In use at once"). There is no draft to apply: a build that can be used is
+  // written onto the design the moment it finishes - what a build owns, plus
+  // the stamp that lets every tool tell the design still matches it - and the
+  // Play tester and the exports use it. What was there before is kept (the
+  // boards, and the build before with its results), so "Go back to the
+  // previous build" restores it: one step back. A build that needs a fix is
+  // never put in use. (Internally a build is still the `draft` object and
+  // "in use" is still read off the design, as `applied` - only the separate
+  // Apply step is gone.)
+  function putInUse(builds) {
+    const next = { ...drafts }
+    const at = Date.now()
+    for (const p of ['main', 'rc']) {
+      const d = builds[p]
+      if (!d) continue
+      if (!draftIsUsable(d)) {
+        // Kept so its phase can say what to fix; nothing is written.
+        next[p] = d
+        continue
+      }
+      const snapshot = {}
+      for (const s of d.segments.filter((x) => x.status !== 'skipped')) {
+        const list = listFor(segments[s.index], p)
+        snapshot[s.index] = list.boards
+        const v = validation[p]?.builtAt === d.builtAt ? validation[p] : null
+        const sv = v?.bySegment?.[s.index]
+        boardsWithDraftApplied(list.boards, s, d.shared, { draft: d, validation: sv ? { runs: v.runs, seed: v.seed, ok: sv.allWithinTolerance } : null }).forEach((b) => list.updateBoard(b))
+      }
+      // The build before, without its own way back: one step only.
+      const before = drafts[p] && drafts[p].builtAt !== d.builtAt ? (({ applied: _applied, ...rest }) => rest)(drafts[p]) : null
+      next[p] = { ...d, applied: { snapshot, at, previous: before } }
+    }
+    onDraftsChange(next)
+  }
+  // Puts back what was in use before the build of `p` - and before the other
+  // phase's build too when both went into use in the same moment (a whole
+  // event built in one click).
+  function goBack(p) {
+    const at = drafts[p]?.applied?.at
+    if (at == null) return
+    const next = { ...drafts }
+    for (const q of ['main', 'rc']) {
+      const d = drafts[q]
+      if (!d?.applied || d.applied.at !== at) continue
+      for (const [index, boards] of Object.entries(d.applied.snapshot)) {
+        const list = listFor(segments[Number(index)], q)
+        boards.forEach((b) => list.updateBoard(b))
+      }
+      next[q] = d.applied.previous ?? null
+    }
+    onDraftsChange(next)
+  }
+
   // Quick fixes already clicked, keyed by the build they belong to. Held here
   // so the "rebuild to see the result" prompt survives moving between steps.
   const [fixed, setFixed] = useState(() => new Set())
@@ -183,39 +251,90 @@ export default function BuildEventPage({
   const draftState = !draft ? 'none' : !draftCurrent ? 'stale' : draft.status === 'infeasible' ? 'infeasible' : null
   const phaseLabel = PHASES.find((p) => p.id === phase).label
   const stepIndex = STEPS.findIndex((s) => s.id === step)
+  // A STEP OPENS AT ITS TOP (economist: "when using the go to the next page
+  // button in the right lower part of each page, i think it should take me to
+  // the top part of the page and not make me scroll up"). Next and Back sit
+  // at the bottom of a step, so the new step used to open scrolled down to
+  // wherever the old one ended. (A link that leads to one place inside a step
+  // scrolls there a moment later - see goTo.)
+  const openedStep = useRef(step)
+  useEffect(() => {
+    if (openedStep.current === step) return
+    openedStep.current = step
+    window.scrollTo({ top: 0 })
+  }, [step])
 
   // Step completion, for the stepper's ticks. Nothing here gates navigation.
   const totalBudget = baseList.boards.reduce((s, b) => s + (b.blockedValue ?? 0), 0)
   const hasTiles = baseList.boards.some((b) => b.tiles.flat().some((t) => t !== 'open'))
   const hasTargets = REWARD_TYPES.some((t) => (baseTargets[t] ?? 0) > 0)
-  // The generator and effort steps have working defaults, so they count as
-  // done once the step before them is.
-  const done = { setup: totalBudget > 0, layouts: hasTiles, generator: hasTiles, effort: hasTiles && totalBudget > 0, rewards: hasTargets, build: draftCurrent, finalize: applied && draftCurrent }
+  const done = { setup: totalBudget > 0, layouts: hasTiles, rewards: hasTargets, build: draftCurrent, finalize: applied && draftCurrent }
 
   const goTo = (id, anchor) => {
-    onStepChange(id === 'definitions' ? 'rewards' : id === 'phase' ? 'setup' : id)
+    onStepChange(STEP_ALIAS[id] ?? id)
     const target = anchor ?? (id === 'definitions' ? 'build-definitions' : null)
-    if (target) setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+    const fold = STEP_FOLD[id]
+    if (target || fold)
+      setTimeout(() => {
+        const el = target ? document.getElementById(target) : document.querySelector(`details[data-collapsible="${fold}"]`)
+        // The place may sit in a folded section (or be one): open it first.
+        for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 60)
   }
 
-  const shared = { segments, base, baseList, activeSeg, activeList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, listOf, onOpenTool, goTo }
+  // The segments in sight (App.jsx): the ones in use, plus any brought in.
+  const shown = shownSegments ?? segments.map((_, i) => i)
+  const shared = { segments, base, baseList, activeSeg, activeList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, listOf, onOpenTool, goTo, shownSegments: shown, onAddSegment }
 
   return (
     <div className="flex flex-col gap-4 w-full" data-testid="build-event">
-      <div className="rounded-3xl border border-white bg-white/85 shadow-sm px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-bold text-slate-900 leading-tight">Build event</h2>
-            <p className="text-xs text-slate-500">Enter each segment&apos;s amount, lay the boards out, set reward targets, then build and test everything together.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="build-scope">
-            <span className="text-slate-500">Phase</span>
-            <div className="inline-flex bg-slate-100 rounded-xl p-0.5">
+      {/* Two rows, whatever the window: the steps, then what the open step is for with the phase and the status beside it. */}
+      <div className="rounded-3xl border border-white bg-white/85 shadow-sm px-5 py-3">
+          <ol className="flex flex-wrap gap-1.5" aria-label="Build event steps">
+            {STEPS.map((s, i) => {
+              const current = s.id === step
+              return (
+                <li key={s.id} className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onStepChange(s.id)}
+                    aria-current={current ? 'step' : undefined}
+                    data-step={s.id}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+                      current ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`grid place-items-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                        done[s.id] ? 'bg-emerald-500 text-white' : current ? 'bg-white/25 text-white' : 'bg-white text-slate-500'
+                      }`}
+                    >
+                      {done[s.id] ? <Check size={12} strokeWidth={3} /> : i + 1}
+                    </span>
+                    {s.label}
+                  </button>
+                  {i < STEPS.length - 1 && <ChevronRight size={14} className="text-slate-300" />}
+                </li>
+              )
+            })}
+          </ol>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="text-xs text-slate-600" data-testid="step-purpose">
+            <span className="font-semibold text-slate-800">
+              Step {stepIndex + 1} of {STEPS.length} · {phaseLabel === 'Normal' ? 'normal event' : 'Recompletion'}:
+            </span>{' '}
+            {STEPS[stepIndex].purpose}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-1" data-testid="build-scope">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phase</span>
+            <div className="inline-flex bg-slate-200/70 rounded-xl p-0.5">
               {PHASES.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   aria-pressed={phase === p.id}
+                  title={p.hint}
                   onClick={() => onPhaseChange(p.id)}
                   className={`px-3 py-1 rounded-lg font-semibold whitespace-nowrap ${phase === p.id ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
@@ -223,7 +342,9 @@ export default function BuildEventPage({
                 </button>
               ))}
             </div>
-            <span className="text-slate-500 ml-1">Segment</span>
+            <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400" title="Pick the segment in the bar at the top of the page">
+              Segment shown
+            </span>
             <span className="font-semibold text-slate-800 whitespace-nowrap" data-testid="build-scope-segment">
               {activeSeg.name || `Segment ${activeSegmentIndex + 1}`}
               {activeSegmentIndex === 0 ? ' (base)' : ` (×${activeSeg.segmentFactor ?? 1} of base)`}
@@ -233,55 +354,25 @@ export default function BuildEventPage({
           </div>
         </div>
 
-        <ol className="mt-3 flex flex-wrap gap-1.5" aria-label="Build event steps">
-          {STEPS.map((s, i) => {
-            const current = s.id === step
-            return (
-              <li key={s.id} className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onStepChange(s.id)}
-                  aria-current={current ? 'step' : undefined}
-                  data-step={s.id}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors ${
-                    current ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`grid place-items-center w-5 h-5 rounded-full text-[11px] font-bold ${
-                      done[s.id] ? 'bg-emerald-500 text-white' : current ? 'bg-white/25 text-white' : 'bg-white text-slate-500'
-                    }`}
-                  >
-                    {done[s.id] ? <Check size={12} strokeWidth={3} /> : i + 1}
-                  </span>
-                  {s.label}
-                </button>
-                {i < STEPS.length - 1 && <ChevronRight size={14} className="text-slate-300" />}
-              </li>
-            )
-          })}
-        </ol>
-
         {draftNotice && (
           <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="draft-notice">
             {draftNotice}
           </div>
         )}
-        {draft?.restored && (
+        {draft?.restored && !applied && draftCurrent && draftIsUsable(draft) && (
           <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="draft-restored">
-            This draft was restored from your last session. {applied ? 'It is the applied design.' : 'It has not been applied - nothing is applied until you choose to in step 5.'}
-            {!draftCurrent && ' It was built from inputs that differ from the project as it is now, so it needs rebuilding before it can be tested or applied.'}
+            A build kept from your last session (or from a backup file) is here, but it is not what is in use. Step 5 can put it in use.
           </div>
         )}
         {draft && !draftCurrent && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="build-stale">
             <TriangleAlert size={15} className="shrink-0" />
             <span className="flex-1 min-w-[16rem]">
-              The built {phaseLabel.toLowerCase()} configuration is out of date: {changedParts.length ? changedParts.map((p) => INPUT_PART_LABELS[p].toLowerCase()).join('; ') : 'an input changed'}.
-              Nothing was erased - rebuild to bring it up to date.
+              The {phaseLabel.toLowerCase()} build is out of date: {changedParts.length ? changedParts.map((p) => INPUT_PART_LABELS[p].toLowerCase()).join('; ') : 'an input changed'}.
+              Nothing was erased - what is in use is still that build. Build again to bring it up to date.
             </span>
             <Button variant="secondary" size="sm" onClick={() => onStepChange('build')}>
-              Go to Build boards
+              Go to step 4: Build
             </Button>
           </div>
         )}
@@ -289,12 +380,12 @@ export default function BuildEventPage({
 
       {step === 'setup' && <SetupStep {...shared} />}
       {step === 'layouts' && <LayoutsStep {...shared} />}
-      {step === 'generator' && <GeneratorStep {...shared} />}
-      {step === 'effort' && <EffortStep {...shared} targetPctInputs={targetPctInputs} onTargetPctInputsChange={onTargetPctInputsChange} />}
-      {step === 'rewards' && <RewardsStep {...shared} baseTargets={baseTargets} targetsFor={targetsFor} sharedTilePct={sharedTilePct} perResource={perResource} split={split} draft={draft} draftCurrent={draftCurrent} />}
+      {step === 'rewards' && <RewardsStep {...shared} baseTargets={baseTargets} targetsFor={targetsFor} sharedTilePct={sharedTilePct} perResource={perResource} split={split} />}
       {step === 'build' && (
         <BuildStep
           {...shared}
+          targetPctInputs={targetPctInputs}
+          onTargetPctInputsChange={onTargetPctInputsChange}
           segInputs={segInputs}
           inputsKey={inputsKey}
           draft={draft}
@@ -302,6 +393,7 @@ export default function BuildEventPage({
           changedParts={changedParts}
           applied={applied}
           onDraft={(next) => onDraftsChange({ ...drafts, [phase]: next })}
+          onUse={putInUse}
           rawSegs={rawSegs}
           inputsFor={inputsFor}
           drafts={drafts}
@@ -325,13 +417,14 @@ export default function BuildEventPage({
           rcOnMainDraft={phase === 'rc' && rcOnMainDraft}
           validation={phaseValidation}
           onValidation={(v) => onValidationChange({ ...validation, [phase]: v })}
+          onUse={putInUse}
+          onGoBack={goBack}
           onDraft={(next) => onDraftsChange({ ...drafts, [phase]: next })}
           onPlay={onPlay}
           playOverride={playOverride}
           designIssues={designIssues}
           exportOverride={exportOverride}
           onExportOverride={onExportOverride}
-          onOpenTwister={onOpenTwister}
         />
       )}
 
@@ -355,8 +448,16 @@ export default function BuildEventPage({
 // phase has. The subsidy the boards must hand out follows (2,048 - demand) and
 // is split into per-board budgets. Everything else about the event (generator,
 // lucky drops, dates, CC) has working defaults and sits collapsed below.
-function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, listOf }) {
+// What the generator section holds, in a line - the summary of the folded section.
+function generatorSummary({ activeList, baseList, base }) {
+  const board0 = activeList.boards[0]
+  return `×2 opens at rank ${board0?.tier2UnlockRank ?? DEFAULT_TIER2_UNLOCK_RANK}, ×4 at rank ${board0?.tier4UnlockRank ?? DEFAULT_TIER4_UNLOCK_RANK} · lucky drops ×${baseList.boards[0]?.targetEv ?? DEFAULT_TARGET_EV} · ${base.eventDurationDays ?? 7} days`
+}
+
+function SetupStep(props) {
+  const { segments, base, baseList, activeList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, listOf, shownSegments, onAddSegment } = props
   const boardCount = baseList.boards.length
+  const [pasteNote, setPasteNote] = useState(null)
 
   // Writes budgets without discarding a board's built contents: a budget
   // change makes the build out of date, it does not erase it.
@@ -393,22 +494,52 @@ function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, ph
     if (list.targetSubsidy != null) writeBudgets(list, spreadSubsidy(list.boards.length, list.targetSubsidy, phase))
   }
 
+  // A COLUMN PASTED FROM A SPREADSHEET fills the demands down from the field
+  // it was pasted into, one row a segment (the first cell of each row). A
+  // single value is an ordinary paste. Rows that are not a demand are named.
+  function pasteDemands(e, startIndex) {
+    const rows = (e.clipboardData?.getData('text') ?? '')
+      .split('\n')
+      .map((row) => row.replace('\r', '').split('\t')[0].trim())
+      .filter((row) => row !== '')
+    if (rows.length < 2) return
+    e.preventDefault()
+    let taken = 0
+    const skipped = []
+    rows.forEach((row, k) => {
+      const seg = segments[startIndex + k]
+      const name = seg ? seg.name || `Segment ${startIndex + k + 1}` : null
+      if (!seg) return skipped.push(`"${row}" (no segment left for it)`)
+      const value = Number(row.split(',').join('').split(' ').join(''))
+      if (phase === 'rc' && seg.main.targetSubsidy != null) return skipped.push(`${name} (follows the normal event)`)
+      if (!Number.isFinite(value) || value < 0 || value > chaseValue(phase)) return skipped.push(`${name}: "${row}" is not a demand between 0 and ${chaseValue(phase).toLocaleString()}`)
+      setDemand(seg, Math.round(value))
+      taken += 1
+    })
+    setPasteNote({ taken, skipped, from: segments[startIndex].name || `Segment ${startIndex + 1}` })
+  }
+
+  const budgetsOf = (i) => listOf(segments[i]).boards.map((b) => b.blockedValue ?? 0)
+  const totalOf = (i) => budgetsOf(i).reduce((sum, v) => sum + v, 0)
+  const gapOf = (i) => budgetGap(budgetsOf(i), listOf(segments[i]).targetSubsidy)
+  // The boards are folded: the build spreads a segment's subsidy over them.
+  // The section opens by itself when a segment's boards were typed by hand
+  // (DR on the boards, no demand) or do not add up to the subsidy.
+  const typedByBoard = shownSegments.some((i) => listOf(segments[i]).targetSubsidy == null && totalOf(i) > 0)
+  const anyGap = shownSegments.some((i) => listOf(segments[i]).targetSubsidy != null && Math.abs(gapOf(i)) > 0)
+
   return (
-    <div className="flex flex-col gap-4">
-      <Panel
-        title="1. Segment amounts"
-        subtitle={`Start here: how much each segment's player has to spend themselves in the ${phaseLabel.toLowerCase()} phase. The app works out the subsidy the boards must hand out.`}
-        tag={<SegmentTag />}
-      >
-        <p className="text-xs text-slate-500 mb-3 max-w-3xl">
-          {phase === 'main'
-            ? 'The first completion: ranks 1 to 12 across the normal boards.'
-            : 'Recompletion starts the moment the player reaches rank 12, on its own boards. They arrive with the rank 12 and the other free items they hold, and chase rank 14.'}{' '}
-          {phase === 'main'
-            ? `The whole chain is worth ${chaseValue('main').toLocaleString()} DR.`
-            : `Rank 14 is worth 8,192 DR and the rank 12 they arrive with already counts for 2,048, so the chase has ${chaseValue('rc').toLocaleString()} DR left to cover.`}{' '}
-          <span className="font-semibold text-slate-700">Total demand</span> is the part the player pays for; the rest is subsidy placed under the board tiles:{' '}
-          <span className="font-mono" data-testid="chase-formula">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] xl:items-start">
+      <Panel title="1. DR demand" tag={<SegmentTag />}>
+        {phase === 'rc' && (
+          <p className="mb-3 max-w-4xl text-xs text-slate-600" data-testid="setup-rc-intro">
+            Recompletion starts the moment the player reaches rank 12, on its own boards. They arrive with the rank 12 and the other free items they hold, and chase rank 14.
+          </p>
+        )}
+        <p className="mb-3 text-xs text-slate-600" data-testid="setup-terms">
+          <span className="font-semibold text-slate-800">DR demand</span> is what the player should spend themselves in this phase. The rest of the chain is the{' '}
+          <span className="font-semibold text-slate-800">board subsidy</span>, placed under the tiles:{' '}
+          <span className="font-mono whitespace-nowrap" data-testid="chase-formula">
             subsidy = {chaseValue(phase).toLocaleString()} − demand
           </span>
           .
@@ -420,39 +551,29 @@ function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, ph
           </p>
         )}
 
-        <div className="mb-3 flex flex-wrap items-end gap-4">
-          <label className="flex flex-col gap-1">
-            <FieldLabel>Number of {phaseLabel.toLowerCase()} boards</FieldLabel>
-            <CommitNumber value={boardCount} min={1} max={40} integer onCommit={(v) => baseList.setBoardCount(v)} className="w-24" data-field="setup-board-count" />
-          </label>
-          <p className="text-xs text-slate-500 max-w-xl">
-            The same for every segment. Set it before the amounts so the subsidy has boards to go on; their size and tiles are drawn next, in step 2.
-          </p>
-        </div>
-
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-sm" data-testid="setup-segments">
+          <table className="text-sm" data-testid="setup-segments" data-dense>
             <thead>
               <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                <th className="py-2 pr-3">Segment</th>
-                <th className="py-2 pr-3">Total demand (DR)</th>
-                <th className="py-2 pr-3">Subsidy needed</th>
-                {baseList.boards.map((b, i) => (
-                  <th key={b.id} className="py-2 pr-2">
-                    Board {i + 1} (DR)
-                  </th>
-                ))}
-                <th className="py-2 pr-3">Boards total</th>
-                <th className="py-2 pr-3">Reward factor</th>
+                <th className="py-2 pr-6">Segment</th>
+                <th className="py-2 pr-6">
+                  DR demand <span className="normal-case tracking-normal font-normal">(player spends)</span>
+                </th>
+                <th className="py-2 pr-6">
+                  Board subsidy <span className="normal-case tracking-normal font-normal">(under tiles)</span>
+                </th>
+                <th className="py-2 pr-3" title="This segment's reward amounts are the base segment's times this number (step 3)">
+                  Reward size <span className="normal-case tracking-normal font-normal">(× base)</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {segments.map((seg, i) => {
+              {shownSegments.map((i) => {
+                const seg = segments[i]
                 const list = listOf(seg)
                 const target = list.targetSubsidy
-                const budgets = list.boards.map((b) => b.blockedValue ?? 0)
-                const total = budgets.reduce((s, v) => s + v, 0)
-                const gap = budgetGap(budgets, target)
+                const total = totalOf(i)
+                const gap = gapOf(i)
                 const name = seg.name || `Segment ${i + 1}`
                 // Recompletion's demand is the normal event's (App.jsx keeps
                 // the subsidy in step); with no normal amount there is nothing
@@ -460,13 +581,13 @@ function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, ph
                 const follows = phase === 'rc' && seg.main.targetSubsidy != null
                 return (
                   <tr key={i} className={`border-b border-slate-100 align-top ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-setup-segment={i}>
-                    <td className="py-1.5 pr-3">
+                    <td className="py-1.5 pr-6">
                       <button type="button" className="font-semibold text-slate-700 hover:text-purple-700 whitespace-nowrap" onClick={() => onSelectSegment(i)}>
                         {name}
                       </button>
                       {i === 0 && <span className="ml-1.5 text-[11px] text-purple-600 font-semibold">base</span>}
                     </td>
-                    <td className="py-1.5 pr-3">
+                    <td className="py-1.5 pr-6">
                       <CommitNumber
                         value={target == null ? null : demandForSubsidy(target, phase)}
                         allowEmpty
@@ -475,52 +596,26 @@ function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, ph
                         integer
                         onCommit={(v) => setDemand(seg, v)}
                         className="w-32"
-                        placeholder="amount"
+                        placeholder="DR"
                         aria-label={`${name} total demand`}
                         data-field="demand"
+                        onPaste={(e) => pasteDemands(e, i)}
                         disabled={follows}
                         title={follows ? 'Same as this segment in the normal event - change it in the Normal phase' : undefined}
                       />
                       {follows && <div className="mt-0.5 text-[10px] font-semibold text-purple-600">same as Normal</div>}
                     </td>
-                    <td className="py-1.5 pr-3 tabular-nums" data-field="subsidy-needed">
-                      {target == null ? <span className="text-slate-400 text-xs">set a demand</span> : <span className="font-semibold text-purple-700">{target.toLocaleString()} DR</span>}
-                    </td>
-                    {baseList.boards.map((_, bi) => {
-                      const board = list.boards[bi]
-                      if (!board) return <td key={bi} className="py-1.5 pr-2 text-slate-300">—</td>
-                      const capped = bi === 0 && list.boards.length > 1
-                      const auto = target != null && bi === list.boards.length - 1
-                      return (
-                        <td key={bi} className="py-1.5 pr-2">
-                          <CommitNumber
-                            value={board.blockedValue ?? 0}
-                            min={0}
-                            max={capped ? firstBoardCapFor(phase) : chaseValue(phase)}
-                            integer
-                            disabled={auto}
-                            onCommit={(v) => setBudget(seg, bi, v)}
-                            className="w-24"
-                            aria-label={`${name} board ${bi + 1} subsidy budget`}
-                            title={auto ? 'Filled in automatically: whatever is left of the subsidy needed' : capped ? `Board 1 carries at most ${firstBoardCapFor(phase)} DR` : undefined}
-                            data-field="budget"
-                          />
-                          {auto && <div className="text-[10px] text-slate-400">auto</div>}
-                        </td>
-                      )
-                    })}
-                    <td className="py-1.5 pr-3 tabular-nums" data-field="total">
-                      <span className="font-semibold text-slate-700">{total.toLocaleString()} DR</span>
-                      {target != null && Math.abs(gap) > 0 && (
-                        <div className="text-[11px] text-amber-700" data-field="gap">
-                          {gap > 0 ? `${gap} over` : `${-gap} short`} of the subsidy needed
-                        </div>
+                    <td className="py-1.5 pr-6 tabular-nums" data-field="subsidy-needed">
+                      {target != null ? (
+                        <span className="font-semibold text-purple-700">{target.toLocaleString()} DR</span>
+                      ) : total > 0 ? (
+                        <span className="text-slate-600">
+                          {total.toLocaleString()} DR <span className="text-[11px] text-slate-400">typed by board</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">type a demand</span>
                       )}
-                      {target != null && list.boards.length > 1 && (
-                        <button type="button" className="block text-[11px] text-purple-700 hover:underline" onClick={() => respread(seg)} data-field="respread">
-                          spread evenly
-                        </button>
-                      )}
+                      {target != null && Math.abs(gap) > 0 && <div className="text-[11px] text-amber-700">the boards are {gap > 0 ? `${gap} over` : `${-gap} short`} - see the boards below</div>}
                     </td>
                     <td className="py-1.5 pr-3">
                       {i === 0 ? (
@@ -535,18 +630,115 @@ function SetupStep({ segments, baseList, activeSegmentIndex, onSelectSegment, ph
             </tbody>
           </table>
         </div>
-        <div className="mt-2 text-[11px] text-slate-500 leading-relaxed max-w-4xl">
-          Enter a segment&apos;s total demand and its subsidy is split across the boards for you: Board 1 takes up to {firstBoardCapFor(phase)} DR and the rest is shared
-          evenly. Change any board and the last board adjusts so the boards always add up to the subsidy needed. This is the same amount the board editor shows as
-          &quot;Total demand&quot; - one number, edited in either place. Reward factor scales the base segment&apos;s small-reward targets (step 4). Leave the demand empty to type
-          every board&apos;s budget by hand.
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {onAddSegment && (
+            <LinkButton className="text-xs" onClick={onAddSegment} data-testid="setup-add-segment">
+              + Add a segment
+            </LinkButton>
+          )}
+          <span className="text-[11px] text-slate-500" data-testid="setup-hint">
+            A segment with no demand is not built. A column of demands pasted from a spreadsheet into a demand field fills down from there.
+          </span>
         </div>
+        {pasteNote && (
+          <p className={`mt-2 text-xs ${pasteNote.skipped.length ? 'text-amber-700' : 'text-emerald-700'}`} data-testid="setup-paste-note">
+            Pasted {pasteNote.taken} demand{pasteNote.taken === 1 ? '' : 's'}, starting at {pasteNote.from}.
+            {pasteNote.skipped.length > 0 && ` Not taken: ${pasteNote.skipped.join('; ')}.`}
+          </p>
+        )}
       </Panel>
 
-      <p className="text-xs text-slate-500 px-1" data-testid="setup-next-steps">
-        Next: lay out the boards (step 2), set the generator multipliers and lucky drops (step 3), set the rewards (step 4) and shape the effort per rank (step 5). Each
-        is a part of the board editor, in the order you need it.
-      </p>
+      {/* Beside the demands on a wide window (under them on a narrow one): the two sections with working defaults. */}
+      <div className="flex min-w-0 flex-col gap-4">
+        <Collapsible
+          id="setup-how"
+          title="Boards: how many, and each board's share of the subsidy"
+          summary={`${boardCount} board${boardCount === 1 ? '' : 's'}. Board 1 takes up to ${firstBoardCapFor(phase)} DR, the rest is shared evenly, and the last board always closes the gap.`}
+          openWhen={typedByBoard || anyGap}
+        >
+          <div className="mb-3 flex flex-wrap items-end gap-4">
+            <label className="flex flex-col gap-1">
+              <FieldLabel>Number of {phaseLabel.toLowerCase()} boards</FieldLabel>
+              <CommitNumber value={boardCount} min={1} max={40} integer onCommit={(v) => baseList.setBoardCount(v)} className="w-24" data-field="setup-board-count" />
+            </label>
+            <p className="text-xs text-slate-500 max-w-xl">The same for every segment, and the same number as in step 2 - change it in either place.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="text-sm" data-testid="setup-budgets" data-dense>
+              <thead>
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                  <th className="py-2 pr-4">Segment</th>
+                  {baseList.boards.map((b, i) => (
+                    <th key={b.id} className="py-2 pr-2">
+                      Board {i + 1}
+                    </th>
+                  ))}
+                  <th className="py-2 pr-3">Boards total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shownSegments.map((i) => {
+                  const seg = segments[i]
+                  const list = listOf(seg)
+                  const target = list.targetSubsidy
+                  const gap = gapOf(i)
+                  const name = seg.name || `Segment ${i + 1}`
+                  return (
+                    <tr key={i} className={`border-b border-slate-100 align-top ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-setup-segment={i}>
+                      <td className="py-1.5 pr-4 font-semibold text-slate-700 whitespace-nowrap">{name}</td>
+                      {baseList.boards.map((_, bi) => {
+                        const board = list.boards[bi]
+                        if (!board) return <td key={bi} className="py-1.5 pr-2 text-slate-300">—</td>
+                        const capped = bi === 0 && list.boards.length > 1
+                        const auto = target != null && bi === list.boards.length - 1
+                        return (
+                          <td key={bi} className="py-1.5 pr-2">
+                            <CommitNumber
+                              value={board.blockedValue ?? 0}
+                              min={0}
+                              max={capped ? firstBoardCapFor(phase) : chaseValue(phase)}
+                              integer
+                              disabled={auto}
+                              onCommit={(v) => setBudget(seg, bi, v)}
+                              className="w-24"
+                              aria-label={`${name} board ${bi + 1} subsidy budget`}
+                              title={auto ? 'Filled in automatically: whatever is left of the subsidy needed' : capped ? `Board 1 carries at most ${firstBoardCapFor(phase)} DR` : undefined}
+                              data-field="budget"
+                            />
+                            {auto && <div className="text-[10px] text-slate-400">auto</div>}
+                          </td>
+                        )
+                      })}
+                      <td className="py-1.5 pr-3 tabular-nums" data-field="total">
+                        <span className="font-semibold text-slate-700">{totalOf(i).toLocaleString()} DR</span>
+                        {target != null && Math.abs(gap) > 0 && (
+                          <div className="text-[11px] text-amber-700" data-field="gap">
+                            {gap > 0 ? `${gap} over` : `${-gap} short`} of the subsidy needed
+                          </div>
+                        )}
+                        {target != null && list.boards.length > 1 && (
+                          <button type="button" className="block text-[11px] text-purple-700 hover:underline" onClick={() => respread(seg)} data-field="respread">
+                            spread evenly
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 text-xs text-slate-600 leading-relaxed max-w-4xl" data-testid="setup-how">
+            Enter a segment&apos;s total demand and its subsidy is split across the boards for you: Board 1 takes up to {firstBoardCapFor(phase)} DR and the rest is shared
+            evenly. Change any board and the last board adjusts so the boards always add up to the subsidy needed. Leave the demand empty to type every board&apos;s subsidy by
+            hand.
+          </div>
+        </Collapsible>
+
+      <Collapsible id="setup-generator" title="Generator, lucky drops and dates" summary={`${generatorSummary({ activeList, baseList, base })}. The defaults work - change them only if the event differs.`}>
+        <GeneratorStep {...props} />
+      </Collapsible>
+      </div>
     </div>
   )
 }
@@ -560,63 +752,49 @@ function LayoutsStep({ baseList, activeSegmentIndex, phase, phaseLabel, onOpenTo
   const isFirst = index === 0
   const capacities = boards.map((b, i) => layoutCapacity(b, i))
   const write = (next) => baseList.updateBoard(next)
+  // The board as it was before the last pick from the bank, so a pick can be
+  // taken back (with what was built under its tiles).
+  const [beforePick, setBeforePick] = useState(null)
+  const tutorialRule = !!board && hasTutorialCells(board, isFirst)
+  const tutorialBroken = tutorialRule && !tutorialCellsAreOpen(board.tiles)
+
+  // A board whose tiles were not picked from the bank was drawn by hand: its
+  // grid is then shown open (a picked board is shown by its picture above).
+  const picked = board ? bankLayoutOf(board, isFirst) : null
+  const drawnByHand = !!board && !picked && board.tiles.flat().some((t) => t !== 'open')
 
   return (
-    <div className="flex flex-col gap-4">
-      <Panel
-        title="2. Board layouts"
-        subtitle="Where items can go. This sets capacity - it does not decide which items go there (that is step 4)."
-        tag={<SharedTag />}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-2xl bg-slate-50/70 border border-slate-100 px-4 py-3">
-            <div className="font-semibold text-slate-700">Layout</div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              The boards, their size, which tiles are blocked or semi-blocked, rank limits, and anything you pin to a cell. You set this.
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50/70 border border-slate-100 px-4 py-3">
-            <div className="font-semibold text-slate-700">Contents</div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Which main-chain and reward items sit under those tiles, and in what order they are revealed. The build generates this from the layout, the budgets and
-              the reward targets.
-            </p>
-          </div>
-        </div>
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:items-start">
+      <Panel title="2. Board layouts" tag={<SharedTag />}>
         {activeSegmentIndex !== 0 && (
-          <p className="mt-3 rounded-2xl border border-purple-200 bg-purple-50/70 px-4 py-2 text-xs text-purple-800">
+          <p className="mb-3 rounded-2xl border border-purple-200 bg-purple-50/70 px-4 py-2 text-xs text-purple-800">
             Layouts are one shared design: this edits Segment 1&apos;s boards and every segment follows. Segments differ in their budgets and reward items, not their tiles.
           </p>
         )}
 
-        <div className="mt-4 flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-4">
           <label className="flex flex-col gap-1">
             <FieldLabel>Number of {phaseLabel.toLowerCase()} boards</FieldLabel>
             <CommitNumber value={boards.length} min={1} max={40} integer onCommit={(v) => baseList.setBoardCount(v)} className="w-24" data-field="board-count" />
           </label>
           <p className="text-xs text-slate-500 max-w-xl">
-            Board 1 is the board the player starts on. Each later board pushes in from the top (up to 3 rows) once the board before it is fully cleared, in this order.
+            Board 1 is the board the player starts on. Each later board pushes in from the top (up to 3 rows) once the board before it is cleared.
           </p>
         </div>
 
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-sm" data-testid="layout-capacity">
+          <table className="text-sm" data-testid="layout-boards" data-dense>
             <thead>
               <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                <th className="py-2 pr-3">Board</th>
-                <th className="py-2 pr-3">Size</th>
-                <th className="py-2 pr-3">Blocked</th>
-                <th className="py-2 pr-3">Semi-blocked</th>
-                <th className="py-2 pr-3">Rank limits</th>
-                <th className="py-2 pr-3">Most DR it can hold</th>
-                <th className="py-2 pr-3">Room for reward items</th>
-                <th className="py-2 pr-3">Pinned</th>
-                <th className="py-2 pr-3">Contents</th>
+                <th className="py-2 pr-6">Board</th>
+                <th className="py-2 pr-6">Layout</th>
+                <th className="py-2 pr-3">Tiles</th>
               </tr>
             </thead>
             <tbody>
               {boards.map((b, i) => {
                 const cap = capacities[i]
+                const layout = bankLayoutOf(b, i === 0)
                 return (
                   <tr
                     key={b.id}
@@ -624,34 +802,12 @@ function LayoutsStep({ baseList, activeSegmentIndex, phase, phaseLabel, onOpenTo
                     onClick={() => setSelectedId(b.id)}
                     data-layout-board={i}
                   >
-                    <td className="py-1.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">Board {i + 1}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">
-                      {b.rows} × {b.cols}
+                    <td className="py-1.5 pr-6 font-semibold text-slate-700 whitespace-nowrap">Board {i + 1}</td>
+                    <td className="py-1.5 pr-6 text-slate-600 whitespace-nowrap" data-cell="layout">
+                      {layout ? layout.name : cap.blockedTiles + cap.semiTiles === 0 ? <span className="text-slate-400">no tiles yet</span> : 'drawn by hand'}
                     </td>
-                    <td className="py-1.5 pr-3 tabular-nums" data-cell="blocked">
-                      {cap.blockedTiles}
-                    </td>
-                    <td className="py-1.5 pr-3 tabular-nums">{cap.semiTiles}</td>
-                    <td className="py-1.5 pr-3 tabular-nums">
-                      {cap.lowRank}–{cap.topRank}
-                      {(cap.lowRank !== b.minRank || cap.topRank !== b.maxRank) && <span className="ml-1 text-[11px] text-slate-400">(typed {b.minRank}–{b.maxRank})</span>}
-                    </td>
-                    <td className="py-1.5 pr-3 tabular-nums">{cap.maxDr.toLocaleString()} DR</td>
-                    <td className="py-1.5 pr-3 tabular-nums" data-cell="reward-slots">
-                      {cap.rewardSlots}
-                    </td>
-                    <td className="py-1.5 pr-3 text-xs text-slate-500">
-                      {cap.pinnedMain + cap.pinnedRewards === 0 ? '—' : `${cap.pinnedMain} rank${cap.pinnedMain === 1 ? '' : 's'}, ${cap.pinnedRewards} reward`}
-                      {cap.onboardingGoal && <div>goal: rank {cap.onboardingGoal.targetRank} in {cap.onboardingGoal.drBudget} DR</div>}
-                    </td>
-                    <td className="py-1.5 pr-3 text-xs" data-cell="contents">
-                      {cap.blockedTiles + cap.semiTiles === 0 ? (
-                        <span className="text-slate-400">no tiles</span>
-                      ) : cap.hasContents ? (
-                        <span className="text-emerald-600">has contents</span>
-                      ) : (
-                        <span className="text-slate-400">blank - built in step 4</span>
-                      )}
+                    <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">
+                      <span data-cell="blocked">{cap.blockedTiles}</span> blocked · <span data-cell="semi">{cap.semiTiles}</span> in sight
                     </td>
                   </tr>
                 )
@@ -659,65 +815,161 @@ function LayoutsStep({ baseList, activeSegmentIndex, phase, phaseLabel, onOpenTo
             </tbody>
           </table>
         </div>
+
+        <Collapsible id="layouts-details" tone="inner" className="mt-3" title="More about each board" summary="Size, rank limits, room for reward items, what is pinned, and whether the build has filled it.">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[46rem] text-sm" data-testid="layout-capacity">
+              <thead>
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                  <th className="py-2 pr-3">Board</th>
+                  <th className="py-2 pr-3">Size</th>
+                  <th className="py-2 pr-3">Rank limits</th>
+                  <th className="py-2 pr-3">Room for reward items</th>
+                  <th className="py-2 pr-3">Pinned</th>
+                  <th className="py-2 pr-3">Contents</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boards.map((b, i) => {
+                  const cap = capacities[i]
+                  return (
+                    <tr key={b.id} className="border-b border-slate-100" data-capacity-board={i}>
+                      <td className="py-1.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">Board {i + 1}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">
+                        {b.rows} × {b.cols}
+                      </td>
+                      <td className="py-1.5 pr-3 tabular-nums">
+                        {cap.lowRank}–{cap.topRank}
+                        {(cap.lowRank !== b.minRank || cap.topRank !== b.maxRank) && <span className="ml-1 text-[11px] text-slate-400">(typed {b.minRank}–{b.maxRank})</span>}
+                      </td>
+                      <td className="py-1.5 pr-3 tabular-nums" data-cell="reward-slots">
+                        {cap.rewardSlots}
+                      </td>
+                      <td className="py-1.5 pr-3 text-xs text-slate-500">
+                        {cap.pinnedMain + cap.pinnedRewards === 0 ? '—' : `${cap.pinnedMain} rank${cap.pinnedMain === 1 ? '' : 's'}, ${cap.pinnedRewards} reward`}
+                        {cap.onboardingGoal && <div>goal: rank {cap.onboardingGoal.targetRank} in {cap.onboardingGoal.drBudget} DR</div>}
+                      </td>
+                      <td className="py-1.5 pr-3 text-xs" data-cell="contents">
+                        {cap.blockedTiles + cap.semiTiles === 0 ? (
+                          <span className="text-slate-400">no tiles</span>
+                        ) : cap.hasContents ? (
+                          <span className="text-emerald-600">has contents</span>
+                        ) : (
+                          <span className="text-slate-400">blank - the build fills it (step 4)</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Collapsible>
       </Panel>
 
       {board && (
-        <Panel title={`Board ${index + 1} layout`} subtitle={isFirst ? 'The starting board.' : 'A wave board: it pushes in as up to 3 rows.'} tag={<SharedTag />}>
-          <div className="flex flex-wrap items-end gap-4 mb-4">
-            <label className="flex flex-col gap-1">
-              <FieldLabel>Rows</FieldLabel>
-              <CommitNumber value={board.rows} min={1} max={isFirst ? 20 : 3} integer onCommit={(v) => write(resizeBoard(board, isFirst, v, board.cols))} className="w-20" data-field="rows" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <FieldLabel>Columns</FieldLabel>
-              <CommitNumber value={board.cols} min={1} max={20} integer onCommit={(v) => write(resizeBoard(board, isFirst, board.rows, v))} className="w-20" data-field="cols" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <FieldLabel hint={phase === 'rc' ? '(never below 3 in Recompletion)' : undefined}>Lowest rank under tiles</FieldLabel>
-              <CommitNumber value={board.minRank} min={phase === 'rc' ? RC_MIN_RANK_UNDER_TILES : MIN_RANK} max={board.maxRank} integer onCommit={(v) => write(setRankWindow(board, isFirst, { minRank: v }))} className="w-20" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <FieldLabel>Highest rank under tiles</FieldLabel>
-              <CommitNumber value={board.maxRank} min={board.minRank} max={phase === 'rc' ? MAX_RANK + 1 : MAX_RANK} integer onCommit={(v) => write(setRankWindow(board, isFirst, { maxRank: v }))} className="w-20" />
-            </label>
-            {isFirst && phase !== 'rc' && (
-              <>
-                <label className="flex flex-col gap-1">
-                  <FieldLabel hint="(optional)">Onboarding: DR the player gets</FieldLabel>
-                  <CommitNumber value={board.onboardingDrBudget} allowEmpty min={1} max={10000} integer onCommit={(v) => write(invalidateLayout(board, { onboardingDrBudget: v }))} className="w-28" placeholder="none" />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <FieldLabel hint="(optional)">…should reach rank</FieldLabel>
-                  <CommitNumber value={board.onboardingTargetRank} allowEmpty min={MIN_RANK + 1} max={MAX_RANK} integer onCommit={(v) => write(invalidateLayout(board, { onboardingTargetRank: v }))} className="w-24" placeholder="none" />
-                </label>
-              </>
-            )}
-            {isFirst && phase === 'rc' && (
-              <label className="flex items-center gap-2 text-sm text-slate-600 pb-1.5" title="Puts the highest rank of this board's queue on the semi-blocked cell next to the fixed rank-2 cell">
-                <input type="checkbox" checked={!!board.rcEvent} onChange={(e) => write(invalidateLayout(board, { rcEvent: e.target.checked }))} className="accent-purple-600" data-field="rc-event" />
-                RC event mode (highest rank shown next to the rank-2 cell)
+        <Panel title={`Board ${index + 1}: its layout`} subtitle={isFirst ? 'The starting board.' : 'A wave board: it pushes in as up to 3 rows.'}>
+          <BoardBank
+            board={board}
+            isFirstBoard={isFirst}
+            tutorialRule={tutorialRule}
+            onPick={(layout) => {
+              setBeforePick(board)
+              write(applyLayout(board, isFirst, layout))
+            }}
+            canUndo={beforePick?.id === board.id}
+            onUndo={() => {
+              write(beforePick)
+              setBeforePick(null)
+            }}
+          />
+          {tutorialBroken && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="tutorial-cells-warning">
+              <TriangleAlert size={15} className="shrink-0" />
+              <span className="flex-1 min-w-[16rem]">
+                The two bottom cells of the right column have tiles on this board. They should be empty: the game&apos;s tutorial uses them.
+              </span>
+              <Button variant="secondary" size="sm" onClick={() => write(openTutorialCells(board))} data-testid="tutorial-cells-fix">
+                Empty these two cells
+              </Button>
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start">
+          <Collapsible
+            id="layouts-by-hand"
+            tone="inner"
+            className="xl:open:col-span-2"
+            title="Change tiles by hand"
+            summary={picked ? `This board is "${picked.name}" from the bank. Open to paint tiles or pin a rank to a cell.` : 'Paint tiles blocked, semi-blocked or open, or pin a rank to a cell.'}
+            openWhen={drawnByHand}
+          >
+            <div data-testid="layout-grid">
+              <BoardGrid
+                keptEmpty={tutorialRule ? tutorialCells(board.rows, board.cols) : []}
+                tiles={board.tiles}
+                placements={board.semiPlacements}
+                maxBrushRank={phase === 'rc' ? MAX_RANK + 1 : MAX_RANK}
+                minBrushRank={phase === 'rc' ? RC_MIN_RANK_UNDER_TILES : 1}
+                forcedRanks={board.forcedSemiRanks}
+                onPaint={(r, c, state, semiRank) => write(paintTile(board, isFirst, r, c, state, semiRank))}
+                onFillAll={(state) => write(fillAllTiles(board, isFirst, state))}
+              />
+            </div>
+            <p className="mt-3 text-xs text-slate-500 leading-relaxed">
+              With the semi-blocked brush you can also pin a specific rank to a cell - the build keeps it.
+              {isFirst && ' One cell on Board 1 is always semi-blocked and holds rank 2.'}
+              {tutorialRule && ' Its two bottom cells in the right column always stay empty: the game\'s tutorial uses them.'} Changing a board&apos;s tiles, size or rank limits clears that one
+              board&apos;s built contents; the next build fills it again.
+            </p>
+            <LinkButton className="mt-1 text-xs" onClick={() => onOpenTool(phase === 'main' ? 'editor' : 'recompletion')}>
+              Advanced board editor: saved layout presets, reorder or duplicate boards, per-board checks
+            </LinkButton>
+          </Collapsible>
+          <Collapsible
+            id="layouts-size"
+            tone="inner"
+            className="xl:open:col-span-2"
+            title="Size, rank limits and onboarding"
+            summary={`${board.rows} × ${board.cols} · ranks ${board.minRank}–${board.maxRank} under the tiles${isFirst && phase !== 'rc' ? (board.onboardingDrBudget ? ` · onboarding goal: rank ${board.onboardingTargetRank ?? '?'} in ${board.onboardingDrBudget} DR` : ' · no onboarding goal') : ''}`}
+          >
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="flex flex-col gap-1">
+                <FieldLabel>Rows</FieldLabel>
+                <CommitNumber value={board.rows} min={1} max={isFirst ? 20 : 3} integer onCommit={(v) => write(resizeBoard(board, isFirst, v, board.cols))} className="w-20" data-field="rows" />
               </label>
-            )}
+              <label className="flex flex-col gap-1">
+                <FieldLabel>Columns</FieldLabel>
+                <CommitNumber value={board.cols} min={1} max={20} integer onCommit={(v) => write(resizeBoard(board, isFirst, board.rows, v))} className="w-20" data-field="cols" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <FieldLabel hint={phase === 'rc' ? '(never below 3 in Recompletion)' : undefined}>Lowest rank under tiles</FieldLabel>
+                <CommitNumber value={board.minRank} min={phase === 'rc' ? RC_MIN_RANK_UNDER_TILES : MIN_RANK} max={board.maxRank} integer onCommit={(v) => write(setRankWindow(board, isFirst, { minRank: v }))} className="w-20" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <FieldLabel>Highest rank under tiles</FieldLabel>
+                <CommitNumber value={board.maxRank} min={board.minRank} max={phase === 'rc' ? MAX_RANK + 1 : MAX_RANK} integer onCommit={(v) => write(setRankWindow(board, isFirst, { maxRank: v }))} className="w-20" />
+              </label>
+              {isFirst && phase !== 'rc' && (
+                <>
+                  <label className="flex flex-col gap-1">
+                    <FieldLabel hint="(optional)">Onboarding: DR the player gets</FieldLabel>
+                    <CommitNumber value={board.onboardingDrBudget} allowEmpty min={1} max={10000} integer onCommit={(v) => write(invalidateLayout(board, { onboardingDrBudget: v }))} className="w-28" placeholder="none" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <FieldLabel hint="(optional)">…should reach rank</FieldLabel>
+                    <CommitNumber value={board.onboardingTargetRank} allowEmpty min={MIN_RANK + 1} max={MAX_RANK} integer onCommit={(v) => write(invalidateLayout(board, { onboardingTargetRank: v }))} className="w-24" placeholder="none" />
+                  </label>
+                </>
+              )}
+              {isFirst && phase === 'rc' && (
+                <label className="flex items-center gap-2 text-sm text-slate-600 pb-1.5" title="Puts the highest rank of this board's queue on the semi-blocked cell next to the fixed rank-2 cell">
+                  <input type="checkbox" checked={!!board.rcEvent} onChange={(e) => write(invalidateLayout(board, { rcEvent: e.target.checked }))} className="accent-purple-600" data-field="rc-event" />
+                  RC event mode (highest rank shown next to the rank-2 cell)
+                </label>
+              )}
+            </div>
+          </Collapsible>
           </div>
-          <div data-testid="layout-grid">
-            <BoardGrid
-              tiles={board.tiles}
-              placements={board.semiPlacements}
-              maxBrushRank={phase === 'rc' ? MAX_RANK + 1 : MAX_RANK}
-              minBrushRank={phase === 'rc' ? RC_MIN_RANK_UNDER_TILES : 1}
-              forcedRanks={board.forcedSemiRanks}
-              onPaint={(r, c, state, semiRank) => write(paintTile(board, isFirst, r, c, state, semiRank))}
-              onFillAll={(state) => write(fillAllTiles(board, isFirst, state))}
-            />
-          </div>
-          <p className="mt-3 text-xs text-slate-500 leading-relaxed">
-            Paint tiles blocked, semi-blocked or open. With the semi-blocked brush you can also pin a specific rank to a cell - the build keeps it.
-            {isFirst && ' One cell on Board 1 is always semi-blocked and holds rank 2.'} Changing a board&apos;s tiles, size or rank limits clears that one board&apos;s
-            built contents (they no longer fit the layout); every other board keeps its contents, and step 6 rebuilds what is missing.
-          </p>
-          <LinkButton className="mt-1 text-xs" onClick={() => onOpenTool(phase === 'main' ? 'editor' : 'recompletion')}>
-            Advanced board editor: saved layout presets, reorder or duplicate boards, per-board checks
-          </LinkButton>
         </Panel>
       )}
     </div>
@@ -725,7 +977,7 @@ function LayoutsStep({ baseList, activeSegmentIndex, phase, phaseLabel, onOpenTo
 }
 
 // ---------------------------------------------------------------- Step 3
-function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, onOpenTool, goTo, baseTargets, targetsFor, sharedTilePct, perResource, split, draft = null, draftCurrent = false }) {
+function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSegment, phase, phaseLabel, goTo, baseTargets, targetsFor, sharedTilePct, perResource, split, shownSegments }) {
   const board0 = baseList.boards[0]
   // The reward definitions as the economist typed them. Rank values a build
   // changed to reach an amount are a RESULT (shown beside them, and in step
@@ -766,12 +1018,6 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
   const toggleMilestone = (rank) => baseList.syncRankRewards({ rewardRanks: rewardRanks.includes(rank) ? rewardRanks.filter((r) => r !== rank) : [...rewardRanks, rank].sort((a, b) => a - b) })
   const advisories = ladderAdvisories(config, baseTargets)
   const literalCoins = hasLiteralCoinDefinitions(config)
-  // The containers to show here: the last build's (even if not applied), else
-  // the applied design's. Nothing until something has been built.
-  const draftDrops = (draft?.shared?.dropGroups ?? []).length > 0 ? draft.shared : null
-  const appliedDrops = (board0?.dropGroups ?? []).some((g) => g.auto) ? { dropGroups: board0.dropGroups, dropGroupsConfig: board0.dropGroupsConfig } : null
-  const shownContainers = draftDrops ? { ...draftDrops, from: draftCurrent ? 'draft' : 'stale-draft' } : appliedDrops ? { ...appliedDrops, from: 'applied' } : null
-
   // --- Twister, the easy way: twists in, price out (the build prices it) ---
   const twisterPlan = base.twisterPlan?.[phase] ?? { targetSpins: null, targetSpinsOverrides: {}, checkpointPct: TWISTER_EASY_CHECKPOINT_PCT }
   const setTwisterPlan = (next) => base.setTwisterPlan({ ...base.twisterPlan, [phase]: next })
@@ -783,6 +1029,13 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
   const twisterOn = twisterIsConfigured(config) && (twisterByBuild || hasTwisterDrops(board0?.dropGroups, board0?.dropGroupsConfig, board0?.minDropRank))
   const twisterValues = (config?.[TWISTER_TYPE] ?? []).map((r) => r?.prizeAmount ?? 0)
   const anyTwists = segments.some((_, i) => targetSpinsForSegment(twisterPlan, i) > 0)
+  // A segment with nothing on its boards is not built, so the per-segment
+  // tables of this step leave it out (and say so) instead of offering fields
+  // that change nothing. Segment 1 is always shown: it sets the amounts.
+  const inEvent = (seg, i) => i === 0 || listOfSeg(seg).boards.some((b) => (b.blockedValue ?? 0) > 0)
+  // (Only the segments in sight are named: one that is not in the segment bar needs no line saying it is not built.)
+  const leftOut = segments.map((seg, i) => (inEvent(seg, i) || !shownSegments.includes(i) ? null : seg.name || `Segment ${i + 1}`)).filter(Boolean)
+  const leftOutNote = leftOut.length > 0 ? `Not shown: ${leftOut.join(', ')} - no DR demand in step 1, so ${leftOut.length === 1 ? 'it is' : 'they are'} not built.` : null
   // From the "two or more items" rank the Twister item drops together with a
   // reward item (coins when they have a target, else the first reward that
   // has one), so that no drop there is a lone Twister item.
@@ -865,18 +1118,18 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
           the build shows next to it what they really get, and can only nudge that with the reward under Recompletion&apos;s own tiles and the two merges that make rank 13 and 14.
         </div>
       )}
-      <Panel
-        title="4. Small rewards"
-        subtitle={`What a base-segment player should collect during the ${phaseLabel.toLowerCase()} phase, and where it should come from.`}
-        tag={<SegmentTag>Base segment sets the targets</SegmentTag>}
-      >
-        <p className="text-xs text-slate-500 mb-3 max-w-3xl">
-          A target is the total a player actually <span className="font-semibold text-slate-700">collects</span> in this phase - the payout - not a number of reward
-          items. Leave a resource empty if this phase should not pay it. Coins are measured in <span className="font-semibold text-slate-700">allowances</span>: 1.5
-          means one and a half times the player&apos;s own coin allowance, not 1.5 coins. Coins are the only amount that can be a fraction - puzzles, merge energy and
-          charms are always whole numbers. The build treats a target as met when it lands within {phase === 'rc' ? 25 : 15}% of it{phase === 'rc' ? ' (Recompletion is looser than the normal event)' : ''}.
+      {/* On a wide window: the amounts (with the per-segment table under them) beside the Twister; then the three
+          sections of rules in a row. A section that is opened takes the full width. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+      <Panel title="3. Rewards and Twister" tag={<SegmentTag>Base segment sets the amounts</SegmentTag>}>
+        <p className="text-xs text-slate-500 mb-3 max-w-3xl" data-testid="reward-targets-intro">
+          Type the total the base segment&apos;s player <span className="font-semibold text-slate-700">collects</span> in the whole {phaseLabel.toLowerCase()} phase - the payout, not a number of
+          reward items; every other segment gets it times its reward size. Leave a reward empty if this phase should not pay it. <span className="font-semibold text-slate-700">Coins are an allowance worth</span>: 1.5 means one and a half times the player&apos;s own coin allowance, not 1.5
+          coins. Puzzles, merge energy and charms are whole numbers. A build counts an amount as met within {phase === 'rc' ? 25 : 15}%
+          {phase === 'rc' ? ' (Recompletion is looser than the normal event)' : ''}.
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="reward-targets">
+        <div className="grid grid-cols-2 gap-3" data-testid="reward-targets">
           {REWARD_TYPES.map((type) => (
             <label key={type} className="flex flex-col gap-1 rounded-2xl border border-slate-100 bg-slate-50/50 p-3">
               <FieldLabel>{REWARD_TARGET_LABELS[type]} target</FieldLabel>
@@ -909,7 +1162,289 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
           ))}
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-100 p-4">
+      </Panel>
+
+      <Collapsible
+        id={`rewards-per-segment-${phase}`}
+        title="Amounts per segment"
+        summary={
+          segments.some((seg, i) => i > 0 && (seg.segmentFactor ?? 1) !== 1)
+            ? `Base amounts × reward size: ${segments
+                .map((seg, i) => (i > 0 && (seg.segmentFactor ?? 1) !== 1 ? `${seg.name || `Segment ${i + 1}`} ×${seg.segmentFactor}` : null))
+                .filter(Boolean)
+                .join(', ')}. The others get the base amounts.`
+            : 'Every segment gets the base amounts (reward size ×1). Change a segment\'s reward size here or in step 1.'
+        }
+        tag={<SegmentTag />}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm" data-testid="derived-targets" data-dense>
+            <thead>
+              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                <th className="py-2 pr-3">Segment</th>
+                <th className="py-2 pr-3">Reward size</th>
+                {REWARD_TYPES.map((t) => (
+                  <th key={t} className="py-2 pr-3">
+                    {REWARD_TARGET_LABELS[t]}
+                    {t === COIN_TYPE && <span className="normal-case tracking-normal font-normal"> (× allowance)</span>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {segments.map((seg, i) => {
+                if (!inEvent(seg, i)) return null
+                const targets = targetsFor(i)
+                return (
+                  <tr key={i} className={`border-b border-slate-100 ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-derived-segment={i}>
+                    <td className="py-1.5 pr-3">
+                      <button type="button" className="font-semibold text-slate-700 hover:text-purple-700 whitespace-nowrap" onClick={() => onSelectSegment(i)}>
+                        {seg.name || `Segment ${i + 1}`}
+                      </button>
+                    </td>
+                    <td className="py-1.5 pr-3">
+                      {i === 0 ? <span className="text-xs text-purple-600 font-semibold">base</span> : <span className="tabular-nums text-slate-700" data-derived="factor">×{seg.segmentFactor ?? 1}</span>}
+                    </td>
+                    {REWARD_TYPES.map((t) => (
+                      <td key={t} className="py-1.5 pr-3 tabular-nums text-slate-600" data-derived={t}>
+                        {targets[t] > 0 ? formatRewardAmount(t, targets[t]) : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          A segment&apos;s reward size is typed in step 1. <LinkButton onClick={() => goTo('setup')}>Go to step 1</LinkButton>
+          {leftOutNote ? ` ${leftOutNote}` : ''}
+        </p>
+        <p className="mt-2 text-[11px] text-slate-400">
+          Each amount is the base amount × the segment&apos;s reward size. Puzzles, merge energy and charms are rounded to the nearest whole number; only coins keep a
+          fraction. Merge-drop odds are the same for every segment, so the other segments reach their own targets through the reward items under their own tiles - and,
+          for coins, through what a coin item is worth in that segment.
+        </p>
+      </Collapsible>
+      <Collapsible
+        id={`rewards-milestones-${phase}`}
+        title="Milestone rewards (optional)"
+        summary={rewardRanks.length === 0 ? 'None. A reward the player gets the first time they reach a rank; exported in the Item Ladder sheet.' : `At rank ${rewardRanks.join(', ')}. Exported in the Item Ladder sheet.`}
+        tag={<SharedTag />}
+      >
+        <p className="mb-3 text-xs text-slate-500">A reward the player gets the first time they reach a rank. Exported in the Item Ladder sheet.</p>
+        <div className="flex flex-wrap gap-1.5" data-testid="milestone-ranks">
+          {Array.from({ length: topRank }, (_, i) => i + 1).map((rank) => {
+            const on = rewardRanks.includes(rank)
+            return (
+              <button
+                key={rank}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleMilestone(rank)}
+                title={on ? `Rank ${rank} gives a reward - click to remove` : `Click to give a reward at rank ${rank}`}
+                className={`w-9 h-9 rounded-xl text-sm font-bold border-2 ${on ? 'text-white border-transparent shadow' : 'text-slate-500 border-slate-200 bg-white hover:border-purple-300'}`}
+                style={on ? { backgroundColor: colorForRank(Math.min(rank, MAX_RANK)) } : undefined}
+                data-milestone-rank={rank}
+              >
+                {rank}
+              </button>
+            )
+          })}
+        </div>
+        {rewardRanks.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-500">No milestone reward yet. Click a rank to add one.</p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-2">
+            {rewardRanks.map((rank) => (
+              <label key={rank} className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="w-16 font-semibold">Rank {rank}</span>
+                <input
+                  className="flex-1 min-w-[16rem] border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm font-mono bg-white/80"
+                  placeholder="reward syntax, as Ops writes it"
+                  value={rewardSyntax[rank] ?? ''}
+                  onChange={(e) => baseList.syncRankRewards({ rewardSyntax: { ...rewardSyntax, [rank]: e.target.value } })}
+                  aria-label={`Milestone reward syntax for rank ${rank}`}
+                  data-milestone-syntax={rank}
+                />
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-slate-400">These do not change the build - they are part of what is exported. The same set applies to every segment.</p>
+      </Collapsible>
+        </div>
+
+      <Panel
+        title="Twister (optional)"
+        subtitle="Type how many twists each segment's player should get. The build gives each segment its Twister values and the price of a twist (you see them in step 4)."
+        tag={<SegmentTag />}
+        data-testid="build-twister"
+      >
+        {!twisterOn ? (
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <StatusChip kind="none">No Twister in this phase</StatusChip>
+            <span className="flex-1 min-w-[16rem] text-xs text-slate-500">
+              A Twister is a separate widget: merges drop Twister items, the player collects Twister DR from them and spends it on twists. It never goes under tiles and never
+              blocks a build.
+            </span>
+            <Button variant="primary" size="sm" onClick={turnTwisterOn} data-testid="twister-add">
+              Add a Twister
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="overflow-x-auto">
+              <table className="text-sm" data-testid="twister-twists" data-dense>
+                <thead>
+                  <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                    <th className="py-1.5 pr-4">Segment</th>
+                    <th className="py-1.5 pr-4">Twists the player should get</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {segments.map((seg, i) => {
+                    const own = i === 0 ? twisterPlan.targetSpins : (twisterPlan.targetSpinsOverrides?.[i] ?? null)
+                    // (A segment that is not built keeps its row only while it holds twists of its own.)
+                    if (!inEvent(seg, i) && own == null) return null
+                    return (
+                      <tr key={i} className={`border-b border-slate-100 ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-twister-segment={i}>
+                        <td className="py-1.5 pr-4 font-semibold text-slate-700 whitespace-nowrap">
+                          {seg.name || `Segment ${i + 1}`}
+                          {i === 0 && <span className="ml-1.5 text-[11px] text-purple-600 font-semibold">base</span>}
+                        </td>
+                        <td className="py-1.5 pr-4">
+                          <CommitNumber
+                            value={own}
+                            allowEmpty
+                            min={1}
+                            max={100000}
+                            integer
+                            onCommit={(v) => setTwists(i, v)}
+                            className="w-36"
+                            placeholder={i === 0 ? 'twists' : twisterPlan.targetSpins ? `${twisterPlan.targetSpins} (as base)` : 'as base'}
+                            aria-label={`${seg.name || `Segment ${i + 1}`} twists`}
+                            data-field="twists"
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {leftOutNote && (
+              <p className="-mt-1 text-xs text-slate-400" data-testid="twister-left-out">
+                {leftOutNote}
+              </p>
+            )}
+            {/* What the build does with the twists, in a sentence (it was three read-only boxes). */}
+            <p className="text-xs text-slate-600" data-testid="twister-window">
+              {twisterByBuild ? (
+                <span data-testid="twister-by-build">The build sets how many Twister items drop and </span>
+              ) : (
+                'Your own fixed chance decides how many Twister items drop; the build sets '
+              )}
+              <span data-testid="twister-price-rule">
+                the price of a twist ({twisterPlan.roundPrice && (twisterPlan.costIncrement ?? 1) > 1 ? `in steps of ${twisterPlan.costIncrement}` : 'any whole price that makes it work'})
+              </span>
+              , so the twists are reached when the player has paid <span className="font-semibold text-slate-800">70-75% of the DR demand</span>.
+            </p>
+            <div className="flex flex-wrap items-end gap-4">
+              {!twisterByBuild && (
+                <label className="flex flex-col gap-1">
+                  <FieldLabel hint="(out of 1,000 merges that drop - your own fixed chance)">How often a merge drops a Twister item</FieldLabel>
+                  <CommitNumber value={twisterRule?.perMille ?? null} min={1} max={900} integer onCommit={setTwisterRate} className="w-28" data-field="twister-rate" />
+                </label>
+              )}
+              {!twisterByBuild && (
+                <Button variant="secondary" size="sm" onClick={turnTwisterOn} data-testid="twister-let-build">
+                  Let the build set the Twister drops
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={turnTwisterOff} data-testid="twister-remove">
+                Remove the Twister
+              </Button>
+            </div>
+            <Collapsible
+              id="rewards-twister-how"
+              tone="inner"
+              title="How the Twister drops, and how its values and price are set"
+              summary="A merge that makes rank 5 drops one rank-1 Twister item; rank 7 always drops its reward and the Twister item. Each segment gets its own four values and its own price."
+            >
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="twister-round-price">
+                  <span className="font-semibold text-slate-700">Round the price of a twist to steps of</span>
+                  <CommitNumber
+                    value={twisterPlan.roundPrice && (twisterPlan.costIncrement ?? 1) > 1 ? twisterPlan.costIncrement : null}
+                    allowEmpty
+                    min={1}
+                    max={100000}
+                    integer
+                    placeholder="any price"
+                    onCommit={(v) => setTwisterPlan(v != null && v > 1 ? { ...twisterPlan, roundPrice: true, costIncrement: v } : { ...twisterPlan, roundPrice: false })}
+                    className="w-28"
+                    aria-label="Round the price of a twist to steps of"
+                    data-field="twister-step"
+                  />
+                  <span className="text-slate-500">Optional. Empty = any whole price, which lands the twists closest to the 70-75% window. A step (10, say) gives rounder prices and lands them less exactly.</span>
+                </label>
+            {twisterByBuild && (
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 px-3 py-2 text-sm text-slate-700 max-w-3xl" data-testid="twister-rules">
+                <span className="font-semibold">How the Twister drops (your rules).</span>{' '}
+                <span className="text-slate-600">
+                  A merge that makes rank 5 drops exactly one rank-1 Twister item - only the Twister starts there, the other rewards still start at rank {minDropRank}. A merge that makes rank 7 always drops two items: its reward and
+                  the Twister item. At ranks 8 and 9 the Twister item is the second item. It is never under a tile, and no dropped item is above rank 3. The same table plays in the normal event and in Recompletion.
+                </span>
+              </div>
+            )}
+            <p className="text-xs text-slate-500 max-w-3xl" data-testid="twister-how">
+              {twisterByBuild ? (
+                <>
+                  How it works: once the boards and rewards are final, the build plays every segment and gives it its own four Twister DR values and its own price of a twist, so that its typical player reaches the twists you typed
+                  when they have paid 70-75% of the segment{"'"}s DR demand - with a twist bought whenever the balance affords one and the rest kept. Twister DR is a currency of its own, so only the ratio of a value to the price
+                  changes anything: the build takes the simplest numbers that fit (values not under {twisterValues.map((v) => formatRewardAmount(TWISTER_TYPE, v)).join(' / ')}, then the lowest whole price that fits). A
+                  segment that cannot land in the window says how far off it is and why (step 4). Recompletion plays the normal event{"'"}s values; only its price is its own.{' '}
+                </>
+              ) : (
+                <>
+                  How it works: every merge from the drop start rank has your fixed chance of dropping a rank-1 Twister item; four of them merged up are worth{' '}
+                  {twisterValues.map((v) => formatRewardAmount(TWISTER_TYPE, v)).join(' / ')} Twister DR at ranks 1 to 4. The build keeps that chance as it is and only sets a
+                  price - when a player collects too little for the twists, it cannot help. &quot;Let the build set the Twister drops&quot; lets it.{' '}
+                </>
+              )}
+              <span className="text-slate-400">
+                Twister values you type yourself are kept as typed, and then only the price is fitted.
+              </span>
+            </p>
+              </div>
+            </Collapsible>
+            {twisterByBuild && !hasTwisterDrops(board0?.dropGroups, board0?.dropGroupsConfig, board0?.minDropRank) && (
+              <p className="text-xs text-purple-700" data-testid="twister-rebuild-note">
+                Containers that were built before you added the Twister do not hold it yet. Build (step 4): the build makes the containers again, with the Twister item in
+                them, and sets the price.
+              </p>
+            )}
+            {!anyTwists && (
+              <p className="text-xs text-amber-700" data-testid="twister-needs-twists">
+                Type the twists for the base segment, or the build has no price to work out.
+              </p>
+            )}
+          </div>
+        )}
+      </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+      <Collapsible
+        id={`rewards-drop-rules-${phase}`}
+        className="xl:open:col-span-2"
+        title="Where rewards come from, and the drop rules"
+        summary={`${REWARD_TYPE_LABELS[tileRewardType]} under the tiles (${sharedTilePct}% asked from tiles) · merges drop from rank ${minDropRank}: one item up to rank ${soloDropRank}, two from rank ${Math.max(minDropRank, multiDropRankOf(board0))}, three from rank ${Math.max(minDropRank + 1, tripleDropRankOf(board0))} · leftovers ${leftoverPolicy === 'collect' ? 'are collected' : 'pay nothing'} · ${board0?.steadyDrops !== false ? 'every merge of a rank drops the same items' : 'containers picked at random'}`}
+        tag={<SharedTag />}
+        data-testid="rewards-drop-rules"
+      >
+        <div>
           <FieldLabel>Where it comes from</FieldLabel>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <span className="text-sm text-slate-600 whitespace-nowrap">Under tiles</span>
@@ -1021,7 +1556,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             with every rank and is 100% from the rank in the second box; only from the rank in the third box does a drop hold three. These counts are rules: a drop never
             holds more than its rank allows. When your amounts need more than that carries, the items get bigger first (rank 3 at most), and then the build changes that
             reward's rank values instead of adding items (see "Reward definitions" below).{' '}
-            Dropped items land free, ready to merge or collect. The build makes the containers and gives each a weight (you see them in step 6), and never moves this rank. The second setting decides which totals can be paid: when leftovers pay nothing, a reward is only ever paid in whole rank-{REWARD_MAX_RANK} amounts.
+            Dropped items land free, ready to merge or collect. The build makes the containers and gives each a weight (you see them in step 4), and never moves this rank. The second setting decides which totals can be paid: when leftovers pay nothing, a reward is only ever paid in whole rank-{REWARD_MAX_RANK} amounts.
           </p>
           <label className="mt-2 flex items-start gap-2 rounded-2xl border border-purple-100 bg-purple-50/50 px-3 py-2 text-sm text-slate-700" data-testid="steady-drops">
             <input
@@ -1037,7 +1572,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
                 Nothing about which reward a merge drops is left to chance, so every player ends close to the amounts you ask for - not only the average player. Measured on a
                 test event (one build, 200 players): with it, 100 of 100 players land within 15% of every amount at once; with containers picked at random, 28 of 100 did. The
                 item counts stay your rules (one item at rank {minDropRank}, two items, three items). Switch it off for the more varied containers of before. It needs the build to
-                give the rank values (below); this tool&apos;s own design. Step 7 shows the number for your own event.
+                give the rank values (below); this tool&apos;s own design. Step 5 shows the number for your own event.
               </span>
             </span>
           </label>
@@ -1060,55 +1595,17 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             </div>
           )}
         </div>
-      </Panel>
+      </Collapsible>
 
-      <Panel title="Other segments" subtitle="Derived from the base targets - nothing to type per resource." tag={<SegmentTag />}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-sm" data-testid="derived-targets">
-            <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                <th className="py-2 pr-3">Segment</th>
-                <th className="py-2 pr-3">Factor</th>
-                {REWARD_TYPES.map((t) => (
-                  <th key={t} className="py-2 pr-3">
-                    {REWARD_TARGET_LABELS[t]}
-                    {t === COIN_TYPE && <span className="normal-case tracking-normal font-normal"> (× allowance)</span>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {segments.map((seg, i) => {
-                const targets = targetsFor(i)
-                return (
-                  <tr key={i} className={`border-b border-slate-100 ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-derived-segment={i}>
-                    <td className="py-1.5 pr-3">
-                      <button type="button" className="font-semibold text-slate-700 hover:text-purple-700 whitespace-nowrap" onClick={() => onSelectSegment(i)}>
-                        {seg.name || `Segment ${i + 1}`}
-                      </button>
-                    </td>
-                    <td className="py-1.5 pr-3">
-                      {i === 0 ? <span className="text-xs text-purple-600 font-semibold">base</span> : <CommitNumber value={seg.segmentFactor ?? 1} min={0} max={100} step={0.05} onCommit={(v) => seg.setSegmentFactor(v)} className="w-20" aria-label={`Reward factor for ${seg.name || `Segment ${i + 1}`}`} />}
-                    </td>
-                    {REWARD_TYPES.map((t) => (
-                      <td key={t} className="py-1.5 pr-3 tabular-nums text-slate-600" data-derived={t}>
-                        {targets[t] > 0 ? formatRewardAmount(t, targets[t]) : '—'}
-                      </td>
-                    ))}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-2 text-[11px] text-slate-400">
-          Each amount is the base target × the segment&apos;s factor. Puzzles, merge energy and charms are rounded to the nearest whole number; only coins keep a
-          fraction. Merge-drop odds are the same for every segment, so the other segments reach their own targets through the reward items under their own tiles - and,
-          for coins, through what a coin item is worth in that segment.
-        </p>
-      </Panel>
-
-      <Panel title="Reward definitions" subtitle="What each reward rank pays. Reused automatically once they are valid." tag={<SharedTag />}>
+      <Collapsible
+        id={`rewards-definitions-${phase}`}
+        className="xl:open:col-span-2"
+        title="Rank values: what each reward rank pays"
+        summary={`${valuesByBuild ? 'The build gives every segment its own rank values, in round amounts that reward merging.' : 'Your typed values are used as they are.'}${missing.length > 0 ? ` ${missing.length} reward${missing.length === 1 ? '' : 's'} still need${missing.length === 1 ? 's' : ''} values.` : ''}${advisories.length > 0 ? ` ${advisories.length} typed set${advisories.length === 1 ? '' : 's'} of values do${advisories.length === 1 ? 'es' : ''} not reward merging${valuesByBuild ? ' (the values the build gives do)' : ''}.` : ''}`}
+        openWhen={missing.length > 0 || literalCoins || (!valuesByBuild && advisories.length > 0)}
+        tag={<SharedTag />}
+        data-testid="rewards-definitions"
+      >
         <div id="build-definitions" className="flex flex-col gap-2" data-testid="definitions-status">
           <label className="flex items-start gap-2 rounded-2xl border border-purple-100 bg-purple-50/50 px-3 py-2 text-sm text-slate-700" data-testid="values-by-build">
             <input
@@ -1123,7 +1620,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
               <span className="text-slate-500">
                 The drop rules stay as you set them (one item at rank {minDropRank}, two items, three items). The build gives every segment its own four rank values for each reward,
                 so each segment&apos;s average lands on its own amount: round amounts (5 / 15 / 35 / 75, not 8 / 23 / 23 / 61), and each rank worth more than the items it is made of, so
-                tapping an item early never pays more than merging it. Step 6 shows them. Your typed values stay here as the definition. Switch this off to keep your values whatever
+                tapping an item early never pays more than merging it. Step 4 shows them. Your typed values stay here as the definition. Switch this off to keep your values whatever
                 happens - then every segment plays the values typed here and what that pays is reported.
               </span>
             </span>
@@ -1240,7 +1737,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
           {advisories.map((a) => {
             const fixes = suggestLadderFixes(config[a.type], { whole: a.type !== COIN_TYPE })
             return (
-              <div key={a.type} className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800" data-ladder-problem={a.type}>
+              <div key={a.type} className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800" data-ladder-problem={a.type} data-note>
                 <div className="flex items-start gap-2">
                   <TriangleAlert size={13} className="mt-0.5 shrink-0" />
                   <div className="flex-1">
@@ -1295,230 +1792,9 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
         <LinkButton className="mt-3 text-xs" onClick={() => onOpenTool('rewards')}>
           Advanced: item syntax, asset IDs, drop groups, per-rank weights, locks and pinned reward items
         </LinkButton>
-      </Panel>
+      </Collapsible>
 
-      <Panel title="Milestone rewards (optional)" subtitle="A reward the player gets the first time they reach a rank. Exported in the Item Ladder sheet." tag={<SharedTag />}>
-        <div className="flex flex-wrap gap-1.5" data-testid="milestone-ranks">
-          {Array.from({ length: topRank }, (_, i) => i + 1).map((rank) => {
-            const on = rewardRanks.includes(rank)
-            return (
-              <button
-                key={rank}
-                type="button"
-                aria-pressed={on}
-                onClick={() => toggleMilestone(rank)}
-                title={on ? `Rank ${rank} gives a reward - click to remove` : `Click to give a reward at rank ${rank}`}
-                className={`w-9 h-9 rounded-xl text-sm font-bold border-2 ${on ? 'text-white border-transparent shadow' : 'text-slate-500 border-slate-200 bg-white hover:border-purple-300'}`}
-                style={on ? { backgroundColor: colorForRank(Math.min(rank, MAX_RANK)) } : undefined}
-                data-milestone-rank={rank}
-              >
-                {rank}
-              </button>
-            )
-          })}
-        </div>
-        {rewardRanks.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">No milestone reward yet. Click a rank to add one.</p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-2">
-            {rewardRanks.map((rank) => (
-              <label key={rank} className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <span className="w-16 font-semibold">Rank {rank}</span>
-                <input
-                  className="flex-1 min-w-[16rem] border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm font-mono bg-white/80"
-                  placeholder="reward syntax, as Ops writes it"
-                  value={rewardSyntax[rank] ?? ''}
-                  onChange={(e) => baseList.syncRankRewards({ rewardSyntax: { ...rewardSyntax, [rank]: e.target.value } })}
-                  aria-label={`Milestone reward syntax for rank ${rank}`}
-                  data-milestone-syntax={rank}
-                />
-              </label>
-            ))}
-          </div>
-        )}
-        <p className="mt-2 text-[11px] text-slate-400">These do not change the build - they are part of what is exported. The same set applies to every segment.</p>
-      </Panel>
-
-      <Panel
-        title="Twister (optional)"
-        subtitle="Type how many twists each segment's player should get. The build works out the price of a twist for each segment (you see it in step 6)."
-        tag={<SegmentTag />}
-        data-testid="build-twister"
-      >
-        {!twisterOn ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-            <StatusChip kind="none">No Twister in this phase</StatusChip>
-            <span className="flex-1 min-w-[16rem] text-xs text-slate-500">
-              A Twister is a separate widget: merges drop Twister items, the player collects Twister DR from them and spends it on twists. It never goes under tiles and never
-              blocks a build.
-            </span>
-            <Button variant="primary" size="sm" onClick={turnTwisterOn} data-testid="twister-add">
-              Add a Twister
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <div className="overflow-x-auto">
-              <table className="text-sm" data-testid="twister-twists">
-                <thead>
-                  <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
-                    <th className="py-1.5 pr-4">Segment</th>
-                    <th className="py-1.5 pr-4">Twists the player should get</th>
-                    <th className="py-1.5 pr-4">Price of a twist now</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {segments.map((seg, i) => {
-                    const own = i === 0 ? twisterPlan.targetSpins : (twisterPlan.targetSpinsOverrides?.[i] ?? null)
-                    const cost = listOfSeg(seg).boards[0]?.twisterSpinCost ?? null
-                    return (
-                      <tr key={i} className={`border-b border-slate-100 ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-twister-segment={i}>
-                        <td className="py-1.5 pr-4 font-semibold text-slate-700 whitespace-nowrap">
-                          {seg.name || `Segment ${i + 1}`}
-                          {i === 0 && <span className="ml-1.5 text-[11px] text-purple-600 font-semibold">base</span>}
-                        </td>
-                        <td className="py-1.5 pr-4">
-                          <CommitNumber
-                            value={own}
-                            allowEmpty
-                            min={1}
-                            max={100000}
-                            integer
-                            onCommit={(v) => setTwists(i, v)}
-                            className="w-28"
-                            placeholder={i === 0 ? 'twists' : twisterPlan.targetSpins ? `${twisterPlan.targetSpins} (as base)` : 'as base'}
-                            aria-label={`${seg.name || `Segment ${i + 1}`} twists`}
-                            data-field="twists"
-                          />
-                        </td>
-                        <td className="py-1.5 pr-4 text-xs text-slate-500 tabular-nums" data-field="twist-price">
-                          {cost == null ? 'not set yet - the build sets it' : `${cost} Twister DR`}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex flex-wrap items-end gap-4">
-              {twisterByBuild ? (
-                <div className="flex flex-col gap-1" data-testid="twister-by-build">
-                  <FieldLabel>How many Twister items drop</FieldLabel>
-                  <span className="rounded-lg bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-purple-700">Set by the build, to fit the twists</span>
-                </div>
-              ) : (
-                <label className="flex flex-col gap-1">
-                  <FieldLabel hint="(out of 1,000 merges that drop - your own fixed chance)">How often a merge drops a Twister item</FieldLabel>
-                  <CommitNumber value={twisterRule?.perMille ?? null} min={1} max={900} integer onCommit={setTwisterRate} className="w-28" data-field="twister-rate" />
-                </label>
-              )}
-              <label className="flex flex-col gap-1">
-                <FieldLabel hint="(Twister DR; 1 = any whole number)">The price moves in steps of</FieldLabel>
-                <CommitNumber value={twisterPlan.costIncrement ?? 1} min={1} max={100000} integer onCommit={(v) => setTwisterPlan({ ...twisterPlan, costIncrement: v })} className="w-28" data-field="twister-step" />
-              </label>
-              <label className="flex flex-col gap-1">
-                <FieldLabel hint="(% of the phase played; 100 = by the end)">Twists counted when the player is at</FieldLabel>
-                <CommitNumber value={twisterPlan.checkpointPct} min={1} max={100} integer onCommit={(v) => setTwisterPlan({ ...twisterPlan, checkpointPct: v })} className="w-28" data-field="twister-checkpoint" />
-              </label>
-              {!twisterByBuild && (
-                <Button variant="secondary" size="sm" onClick={turnTwisterOn} data-testid="twister-let-build">
-                  Let the build set the Twister drops
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={turnTwisterOff} data-testid="twister-remove">
-                Remove the Twister
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => onOpenTool('twister')}>
-                Advanced: open the Twister tool
-              </Button>
-            </div>
-            {twisterByBuild && (
-              <label className="flex items-start gap-2 rounded-2xl border border-purple-100 bg-purple-50/50 px-3 py-2 text-sm text-slate-700 max-w-3xl" data-testid="twister-steady">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-purple-600"
-                  checked={board0?.twisterSteady !== false}
-                  onChange={(e) => baseList.syncRewardConfig({ twisterSteady: e.target.checked })}
-                  data-field="twister-steady"
-                />
-                <span>
-                  <span className="font-semibold">Keep every segment&apos;s Twister steady.</span>{' '}
-                  <span className="text-slate-500">
-                    Twister DR is only paid when a Twister item is finished (rank 4). A segment with a lot of subsidy merges little, finishes one item, and gets every twist in
-                    one jump - at 50% of the phase in one segment, at 100% in another. With this on, the build makes the Twister items bigger (rank 3 at most, never a finished
-                    item) until every segment&apos;s typical player finishes at least {TWISTER_MIN_COLLECTS} and no segment has all its twists early, so twists arrive in steps and the last one lands near the end in every
-                    segment. Switch it off to keep the Twister items at rank 1-2 whatever happens. ({TWISTER_MIN_COLLECTS} is this tool&apos;s own number.)
-                  </span>
-                </span>
-              </label>
-            )}
-            <p className="text-xs text-slate-500 max-w-3xl" data-testid="twister-how">
-              {twisterByBuild ? (
-                <>
-                  How it works: the build makes the Twister item one of the things a merge can drop
-                  : a Twister item is one of the items in a quarter of the drops at every rank (it takes a reward item's place - it is never an extra item), more where the rewards leave places empty. Then it plays every segment and sizes
-                  the four Twister DR values: the smallest round values at which every segment has a price that fits its twists. Last, it sets each segment{"'"}s price: the highest one at
-                  which its typical player still gets the twists you typed, so the last twist comes close to the point twists are counted - in every segment alike (step 6 shows when). A
-                  Twister item is worth {twisterValues.map((v) => formatRewardAmount(TWISTER_TYPE, v)).join(' / ')} Twister DR at ranks 1 to 4. A segment that merges
-                  more collects more, so it gets a higher price for the same twists.{' '}
-                </>
-              ) : (
-                <>
-                  How it works: every merge from the drop start rank has your fixed chance of dropping a rank-1 Twister item; four of them merged up are worth{' '}
-                  {twisterValues.map((v) => formatRewardAmount(TWISTER_TYPE, v)).join(' / ')} Twister DR at ranks 1 to 4. The build keeps that chance as it is and only sets a
-                  price - when a player collects too little for the twists, it cannot help. &quot;Let the build set the Twister drops&quot; lets it.{' '}
-                </>
-              )}
-              <span className="text-slate-400">
-                The four values and counting at the end are this tool's starting numbers, not confirmed game values - the price adapts to whatever you set. A smaller price step
-                lets the price land closer to your twists.
-              </span>
-            </p>
-            {twisterByBuild && !hasTwisterDrops(board0?.dropGroups, board0?.dropGroupsConfig, board0?.minDropRank) && (
-              <p className="text-xs text-purple-700" data-testid="twister-rebuild-note">
-                Containers that were built before you added the Twister do not hold it yet. Build (step 6): the build makes the containers again, with the Twister item in
-                them, and sets the price.
-              </p>
-            )}
-            {!anyTwists && (
-              <p className="text-xs text-amber-700" data-testid="twister-needs-twists">
-                Type the twists for the base segment, or the build has no price to work out.
-              </p>
-            )}
-          </div>
-        )}
-      </Panel>
-
-      <Panel
-        title="Containers: what a merge drops"
-        subtitle="A container is one drop: one to four reward items that fall together. The build makes them from your targets and gives each a weight per merge rank - you do not type them."
-        tag={<SharedTag />}
-        data-testid="rewards-containers"
-      >
-        {shownContainers ? (
-          <>
-            <p className="mb-2 text-xs text-slate-500" data-testid="rewards-containers-source">
-              {shownContainers.from === 'draft'
-                ? 'From the last build (not applied yet).'
-                : shownContainers.from === 'stale-draft'
-                  ? 'From the last build - your inputs have changed since, so the next build will make them again.'
-                  : 'From the applied design.'}{' '}
-              They are exported as the Small Rewards Bank and Small Reward Weights sheets.
-            </p>
-            <ContainersTable dropGroups={shownContainers.dropGroups} dropGroupsConfig={shownContainers.dropGroupsConfig} minDropRank={minDropRank} phase={phase} testid="rewards-container-table" />
-          </>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600" data-testid="rewards-containers-empty">
-            <span className="flex-1 min-w-[16rem] text-xs text-slate-500">
-              No containers yet. They are made when you build (step 6): one per different drop, each with a weight for every merge rank from the drop start rank up. They then show
-              here, in the build results, and in the Syntax tab.
-            </span>
-            <Button variant="secondary" size="sm" onClick={() => goTo('build')}>
-              Go to Build boards
-            </Button>
-          </div>
-        )}
-      </Panel>
+      </div>
 
     </div>
   )

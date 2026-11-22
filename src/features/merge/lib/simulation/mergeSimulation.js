@@ -602,8 +602,10 @@ export function performMerge(
     // Merge-drop groups only roll from minDropRank onward (default 6,
     // configurable per board list via board.minDropRank). A hard engine
     // gate: even a misconfigured table below the threshold can never fire.
+    // (One exception, by the economist's rule: a row marked `belowStart` - the
+    // Twister item a rank-5 merge drops - rolls although it is under the gate.)
     const dropGate = minDropRankOpt ?? MIN_DROP_RANK
-    if (newRank >= dropGate && dropGroupsConfig && dropGroupsById) {
+    if ((newRank >= dropGate || dropGroupsConfig?.[newRank - 1]?.belowStart === true) && dropGroupsConfig && dropGroupsById) {
       const table = dropGroupsConfig[newRank - 1]
       // 'expected' = the deterministic schedule (dropGroups.js's
       // createDropScheduler) - same tables, same outcomes in proportion to
@@ -1171,7 +1173,7 @@ export function simulatePlaythrough(boards, options = {}) {
   // player rolls each tap, though, and two of them do not spend the same DR.
   // `options.luckRng` (a random source) makes this player roll like a real
   // one, so a batch of them shows how far one player can be from the average
-  // (step 7's validation, and its "players within 15%").
+  // (step 5's validation, and its "players within 15%").
   const luckRng = options.luckRng ?? null
   const schedulerFor = (p) => (luckRng ? () => rollBonus(p, luckRng) : createEvScheduler(p))
   let nextBonus = schedulerFor(probs)
@@ -1196,8 +1198,61 @@ export function simulatePlaythrough(boards, options = {}) {
       droppedItems[e.rewardType] = (droppedItems[e.rewardType] ?? 0) + 1
       droppedRawValue[e.rewardType] = (droppedRawValue[e.rewardType] ?? 0) + (rewardChainConfig ? rewardPrizeAmount(rewardChainConfig, e.rewardType, e.rank) : 0)
     }
+    if (cadence && (e.type === 'merge' || e.type === 'merge-drop' || e.type === 'spend')) {
+      // (paid DR of the phase the event happens in)
+      const paid = drSpent - (phase === 'rc' ? (cadence.drAtRcEntry ?? 0) : 0)
+      if (e.type === 'merge' && isMainItem(e.rank) && e.newRank != null) cadence.merges.push([phase, paid, e.newRank])
+      else if (e.type === 'merge-drop') {
+        if (e.rewardType === TWISTER_TYPE) cadence.drops.push([phase, paid, e.rank])
+        // A dropped item needs a free cell like anything else. With none it
+        // waits off the board (delayed); it is never thrown away - and only a
+        // run with no waiting area would have to collect it on the spot.
+        const where = cadence.space[phase]
+        where.drops += 1
+        if (e.toInventory) {
+          where.delayed += 1
+          if (e.rewardType === TWISTER_TYPE) where.twisterDelayed += 1
+        } else if (e.collected && e.rank < REWARD_MAX_RANK) where.suppressed += 1
+      }
+      // How full the board is: items on cells that are not locked.
+      if (e.type !== 'merge') {
+        let open = 0
+        let used = 0
+        for (let r = 0; r < state.rows; r++) {
+          for (let c = 0; c < state.cols; c++) {
+            if (state.locked[r][c]) continue
+            open += 1
+            if (state.itemAt[r][c] != null) used += 1
+          }
+        }
+        const where = cadence.space[phase]
+        if (open > 0 && used / open > where.peak) where.peak = used / open
+        if (open > 0 && used >= open) where.fullEvents += 1
+      }
+    }
     if (trace) events.push({ drSpent, ...e })
   }
+  // CADENCE (`options.cadence`): WHEN things happen, measured in the DR the
+  // player has PAID the generator in the phase so far - the x1/x2/x4 cost of
+  // every paid tap; a free merge-energy tap adds nothing, though its merges
+  // and drops are recorded like any other. This is the clock the Twister is
+  // timed on (economist: the twists should be reached "around 70-75% of the
+  // segment's DR demand spent") - not main-chain value, board, merge count or
+  // time. Three light lists of [phase, paid DR, ...]:
+  //   merges    every main-chain merge and the rank it made
+  //   drops     every Twister item dropped and its rank
+  //   collects  every Twister collection: [.., amount, rank, phaseEnd] -
+  //             phaseEnd marks what was merged up and tapped when the phase's
+  //             top rank was reached, so it is never mistaken for income that
+  //             arrived earlier
+  // plus the paid DR at which each phase ended.
+  //   space     per phase: the fullest the board got (share of its unlocked
+  //             cells holding an item), how often it was full, and how many
+  //             dropped items had to wait off the board
+  //   carried   the Twister items the player holds when Recompletion begins
+  const newSpace = () => ({ peak: 0, fullEvents: 0, drops: 0, delayed: 0, twisterDelayed: 0, suppressed: 0 })
+  const cadence = options.cadence ? { merges: [], drops: [], collects: [], drAtRcEntry: null, phaseEndDr: { main: null, rc: null }, space: { main: newSpace(), rc: newSpace() }, carried: null } : null
+  let settling = false
   const droppedItems = emptyRewardTally()
   const droppedRawValue = emptyRewardTally()
 
@@ -1232,12 +1287,32 @@ export function simulatePlaythrough(boards, options = {}) {
   // payout.) tileShare (0-1) comes from the reward pool's composition at the
   // moment of the collect - see creditCollect.
   let energyBalance = 0
+  // MERGE ENERGY, PHASE BY PHASE (always kept; it is a handful of numbers).
+  //   start    the balance the phase began with (carried in from the phase before)
+  //   play     collected while the phase was being played
+  //   cleanup  collected when the phase ended (the leftovers merged and tapped)
+  //   used     spent on free generator taps in the phase
+  //   left     the balance when the phase ended, cleanup included
+  // The 80% credit is taken on what a phase COLLECTS; only `used` saves the
+  // player DR in that phase. The two are not the same thing: energy that
+  // comes with the last merges, or at cleanup, pays for nothing in its phase.
+  const newFlow = () => ({ start: 0, play: 0, cleanup: 0, used: 0, left: 0 })
+  const energyFlow = { main: newFlow(), rc: newFlow() }
+  // Paid generator taps of each phase (with `used`: its generator actions).
+  const paidTaps = { main: 0, rc: 0 }
   const onCollect = (type, rank, tileShare = 1) => {
     const amount = rewardChainConfig ? rewardPrizeAmount(rewardChainConfig, type, rank) : 0
     collected[type] = (collected[type] ?? 0) + amount
     collectedBySource.tile[type] += amount * tileShare
     collectedBySource.drop[type] += amount * (1 - tileShare)
-    if (type === 'energy') energyBalance += amount
+    if (type === 'energy') {
+      energyBalance += amount
+      // In play it can pay for a tap in this phase; tapped when the phase ends
+      // it comes too late for that (it is there for the next phase, if any).
+      if (settling) energyFlow[phase].cleanup += amount
+      else energyFlow[phase].play += amount
+    }
+    if (cadence && type === TWISTER_TYPE) cadence.collects.push([phase, drSpent - (phase === 'rc' ? (cadence.drAtRcEntry ?? 0) : 0), amount, rank, settling, energyFlow[phase].used + paidTaps[phase]])
     log?.({ type: 'collect', rewardType: type, rank, amount, tileShare })
   }
   // rewardChainConfig/minDropRank default from the starting board's own
@@ -1371,6 +1446,9 @@ export function simulatePlaythrough(boards, options = {}) {
   // read each phase's own payout directly (collectedMainPhase /
   // collectedRcPhase on the result) instead of diffing two whole runs.
   let collectedAtRcEntry = null
+  // The DR paid when Recompletion began (null: it never did) - a phase's own
+  // spend is counted from its start, never the other phase's with it.
+  let drSpentAtRcEntry = null
   let collectedBySourceAtRcEntry = null
   let mergeCountsAtRcEntry = null
   // WHAT THE NORMAL EVENT REALLY PAID. Everything on the board comes along
@@ -1444,7 +1522,17 @@ export function simulatePlaythrough(boards, options = {}) {
         // so nothing is settled here - only when the run ends.
         mainPhaseSnapshot = snapshotPhaseStats(activeBoards, startIndex, nextBoardIndex, subsidyDelivered)
         subsidyDeliveredAtTransition = subsidyDelivered
+        if (cadence) {
+          cadence.phaseEndDr.main = drSpent
+          cadence.drAtRcEntry = drSpent
+          const held = leftoverRewardItems(state, inventory).filter((item) => item.type === TWISTER_TYPE)
+          cadence.carried = { items: held.length, units: held.reduce((sum, item) => sum + 2 ** (item.rank - 1), 0) }
+        }
         collectedAtRcEntry = { ...collected }
+        drSpentAtRcEntry = drSpent
+        // What the normal event leaves unspent is what Recompletion starts with.
+        energyFlow.main.left = energyBalance
+        energyFlow.rc.start = energyBalance
         collectedBySourceAtRcEntry = { tile: { ...collectedBySource.tile }, drop: { ...collectedBySource.drop } }
         carriedAtRcEntry = emptyRewardTally()
         carriedBySourceAtRcEntry = { tile: emptyRewardTally(), drop: emptyRewardTally() }
@@ -1576,6 +1664,7 @@ export function simulatePlaythrough(boards, options = {}) {
     if (energyBalance >= 1) {
       energyBalance -= 1
       energySpent += 1
+      energyFlow[phase].used += 1
       taps += 1
       const x1Tier = tiers[0]
       const maxRankHeld = currentMaxRank(state)
@@ -1596,6 +1685,7 @@ export function simulatePlaythrough(boards, options = {}) {
     }
 
     drSpent += tier.cost
+    paidTaps[phase] += 1
     taps += 1
     // Lucky drops only open once the player holds an item at the x2 tier's
     // OWN configured unlock rank (tier2UnlockRank - customizing that rank
@@ -1618,7 +1708,11 @@ export function simulatePlaythrough(boards, options = {}) {
   const twisterUncollectedAtEnd = uncollectedRewardItems(state, inventory, TWISTER_TYPE, rewardChainConfig)
   // The run's last phase ends here too - same leftover policy as the main->RC
   // handover above.
+  if (cadence) cadence.phaseEndDr[phase] = drSpent - (phase === 'rc' ? (cadence.drAtRcEntry ?? 0) : 0)
+  settling = true
   settleLeftovers()
+  settling = false
+  energyFlow[phase].left = energyBalance
   log?.({ type: 'stop', reason: stopReason })
 
   // How much of the configured subsidy the player actually RECEIVED, versus
@@ -1676,6 +1770,15 @@ export function simulatePlaythrough(boards, options = {}) {
     // the run never reached is missing.
     checkpointsAt,
     twisterUncollectedAtEnd,
+    // Merge energy in and out, per phase (see energyFlow above), and the paid
+    // generator taps of each phase.
+    energyFlow,
+    paidTaps,
+    // Paid generator DR of each phase on its own (rc: null when never entered).
+    drSpentMainPhase: drSpentAtRcEntry ?? drSpent,
+    drSpentRcPhase: drSpentAtRcEntry != null ? drSpent - drSpentAtRcEntry : null,
+    // When things happened, in paid DR (options.cadence) - see above.
+    cadence,
     phase,
     rcEntered: phase === 'rc',
     secondGrandPrizeAwarded: reachedAt[RC_MAX_RANK] !== undefined,

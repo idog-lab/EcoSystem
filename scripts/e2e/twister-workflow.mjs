@@ -4,7 +4,7 @@
 // override / revert -> staleness -> persistence, backup, clear, sharing and
 // the on-screen export. See helpers.mjs for how to run.
 import fs from 'node:fs'
-import { BASE, createChecker, generatedBoard, launch, openMerge, tab, SAVE_KEY } from './helpers.mjs'
+import { BASE, createChecker, generatedBoard, launch, openMerge, tab, SAVE_KEY, syntaxView } from './helpers.mjs'
 import { decodePlan } from '../../src/features/merge/lib/share/planShare.js'
 import { boardHasTwisterUnderTiles } from '../../src/features/merge/lib/rewards/twisterEconomy.js'
 
@@ -223,34 +223,36 @@ ok('generating the other small rewards leaves the Twister drop in place', (await
 
 // ---------- Syntax tab: shared definitions vs segment costs ----------
 await tab(page, 'Syntax').click()
-await page.getByRole('button', { name: 'V2 Twister', exact: true }).click()
+await syntaxView(page, 'V2 Twister')
 await page.waitForTimeout(200)
 const twisterSheet = await page.locator('table').first().innerText()
 ok('V2 Twister lists this segment\'s cost as runtime and the targets as design metadata', twisterSheet.includes('Runtime - segment-specific') && twisterSheet.includes('DR cost per spin') && twisterSheet.includes(String(sug0)) && twisterSheet.includes('Design metadata - not runtime') && twisterSheet.includes('Target spins by the checkpoint'))
-await page.getByRole('button', { name: 'V2 Reward Chain', exact: true }).click()
+await syntaxView(page, 'V2 Reward Chain')
 await page.waitForTimeout(200)
 ok('the shared Twister ladder is exported with the reward definitions', (await page.locator('table').first().innerText()).includes('dr-twister-r4'))
-await page.getByRole('button', { name: 'V2 Drop Groups', exact: true }).click()
+await syntaxView(page, 'V2 Drop Groups')
 await page.waitForTimeout(200)
 ok('the shared Twister drop is exported with the drop groups', /Twister DR rank/.test(await page.locator('table').first().innerText()) && (await page.locator('table').first().innerText()).includes('Twister DR R2'))
-await page.getByRole('button', { name: 'Blocked Queue', exact: true }).click()
+await syntaxView(page, 'Blocked Queue')
 await page.waitForTimeout(200)
 ok('the Blocked Queue export contains no Twister entry', !(await page.locator('table').first().innerText()).includes('twister'))
 // The advanced Rewards Generate above gave these hand-built boards merge
 // energy without any energy credit being taken off them, so the export is
 // blocked until that is rebuilt - or explicitly overridden, as here.
-ok('an advanced rewards-only change on a hand-built design blocks export, with the reason', (await page.getByTestId('export-blocked').innerText()).includes('no energy credit was ever taken') && (await page.getByRole('button', { name: /Download workbook/ }).first().isDisabled()))
+ok('an advanced rewards-only change on a hand-built design blocks export, with the reason', (await page.getByTestId('export-blocked').innerText()).includes('made by hand, not by a build') && (await page.getByRole('button', { name: /Download workbook/ }).first().isDisabled()))
 await page.getByTestId('export-override').check()
 await page.waitForTimeout(150)
 // The real workbook download.
 const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Download workbook/ }).first().click()])
 const xlsxPath = await download.path()
 ok('the per-segment workbook downloads', fs.statSync(xlsxPath).size > 5000)
+await page.locator('[data-scope="all"]').click()
+await page.waitForTimeout(150)
 const [downloadAll] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Download combined workbook/ }).click()])
 ok('the combined workbook downloads', fs.statSync(await downloadAll.path()).size > 5000)
 
 // ---------- Share planning ----------
-await page.getByRole('button', { name: /Share planning/ }).click()
+await tab(page, 'Share planning').click()
 await page.waitForTimeout(400)
 const planUrl = await page.evaluate(() => navigator.clipboard.readText())
 const plan = decodePlan(new URL(planUrl).searchParams.get('plan'))
@@ -263,12 +265,12 @@ ok('the read-only plan view shows the Twister cost per spin and checkpoint', pla
 await planPage.close()
 
 // ---------- Backup export / Clear / import ----------
-const [backup] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Export backup/ }).click()])
+const [backup] = await Promise.all([page.waitForEvent('download'), tab(page, 'Export backup').click()])
 const backupPath = await backup.path()
 const backupJson = JSON.parse(fs.readFileSync(backupPath, 'utf8'))
 ok('the backup file carries costs, ladder, drops and plan', backupJson.segments[1].boards[0].twisterSpinCost === sug1 && backupJson.segments[0].boards[0].dropGroups.some((g) => g.items.twister === 2) && backupJson.segments[0].twisterPlan.main.targetSpins === 5)
 page.once('dialog', (d) => d.accept())
-await page.getByRole('button', { name: /Clear data/ }).click()
+await tab(page, 'Clear data').click()
 await page.waitForTimeout(400)
 await tab(page, 'Twister').click()
 await page.waitForTimeout(300)

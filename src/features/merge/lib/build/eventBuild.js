@@ -53,20 +53,65 @@ import {
   roundRewardAmount,
   formatRewardAmount,
 } from '../rewards/rewardChain'
-import { FIRST_BOARD_SUBSIDY_CAP_DR, firstBoardCapFor, generationTargetOf } from '../core/board'
+import { FIRST_BOARD_SUBSIDY_CAP_DR, firstBoardCapFor, generationTargetOf, boardMinRank } from '../core/board'
 // The Board 1 limit of the phase being built (150 DR, or 300 for Recompletion).
 let activeFirstBoardCap = FIRST_BOARD_SUBSIDY_CAP_DR
 import { ENERGY_CREDIT_RATE, validateConfigAcrossRuns } from '../rewards/rewardEconomy'
 import { rewardSlotCapacity, rewardSemiSlots } from '../rewards/rewardPlacement'
-import { resizeTwisterDrops } from '../rewards/rewardTargeting'
 import { TWISTER_FILL_MIN_SHARE } from '../rewards/dropGroups'
-import { boardHasTwisterUnderTiles, targetSpinsForSegment, priceTwisterForBuild, withDefaultTwisterValues, roundTwisterValues, TWISTER_EASY_CHECKPOINT_PCT, TWISTER_MIN_COLLECTS, TWISTER_OVER_TOLERANCE, TWISTER_DEFAULT_VALUES } from '../rewards/twisterEconomy'
-import { twisterLadderIsAuto, TWISTER_TYPE, withTypedRewardValues, syntaxWithAmount, tapPaysAtLeastAsMuch, rewardChainForNextPhase, typedRewardValues, withBuildRewardValues, niceRewardValues, niceCoinValues, niceStepAt, rewardLadderIsBuildValued, BUILD_VALUED_TYPES, REWARD_VALUE_FACTOR_MIN, REWARD_VALUE_FACTOR_MAX } from '../rewards/rewardChain'
+import { fitTwisterForBuild, twisterMark, twisterDistance, TWISTER_WINDOW_PCT, TWISTER_WINDOW_MARGIN_PTS } from '../rewards/twisterCadence'
+import { boardHasTwisterUnderTiles, targetSpinsForSegment, roundTwisterValues, TWISTER_EASY_CHECKPOINT_PCT, TWISTER_OVER_TOLERANCE, TWISTER_DEFAULT_VALUES } from '../rewards/twisterEconomy'
+import { twisterLadderIsAuto, TWISTER_TYPE, withTypedRewardValues, tapPaysAtLeastAsMuch, rewardChainForNextPhase, typedRewardValues, withBuildRewardValues, niceRewardValues, niceCoinValues, niceStepAt, rewardLadderIsBuildValued, BUILD_VALUED_TYPES, REWARD_VALUE_FACTOR_MIN, REWARD_VALUE_FACTOR_MAX } from '../rewards/rewardChain'
 import { valueOf, MAX_RANK } from '../core/ranks'
-import { effectiveMinRank, effectiveMaxRank } from '../core/rankWindow'
+import { effectiveMaxRank } from '../core/rankWindow'
 import { spreadSubsidy, chaseValue } from '../core/subsidyBudget'
 
-export const MAX_PASSES = 4
+export const MAX_PASSES = 6
+// DEMAND IS WHAT THE PLAYER PAYS (economist: "The demand entered for a
+// segment is the intended average DR its player actually pays during that
+// phase under the baseline careful-player policy"). Subsidy = chase - demand
+// is a statement in VALUE; a player pays less DR than that, because lucky
+// drops return more value than a tap costs and merge energy pays for taps
+// (88-96% of the demand in the normal event and 78-86% in Recompletion on a
+// test event). So the build CALIBRATES: besides the 80% energy credit - a
+// rule of its own, untouched and never counted twice - it takes a further
+// amount of subsidy off the later boards (`calibration`), found by playing
+// each pass and moving it by the DR the average player still pays short of
+// the demand, until that player pays the demand. Board 1, every board's
+// floor, rank limits, pins and exact queue values are the allocation's own
+// rules and are kept. The calibration moves BOTH WAYS (economist: "'Subsidy
+// is never added' is not an economist requirement ... Players pay above
+// demand: search toward more subsidy"): a player who pays more than the
+// demand - a small demand, where the 80% credit takes more off than the free
+// taps give back in that phase - gets subsidy back, first out of what the
+// credit took and then ON TOP of what was typed, up to what the later
+// boards' tiles can hold. The typed budgets themselves are never rewritten.
+// When the player still cannot be brought to the demand the build says
+// whether a board limit binds or the search did not settle, and what range of
+// spend it found. This app's own numbers:
+// the margin (2% of the demand, 4% in Recompletion, at least 10 DR - one
+// set of boards costs a player a few DR more or less than the next, and two
+// players of a segment are 15 DR apart on their own luck) and one DR of
+// subsidy per DR short.
+export const DEMAND_TOLERANCE_SHARE = 0.02
+export const DEMAND_TOLERANCE_SHARE_RC = 0.04
+// What the build's own simulated players paid in a phase ({ mean, p50, ... }).
+const paidOf = (sub, phase) => (phase === 'rc' ? sub?.evaluation?.summary?.drSpentRcPhase : sub?.evaluation?.summary?.drSpentMainPhase) ?? null
+export const demandToleranceFor = (phase, demand) => Math.max(10, (phase === 'rc' ? DEMAND_TOLERANCE_SHARE_RC : DEMAND_TOLERANCE_SHARE) * Math.max(0, demand))
+// THE PASS MARK FOR DR USAGE (economist: "for DR usage we can give 5% or 30DR
+// (the smaller one for the segment)"; asked, and the same in both phases). A
+// segment passes when its average simulated player pays the demand within
+// this. It is NOT what the build aims at: the build keeps aiming as closely
+// as before (demandToleranceFor, this app's own) and never more loosely than
+// the mark (demandAimFor) - so "Close" still means the aim was met, and a
+// result between the aim and the mark is "Within margin". Below a demand of
+// 200 DR the mark (5%) is tighter than the old floor of 10 DR; above 1,500 DR
+// it is 30 DR, tighter than 2%.
+export const DEMAND_MARGIN_SHARE = 0.05
+export const DEMAND_MARGIN_DR = 30
+export const demandMarginFor = (demand) => Math.min(DEMAND_MARGIN_SHARE * Math.max(0, demand), DEMAND_MARGIN_DR)
+const demandAimFor = (phase, demand) => (demand > 0 ? Math.min(demandToleranceFor(phase, demand), demandMarginFor(demand)) : demandToleranceFor(phase, demand))
+const DEMAND_GAIN = 1
 // The credit is "settled" when the credit implied by a pass's own simulation
 // is within half a DR of the one its boards were built with - i.e. they agree
 // to the nearest whole DR, which is all a whole-DR allocation can express.
@@ -169,7 +214,7 @@ export function layoutCapacity(board, boardIndex) {
     // the typed limits, within the fixed ones of its position (Board 1 never
     // above rank 8, Board 2 never above rank 11 - rankWindow.js).
     topRank: effectiveMaxRank(board.maxRank ?? 12, boardIndex),
-    lowRank: effectiveMinRank(board.minRank ?? 1, boardIndex),
+    lowRank: boardMinRank(board, boardIndex),
     // The most main-chain DR these tiles could ever carry: every blocked tile
     // at that highest rank. Board 1 semi-blocked tiles hold their own small
     // fixed items (rank 1, one rank 2), so they add next to nothing there.
@@ -200,7 +245,21 @@ export function minFeasibleBoardValue(board, boardIndex) {
   const pinnedValue = pins.reduce((v, f) => v + valueOf(f.rank), 0)
   const pinnedRewards = (board.rewardQueueItems ?? []).filter((it) => !it.auto).length + (board.rewardSemiItems ?? []).filter((it) => !it.auto && isSemi(it.row, it.col)).length
   const free = Math.max(0, tiles - pins.length - pinnedRewards)
-  return pinnedValue + free * valueOf(effectiveMinRank(board.minRank ?? 1, boardIndex))
+  return pinnedValue + free * valueOf(boardMinRank(board, boardIndex))
+}
+
+// The most main-chain DR a board's tiles can carry: every free tile at the
+// highest rank its position and its own limit allow, plus its pins. The
+// demand calibration never asks a board for more.
+export function maxFeasibleBoardValue(board, boardIndex) {
+  const tiles = subsidyTileCount(board)
+  if (tiles === 0) return 0
+  const isSemi = (r, c) => board.tiles?.[r]?.[c] === 'semi'
+  const pins = (board.forcedSemiRanks ?? []).filter((f) => isSemi(f.row, f.col))
+  const pinnedValue = pins.reduce((v, f) => v + valueOf(f.rank), 0)
+  const pinnedRewards = (board.rewardQueueItems ?? []).filter((it) => !it.auto).length + (board.rewardSemiItems ?? []).filter((it) => !it.auto && isSemi(it.row, it.col)).length
+  const free = Math.max(0, tiles - pins.length - pinnedRewards)
+  return pinnedValue + free * valueOf(effectiveMaxRank(board.maxRank ?? MAX_RANK, boardIndex))
 }
 
 // Per board: its budget after CC ("before the credit"), and after its share
@@ -218,7 +277,15 @@ export function minFeasibleBoardValue(board, boardIndex) {
 //     never altered.
 // Whole DR throughout; the rounding is by largest remainder and its size is
 // returned (roundingResidual) rather than hidden.
-export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoardCap = FIRST_BOARD_SUBSIDY_CAP_DR } = {}) {
+//   - `calibration`: a second, SIGNED amount (see DEMAND IS WHAT THE PLAYER
+//     PAYS). Positive: taken off with the credit, in exactly the same way.
+//     Negative: subsidy given back - first out of what the credit took, and
+//     beyond that ADDED to the later boards, in proportion to what each
+//     carries, never past what a board's tiles can hold
+//     (maxFeasibleBoardValue). Board 1 is not touched either way. The credit
+//     and the calibration are reported apart, and always add up to what was
+//     really taken off (or put on) the boards.
+export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoardCap = FIRST_BOARD_SUBSIDY_CAP_DR, calibration = 0 } = {}) {
   const before = boards.map((b) => (b.blockedValue ?? 0) * (1 + (b.ccPercent ?? 0)))
   let firstBoardCapped = false
   if (capFirstBoard && boards.length > 1 && before[0] > firstBoardCap) {
@@ -227,7 +294,12 @@ export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoa
   }
   const floors = boards.map((b, i) => (i === 0 ? before[0] : Math.min(before[i], minFeasibleBoardValue(b, i))))
   const deductible = boards.map((_, i) => (i === 0 ? 0 : Math.max(0, before[i] - floors[i])))
-  const wanted = Math.max(0, credit)
+  const creditWanted = Math.max(0, credit)
+  const calibrationWanted = Number.isFinite(calibration) ? calibration : 0
+  // What has to come off the boards in all (when positive) or go on (negative).
+  const net = creditWanted + calibrationWanted
+  const wanted = Math.max(0, net)
+  const addWanted = Math.max(0, -net)
   const deducted = boards.map(() => 0)
   let remaining = Math.min(wanted, sum(deductible))
   let active = boards.map((_, i) => i).filter((i) => deductible[i] > 1e-9)
@@ -252,8 +324,40 @@ export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoa
     for (const i of active) deducted[i] = (remaining * before[i]) / weight
     remaining = 0
   }
-  const taken = sum(deducted)
-  const raw = before.map((v, i) => v - deducted[i])
+  // Subsidy ADDED (a negative calibration larger than the credit): shared by
+  // what each later board carries, clamped at what its tiles can hold.
+  const ceilings = boards.map((b, i) => (i === 0 ? before[0] : Math.max(before[i], maxFeasibleBoardValue(b, i))))
+  const room = boards.map((_, i) => (i === 0 ? 0 : Math.max(0, ceilings[i] - before[i])))
+  const added = boards.map(() => 0)
+  if (addWanted > 1e-9) {
+    let left = Math.min(addWanted, sum(room))
+    let live = boards.map((_, i) => i).filter((i) => room[i] > 1e-9)
+    for (let guard = 0; guard < boards.length + 2 && left > 1e-9 && live.length > 0; guard++) {
+      const weight = sum(live.map((i) => Math.max(1, before[i])))
+      let clamped = false
+      for (const i of [...live]) {
+        if ((left * Math.max(1, before[i])) / weight >= room[i] - 1e-9) {
+          added[i] = room[i]
+          live = live.filter((x) => x !== i)
+          clamped = true
+        }
+      }
+      if (clamped) {
+        left = Math.min(addWanted, sum(room)) - sum(added.filter((_, i) => !live.includes(i)))
+        for (const i of live) added[i] = 0
+        continue
+      }
+      for (const i of live) added[i] = (left * Math.max(1, before[i])) / weight
+      left = 0
+    }
+  }
+  // What really came off the boards (negative: went on).
+  const taken = sum(deducted) - sum(added)
+  // The credit is its own accounting step: whatever could not be taken off is
+  // the credit's shortfall, and the calibration is the rest of what happened.
+  const creditTaken = calibrationWanted >= 0 ? Math.min(creditWanted, sum(deducted)) : creditWanted - Math.max(0, wanted - sum(deducted))
+  const calibrationTaken = taken - creditTaken
+  const raw = before.map((v, i) => v - deducted[i] + added[i])
   // Rounding. A board the credit is deducted from is given a value its
   // generator can hit EXACTLY: a whole multiple of its lowest allowed rank's
   // value (a board built from items worth at least 4 DR each cannot total
@@ -262,14 +366,14 @@ export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoa
   // to the unrounded figure. Boards nothing is deducted from keep their own
   // value (to the nearest DR). What this rounding adds up to is returned as
   // roundingResidual, not hidden.
-  const step = boards.map((b, i) => valueOf(effectiveMinRank(b.minRank ?? 1, i)))
-  const touched = boards.map((_, i) => deducted[i] > 1e-9)
+  const step = boards.map((b, i) => valueOf(boardMinRank(b, i)))
+  const touched = boards.map((_, i) => deducted[i] > 1e-9 || added[i] > 1e-9)
   const after = raw.map((v, i) => (touched[i] ? Math.max(Math.ceil(floors[i] / step[i] - 1e-9) * step[i], Math.floor(v / step[i] + 1e-9) * step[i]) : Math.round(v)))
   let error = sum(raw) - sum(after)
   const order = raw.map((v, i) => [touched[i] ? (v - after[i]) / step[i] : -1, i]).sort((a, b) => b[0] - a[0])
   for (const [remainder, i] of order) {
     if (remainder <= 0) break
-    if (error >= step[i] / 2 && after[i] + step[i] <= before[i] + 1e-9) {
+    if (error >= step[i] / 2 && after[i] + step[i] <= before[i] + added[i] + 1e-9) {
       after[i] += step[i]
       error -= step[i]
     }
@@ -287,11 +391,20 @@ export function allocateSubsidy(boards, credit, { capFirstBoard = true, firstBoa
     totalBefore: sum(before),
     totalDeductible: sum(deductible),
     totalAfter: sum(after),
-    creditWanted: wanted,
-    creditTaken: taken,
-    creditUnabsorbed: wanted - taken,
+    creditWanted,
+    creditTaken,
+    creditUnabsorbed: creditWanted - creditTaken,
+    // Signed: positive = taken off, negative = added. Unabsorbed positive: the
+    // boards could not give that much more (their floors); negative: they
+    // could not hold that much more (their tiles).
+    calibrationWanted,
+    calibrationTaken,
+    calibrationUnabsorbed: calibrationWanted - calibrationTaken,
+    added,
+    ceilings,
+    totalRoom: sum(room),
     // Why some credit could not be taken, when any could not.
-    unabsorbedReason: wanted - taken <= 1e-9 ? null : boards.length <= 1 ? 'only-board-1' : sum(deductible) <= 1e-9 ? 'nothing-deductible' : 'insufficient-deductible',
+    unabsorbedReason: creditWanted - creditTaken <= 1e-9 ? null : boards.length <= 1 ? 'only-board-1' : sum(deductible) <= 1e-9 ? 'nothing-deductible' : 'insufficient-deductible',
     // What rounding added: sum(after) - sum(before - deducted). Whole DR,
     // and whole minimum-rank steps on the boards the credit came off.
     roundingResidual: sum(after) - sum(raw),
@@ -417,12 +530,21 @@ export const INPUT_PART_LABELS = {
   split: 'The under-tiles / merge-drops split changed',
   definitions: 'Reward definitions, drop settings or generator settings changed',
   mainPhase: 'The Normal phase (played before Recompletion) changed',
+  rules: 'The build rules changed since this was built: the Twister now drops from rank 5 and in every rank-7 drop, the demand is the DR a player really pays (the build may now take subsidy off the later boards or put it back), Twister values and prices are fitted per segment, a Recompletion board never holds an item below rank 3, and a segment now passes when its player pays within 5% of the demand or 30 DR (the smaller) and reaches the twists within 5 points of the 70-75% window',
 }
+// THE RULES A BUILD FOLLOWS, as a mark on its inputs. Raising it makes every
+// draft and every applied design built under the older rules 'Out of date'
+// (designConsistency) - nothing that was applied is changed on its own: the
+// economist is told, and builds again. (economist: "Do not silently alter
+// previously applied events. Mark affected configurations as needing a
+// rebuild.")
+export const BUILD_RULES_VERSION = 'twister-rank5-rank7 / demand-is-paid-dr / twister-fit-per-segment / calibration-both-ways / rc-rank-floor / pass-marks-dr-and-twister'
 
 export function buildInputParts({ phase, segments }) {
   const j = JSON.stringify
   const layoutOf = (b) => [b.rows, b.cols, b.tiles, b.minRank, b.maxRank, b.forcedSemiRanks ?? [], b.rcEvent ?? false, b.onboardingDrBudget ?? null, b.onboardingTargetRank ?? null, (b.rewardQueueItems ?? []).filter((it) => !it.auto), (b.rewardSemiItems ?? []).filter((it) => !it.auto)]
   return {
+    rules: BUILD_RULES_VERSION,
     layouts: j(segments.map((s) => s.boards.map(layoutOf))),
     budgets: j(segments.map((s) => s.boards.map((b) => [b.blockedValue, b.ccPercent ?? 0]))),
     targets: j(segments.map((s) => s.targets)),
@@ -457,7 +579,7 @@ export function buildInputParts({ phase, segments }) {
 // The most of a reward that is asked of the tiles in a build, in percent. The
 // economist: "its just important that the drops will be the bigger part".
 export const MAX_TILE_SHARE_PCT = 40
-// THE EFFORT DISTRIBUTION THE ECONOMIST ASKED FOR (step 5: share of effort
+// THE EFFORT DISTRIBUTION THE ECONOMIST ASKED FOR (step 4: share of effort
 // per rank), kept by the build. By explicit economist feedback: "the splits
 // befor and after the boards build with the small rewards are extremelly off
 // from each other ... it needs to protect the distribution i asked for and
@@ -483,8 +605,8 @@ export const EFFORT_LAYOUT_TRIES = 24
 // Share of effort per rank of a main-chain-only run of these boards.
 // `drops` ({ dropGroups, dropGroupsConfig, rewardChainConfig, minDropRank,
 // leftoverPolicy }): judge the boards WITH the build's merge drops - the
-// same playthrough the effort chart in step 6 shows. Without it, a playthrough
-// of the main chain alone (step 5, before any drops exist).
+// same playthrough the effort chart in step 4 shows. Without it, a playthrough
+// of the main chain alone (step 4, before any drops exist).
 // (The build used to pick layouts on the main chain alone; merge drops and the
 // free taps merge energy pays for then moved the chart away from the curve the
 // economist typed - rank 12 at 77% against 65% asked, on a test build whose
@@ -532,7 +654,6 @@ export function pickBoardsForEffort(boards, target, noise, tries = EFFORT_LAYOUT
 }
 export const TWISTER_PRICE_STEPS_AIM = 2
 // What a player collects is about twists x the price of one (economist: "if each twist is 10 and we got 15 its a total of 150 DRs, u now give thousands"): one price step per twist, with a little room so the last twist is not lost to rounding. It was 6, then 3.
-const TWISTER_VALUE_STEPS_AIM = 1.1
 // How close to the energy target a pass must land for the next pass to aim
 // at the target again (buildSegment).
 const NEAR_TARGET_CREDIT = 0.05
@@ -542,9 +663,6 @@ const NEAR_TARGET_CREDIT = 0.05
 // moment it drops, with nothing to merge). So the build never makes it bigger
 // than rank 3; what that cannot carry has to come from more drops, and what
 // that cannot carry either is reported as too little.
-const TWISTER_MAX_ITEM_UNITS = 4 // a rank-3 item
-const MAX_TWISTER_SIZINGS = 4
-const TWISTER_SIZING_RUNS = 24
 // How many times more Twister DR the worst-off segment needs (1 = enough).
 // `typical`: measured on the TYPICAL (median) player instead of the average.
 // Twister DR arrives in whole rank-4 collects, and with few Twister items a
@@ -626,17 +744,60 @@ export function twisterInputsKey(segments) {
   return JSON.stringify(segments.map((s) => [s.twists ?? null, s.twisterCheckpointPct ?? null, s.twisterCostStep ?? null]))
 }
 
+// THE TWISTER'S PASS MARK ON A BUILT SEGMENT. A segment whose typical player
+// reaches the twists more than 5 points outside the 70-75% window (or never)
+// gets the cause 'twister-off' and reads "Can be improved"; inside the margin
+// it passes. The Twister is fitted after the segments are built, and priced
+// again whenever the twists typed change - so the cause is put on, and taken
+// off, here, from the Twister rows in force.
+export function withTwisterMarks(builtSegments, twister) {
+  const rows = new Map((twister?.rows ?? []).map((r) => [r.index, r]))
+  // (The same list is handed back when no segment's mark changed.)
+  const marked = (builtSegments ?? []).map((seg) => {
+    if (!seg || seg.status === 'skipped') return seg
+    const others = (seg.causes ?? []).filter((c) => c.code !== 'twister-off')
+    const hadMark = others.length !== (seg.causes ?? []).length
+    const row = rows.get(seg.index)
+    const timing = row?.demandTiming ?? null
+    const off = !!row && row.twists > 0 && twisterMark(timing) === 'off'
+    if (!off && !hadMark) return seg
+    if (!off) return { ...seg, causes: others, status: seg.twisterLifted && others.length === 0 && seg.status === 'review' ? 'ok' : seg.status, twisterLifted: false }
+    const [low, high] = timing.window ?? TWISTER_WINDOW_PCT
+    const never = timing.reachPct == null
+    const far = never ? null : Math.round(twisterDistance(timing.reachPct, [low, high]) * 10) / 10
+    const side = never ? null : timing.reachPct < low ? 'early' : 'late'
+    // (The row's own note begins by saying where the twists land, which this cause says already: only what follows is added.)
+    const why = String(row.message ?? '').replace(/^The typical player (reaches|does not reach)[^.]*\.\s*/, '')
+    const cause = {
+      code: 'twister-off',
+      detail: never
+        ? `The typical player does not reach the ${row.twists} twists in this phase.${why ? ` ${why}` : ''}`
+        : `The typical player reaches the ${row.twists} twists at ${Math.round(timing.reachPct)}% of the DR demand - ${far} points ${side === 'early' ? 'before' : 'after'} the ${low}-${high}% window. The margin is ${TWISTER_WINDOW_MARGIN_PTS} points (${low - TWISTER_WINDOW_MARGIN_PTS}-${high + TWISTER_WINDOW_MARGIN_PTS}%).${why ? ` ${why}` : ''}`,
+      short: never ? 'Twists not reached' : `Twists ${Math.round(far)} pts ${side}`,
+      fixes: [],
+      ...CAUSES['twister-off'],
+    }
+    return { ...seg, causes: [...others, cause], status: seg.status === 'ok' ? 'review' : seg.status, twisterLifted: seg.status === 'ok' || !!seg.twisterLifted }
+  })
+  return builtSegments && marked.every((seg, i) => seg === builtSegments[i]) ? builtSegments : marked
+}
+// A build's overall status, from its segments.
+export const draftStatusOf = (builtSegments) => {
+  const built = (builtSegments ?? []).filter((s) => s.status !== 'skipped')
+  return built.length === 0 ? 'nothing-built' : built.some((s) => s.status === 'infeasible') ? 'infeasible' : built.every((s) => s.status === 'ok') ? 'ok' : 'review'
+}
+
 // The prices of a draft, worked out again for the twists asked now.
 export async function repriceTwister({ phase, draft, segments, isCancelled }) {
-  const twister = await priceTwisterForBuild({ phase, segments, built: draft.segments, shared: draft.shared, isCancelled })
-  // The Twister items were sized for the twists the build was given. When the
-  // new twists need more than they carry, that takes a build - said, not done.
-  const sizing = draft.twister?.sizing ?? null
-  // ...or far less: the values were sized for the old twists, and at the new
-  // ones no whole-step price leaves the typical player near what was asked.
-  const tooMuch = !!sizing?.valuesByBuild && twister?.rows.some((r) => r.twists > 0 && r.spinsMedian != null && r.spinsMedian > r.twists * (1 + TWISTER_OVER_TOLERANCE) + 1e-9)
-  if (twister && sizing) twister.sizing = { ...sizing, short: false, needsRebuild: tooMuch || (sizing.valuesByBuild ? twisterIncomeNeed(twister.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM) > 1.05 : twisterIncomeNeed(twister.rows, segments) > 1.05 && (sizing.minShare < 1 - 1e-9 || sizing.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9)) }
-  return { ...draft, twister, twisterKey: twisterInputsKey(segments) }
+  const twister = await fitTwisterForBuild({ phase, segments, built: draft.segments, shared: draft.shared, isCancelled })
+  if (twister === undefined) return null
+  if (twister) {
+    const asked = twister.rows.filter((r) => r.twists > 0 && r.cost != null)
+    twister.sizing = { ...(draft.twister?.sizing ?? { byBuild: true, perSegment: true }), inWindow: asked.filter((r) => r.fit?.inWindow).length, asked: asked.length, short: twister.rows.some((r) => r.tooLow), needsRebuild: false }
+  }
+  // (The Twister's pass mark follows the new prices: the cause is put on or taken off.)
+  const marked = withTwisterMarks(draft.segments, twister)
+  return { ...draft, segments: marked, status: draftStatusOf(marked), twister, twisterKey: twisterInputsKey(segments) }
 }
 
 export function buildInputsKey({ phase, segments }) {
@@ -678,11 +839,11 @@ export const hashOf = (value) => hashString(JSON.stringify(value))
 
 export const DESIGN_PART_LABELS = {
   layout: 'board layouts, pins or rank limits',
-  budgets: 'subsidy budgets or CC',
-  contents: 'main-chain queue contents',
+  budgets: 'board subsidy or CC',
+  contents: 'the main-chain items under the tiles',
   rewardItems: 'reward items under tiles',
-  drops: 'merge-drop groups or weights',
-  definitions: 'reward definitions or drop rules',
+  drops: 'what merges drop',
+  definitions: 'reward rank values or drop rules',
   generator: 'generator or lucky-drop settings',
 }
 
@@ -772,7 +933,7 @@ export function boardsWithDraftApplied(currentBoards, draftSegment, shared, { dr
       next.dropGroups = shared.dropGroups
       next.dropGroupsConfig = shared.dropGroupsConfig
     }
-    // Twister rank values the build sized (shared by every segment).
+    // (A draft from before the Twister values were per segment has them once, in `shared`.)
     if (draft?.shared?.twisterLadder) next.rewardChainConfig = { ...next.rewardChainConfig, [TWISTER_TYPE]: draft.shared.twisterLadder }
     // Rank values the build gave THIS segment: written over the TYPED ladders,
     // so one it left alone this time goes back to as typed. (A draft from
@@ -780,6 +941,9 @@ export function boardsWithDraftApplied(currentBoards, draftSegment, shared, { dr
     if (draft?.shared) next.rewardChainConfig = { ...withTypedRewardValues(next.rewardChainConfig), ...(draftSegment.rewardLadders ?? draft.shared.rewardLadders ?? {}) }
     // Recompletion plays the normal event's values and drop rules (one table
     // for the whole event): exactly the ones it was built with.
+    // The Twister values the build fitted for THIS segment (the normal event;
+    // Recompletion plays them, inherited just below).
+    if (twisterRow?.ladder) next.rewardChainConfig = { ...next.rewardChainConfig, [TWISTER_TYPE]: twisterRow.ladder }
     if (draftSegment.inherited) Object.assign(next, draftSegment.inherited)
     // The price of a twist the build worked out for THIS segment.
     if (twisterRow?.cost != null) {
@@ -804,7 +968,7 @@ export function draftSegmentIsApplied(currentBoards, draft) {
 // sourceAllocation }] - the base segment first.
 export function segmentBuildInputs(segments, phase) {
   const base = segments[0]
-  // Twister twists (optional): typed per segment in step 4, held on the base
+  // Twister twists (optional): typed per segment in step 3, held on the base
   // segment's Twister plan for this phase.
   const twisterPlan = base.twisterPlan?.[phase] ?? null
   const baseTargets = base.rewardTargets?.[phase] ?? {}
@@ -831,9 +995,10 @@ export function segmentBuildInputs(segments, phase) {
     split,
     twists: twisterPlan ? targetSpinsForSegment(twisterPlan, i) : null,
     twisterCheckpointPct: twisterPlan?.checkpointPct ?? TWISTER_EASY_CHECKPOINT_PCT,
-    twisterCostStep: twisterPlan?.costIncrement ?? 1,
+    // Any whole price, unless rounding was switched on (twisterEconomy.js: roundPrice).
+    twisterCostStep: twisterPlan?.roundPrice ? Math.max(1, Math.round(twisterPlan.costIncrement ?? 1)) : 1,
     twisterByBuild: !!(phase === 'main' ? base.mainBoards : base.rcBoards)?.[0]?.twisterByBuild,
-    // "Keep every segment's Twister steady" (step 4; on unless switched off).
+    // "Keep every segment's Twister steady" (step 3; on unless switched off).
     twisterSteady: (phase === 'main' ? base.mainBoards : base.rcBoards)?.[0]?.twisterSteady !== false,
   }))
 }
@@ -1057,6 +1222,8 @@ export const CAUSES = {
   'rc-not-reached': { title: 'Players never reach Recompletion', step: 'phase', action: 'Fix the Normal phase first' },
   'drop-floor': { title: 'Every merge from the start rank drops, and that alone pays more than the target', step: 'rewards', action: 'Start merge drops at a later rank, or raise the reward targets' },
   'off-target': { title: 'A reward is paid more than 15% away from its target', step: 'rewards', action: 'See the rewards table below for which one and by how much' },
+  'demand-off': { title: 'The player does not pay the demand you typed', step: 'setup', action: 'The build takes subsidy off the later boards until the average player pays the demand. Here it could not get inside the margin: 5% of the demand or 30 DR, whichever is smaller' },
+  'twister-off': { title: 'The twists are not reached near 70-75% of the DR demand', step: 'rewards', action: 'Type fewer twists when they come late, more when they come early (step 3) - the price is worked out again at once, without a rebuild' },
   'rc-follows-normal': { title: 'Recompletion pays what the normal event\'s merge drops give', step: 'rewards', action: 'Recompletion plays the same merge drops and rank values as the normal event (the game has one table for both), so they cannot be sized for it. Ask for what it really pays, or change the normal event\'s amounts' },
 }
 
@@ -1248,10 +1415,26 @@ function causesOf({ sub, allocation, boardChecks, dropsFixed, context = {} }) {
   return out
 }
 
+// The two passes of a build that show the spend JUMPING over the demand: one
+// whose player paid more than the demand and one whose player paid less
+// (each by more than the tolerance), with subsidies no further apart than the
+// tolerance. Null when no two passes do. `passes`: [{ paid, calibration }].
+export function demandJumpOf(passes, demand, tolerance) {
+  const seen = (passes ?? []).filter((p) => p.paid != null)
+  let found = null
+  for (const over of seen.filter((p) => p.paid > demand + tolerance)) {
+    for (const under of seen.filter((p) => p.paid < demand - tolerance)) {
+      const apart = Math.abs(over.calibration - under.calibration)
+      if (apart <= tolerance && (!found || apart < found.subsidyApart)) found = { subsidyApart: apart, paidOver: over.paid, paidUnder: under.paid }
+    }
+  }
+  return found
+}
+
 // --- One segment --------------------------------------------------------------
 // `context` ({ index, name, factor, baseTargets }) says which segment this
 // is, so a problem's quick fix can name what to change for it.
-export async function buildSegment({ phase, boards: givenBoards, mainBoards = null, targets, split, dropsFixed = false, sharedDrops = null, inherit = false, coinPlanTarget = null, dropCapPct = null, twisterNeed = null, twisterCheckpointPct = null, context = null, maxPasses = MAX_PASSES, onProgress, isCancelled }) {
+export async function buildSegment({ phase, boards: givenBoards, mainBoards = null, targets, split, dropsFixed = false, sharedDrops = null, inherit = false, coinPlanTarget = null, dropCapPct = null, twisterNeed = null, twisterCheckpointPct = null, context = null, maxPasses = MAX_PASSES, calibrateDemand = true, onProgress, isCancelled }) {
   activeFirstBoardCap = firstBoardCapFor(phase)
   activePhase = phase
   const ctx = { index: 0, name: 'this segment', factor: 1, baseTargets: targets ?? {}, ...(context ?? {}) }
@@ -1280,7 +1463,7 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
     const withShared = Object.keys(sharedLadders).length > 0 ? { ...typed, ...sharedLadders } : typed
     return { ...b, rewardChainConfig: autoCoins ? withGeneratedCoinValues(withShared, COIN_VALUE_SHAPE) : withShared }
   })
-  // Whether the model gives this segment its rank values (step 4's switch;
+  // Whether the model gives this segment its rank values (step 3's switch;
   // never for Recompletion, which plays the normal event's).
   const valuesByBuild = !inherited && inputBoards[0]?.rankValuesByBuild !== false
   let credit = ENERGY_CREDIT_RATE * Math.max(0, targets?.energy ?? 0)
@@ -1297,8 +1480,15 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
   let tileCaps = null
   // The values the pass before ended with ({ type: ladder }) - see "VALUES STAY PUT".
   let keep = null
+  // The subsidy taken off so the player pays the demand (see DEMAND IS WHAT
+  // THE PLAYER PAYS), moved from pass to pass with the credit.
+  let shift = 0
+  // The calibrations seen so far at which the player paid too little (the
+  // answer is above the largest of them) and too much (below the smallest).
+  let shiftLow = null
+  let shiftHigh = null
   for (let pass = 1; pass <= maxPasses; pass++) {
-    const allocation = allocateSubsidy(boards, credit, { firstBoardCap: activeFirstBoardCap })
+    const allocation = allocateSubsidy(boards, credit, { firstBoardCap: activeFirstBoardCap, calibration: calibrateDemand ? shift : 0 })
     onProgress?.({ pass, maxPasses, label: 'Building board contents' })
     await tick()
     if (isCancelled?.()) return null
@@ -1335,11 +1525,41 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
     // The credit this pass could actually deduct (the rest is infeasible and
     // is not something another pass can fix).
     const gap = creditSimulated - allocation.creditWanted
-    passes.push({ pass, creditAssumed: credit, creditTaken: allocation.creditTaken, energySimulated, creditSimulated, gap, allocationAfter: allocation.after })
-    if (!best || Math.abs(gap) < Math.abs(best.gap)) best = { sub, allocation, gap, pass, energySimulated, creditSimulated }
-    if (Math.abs(gap) <= creditToleranceFor(phase, allocation.totalBudget)) {
+    // What this pass's average player paid in the phase, against the demand.
+    const demand = Math.max(0, chaseValue(phase) - allocation.totalBudget)
+    const paid = paidOf(sub, phase)?.mean ?? null
+    const paidGap = calibrateDemand && paid != null && demand > 0 ? demand - paid : 0
+    const demandTolerance = demandAimFor(phase, demand)
+    // Nothing more can be done about a gap when the player pays too little and
+    // the later boards have no more subsidy to give (their floors), or pays
+    // too much and the later boards can hold no more (their tiles).
+    const demandStuck = (paidGap > 0 && allocation.calibrationUnabsorbed > 0.5) || (paidGap < 0 && allocation.calibrationUnabsorbed < -0.5)
+    const creditTolerance = creditToleranceFor(phase, allocation.totalBudget)
+    const score = Math.abs(gap) / creditTolerance + Math.abs(paidGap) / demandTolerance
+    passes.push({ pass, creditAssumed: credit, creditTaken: allocation.creditTaken, energySimulated, creditSimulated, gap, allocationAfter: allocation.after, paid, paidGap, calibration: allocation.calibrationTaken })
+    if (!best || score < best.score - 1e-9) best = { sub, allocation, gap, pass, energySimulated, creditSimulated, score }
+    if (Math.abs(gap) <= creditTolerance && (Math.abs(paidGap) <= demandTolerance || demandStuck)) {
       converged = true
       break
+    }
+    // The next calibration: this one, moved by the DR the player was short
+    // (off) or over (on). Never more subsidy than the chase itself.
+    if (calibrateDemand && paid != null) {
+      if (paidGap > 0) shiftLow = Math.max(shiftLow ?? -Infinity, allocation.calibrationTaken)
+      else if (paidGap < 0) shiftHigh = Math.min(shiftHigh ?? Infinity, allocation.calibrationTaken)
+      let next = allocation.calibrationTaken + paidGap * DEMAND_GAIN
+      // Seen from both sides: stay between them, and halve the gap when the
+      // step would only land on an end again (a small demand answers to a few
+      // DR of subsidy with many DR of spend, and one set of boards differs
+      // from the next - a plain step then swings back and forth).
+      if (shiftLow != null && shiftHigh != null && shiftLow < shiftHigh) {
+        next = Math.min(shiftHigh, Math.max(shiftLow, next))
+        if (next - shiftLow < 1 || shiftHigh - next < 1) next = (shiftLow + shiftHigh) / 2
+      }
+      // (The bound is on what the boards END with - never more subsidy than
+      // the chase itself - so it counts the energy credit too: the credit
+      // comes off first, and the calibration may add that much back on top.)
+      shift = Math.max(-(chaseValue(phase) - allocation.totalBefore) - allocation.creditWanted, next)
     }
     // The next pass. A pass that landed within a prize or so of the energy
     // TARGET is tried again for the target itself: the solve aims at the
@@ -1375,7 +1595,7 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
     draftBoards = fitted.boards
     // The effort these boards give is read once more with the values they
     // ended with (merge energy funds taps, so its value moves the curve a
-    // little): what step 6 charts is exactly what is returned.
+    // little): what step 4 charts is exactly what is returned.
     const finalCurve = effortCurveOf(draftBoards, { ...effortDrops, rewardChainConfig: sub.rewardChainConfig }).curve
     effortFit.curve = finalCurve
     effortFit.distance = effortDistance(finalCurve, effortTarget)
@@ -1395,6 +1615,41 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
   // improved, and it is reported that way ("Can be improved") with its fix.
   const rewardAmountOnly = (reason) => /tile placements don't fit|neither tiles nor merge drops|not enough eligible merges/.test(reason)
   const infeasible = sub.feasibility.infeasibleReasons.some((r) => !rewardAmountOnly(r)) || creditShortfallMatters(allocation) || !constraintsOk
+  // WHAT THE PLAYER PAYS, on the boards and values returned.
+  const demandConfigured = Math.max(0, chaseValue(phase) - allocation.totalBudget)
+  const paidStat = paidOf(sub, phase)
+  const paidDifference = paidStat?.mean != null ? paidStat.mean - demandConfigured : null
+  const demandTolerance = demandAimFor(phase, demandConfigured)
+  const demandMargin = demandMarginFor(demandConfigured)
+  const demandMeasured = paidDifference != null && calibrateDemand && demandConfigured > 0
+  // The build's own aim ("Close")...
+  const demandWithin = !demandMeasured || Math.abs(paidDifference) <= demandTolerance
+  // ...and the economist's pass mark: only a spend outside it is a cause.
+  const demandPasses = !demandMeasured || Math.abs(paidDifference) <= demandMargin + 1e-9
+  // PROVEN LIMIT or NOT SETTLED. A limit is proven when the calibration asked
+  // for more than the boards could give ('no-subsidy-left': every later board
+  // at its floor) or take ('boards-full': every later board at what its tiles
+  // hold). Anything else is the search not having settled in its passes.
+  const demandConstraint = demandPasses ? null : paidDifference < 0 && allocation.calibrationUnabsorbed > 0.5 ? 'no-subsidy-left' : paidDifference > 0 && allocation.calibrationUnabsorbed < -0.5 ? 'boards-full' : 'not-settled'
+  // What the passes found a player could be made to pay (each pass is its own
+  // set of boards, so this is a found range, not a proof of the limits).
+  const paidSeen = passes.map((p) => p.paid).filter((v) => v != null)
+  const spendRange = paidSeen.length ? { low: Math.min(...paidSeen), high: Math.max(...paidSeen) } : null
+  // THE SPEND MOVES IN JUMPS. Two passes whose subsidy was almost the same
+  // (no further apart than the tolerance) and whose player paid on either
+  // side of the demand: no amount of subsidy in between lands on it. Measured
+  // in Recompletion, where single items are worth hundreds of DR: the same
+  // subsidy gave one set of boards a player paying 756 DR and the next 1,148
+  // (single builds) - which items a set happens to hold decides it. It is
+  // neither a limit of the boards nor a search that ran out of passes, and it
+  // is said as what it is.
+  const demandJump = demandPasses || demandConstraint !== 'not-settled' ? null : demandJumpOf(passes, demandConfigured, demandTolerance)
+  if (!demandPasses) {
+    const pctOff = Math.round((Math.abs(paidDifference) / demandConfigured) * 100)
+    const range = spendRange ? ` The passes found a player paying between ${Math.round(spendRange.low).toLocaleString()} and ${Math.round(spendRange.high).toLocaleString()} DR.` : ''
+    const why = (demandConstraint === 'no-subsidy-left' ? 'A proven limit: the later boards have no more subsidy to give (each keeps what its lowest rank needs), so the player cannot be made to pay more.' : demandConstraint === 'boards-full' ? 'A proven limit: the later boards hold all the subsidy their tiles can, so the player cannot be made to pay less.' : demandJump ? `Not a limit of the boards - the spend moves in jumps here: two sets of boards with almost the same subsidy (${Math.round(demandJump.subsidyApart).toLocaleString()} DR apart) had the player pay ${Math.round(demandJump.paidUnder).toLocaleString()} and ${Math.round(demandJump.paidOver).toLocaleString()} DR, so the search did not settle on the demand. Building again draws other boards and can land closer.` : 'Not a limit: the search did not settle closer than this in its passes; building again usually does.') + range
+    causes.push({ code: 'demand-off', detail: `The average player pays ${Math.round(paidStat.mean).toLocaleString()} DR in this phase, ${pctOff}% ${paidDifference < 0 ? 'under' : 'over'} the ${Math.round(demandConfigured).toLocaleString()} DR demand. ${why}`, short: `Pays ${pctOff}% ${paidDifference < 0 ? 'under' : 'over'} the demand`, fixes: [], ...CAUSES['demand-off'] })
+  }
   const status = infeasible ? 'infeasible' : sub.feasibility.status === 'ok' && converged && causes.length === 0 ? 'ok' : 'review'
 
   // Exact reconciliation - no figure here is rounded to look tidy:
@@ -1404,7 +1659,7 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
   // and the residual is fully accounted for by its three possible sources.
   const generatedDr = sum(draftBoards.map(mainChainSum))
   const creditCalculated = best.creditSimulated
-  const unroundedTarget = allocation.totalBefore - creditCalculated
+  const unroundedTarget = allocation.totalBefore - creditCalculated - allocation.calibrationTaken
   const reconciliation = {
     budget: allocation.totalBudget,
     afterCc: allocation.totalBefore,
@@ -1480,6 +1735,34 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
     // The phase it was built for (its margins differ - offTargetToleranceFor).
     phase,
     reconciliation,
+    // The demand typed against what the simulated player pays in this phase
+    // (Recompletion: counted from the moment it begins).
+    demandFit: {
+      configured: demandConfigured,
+      paid: paidStat ? { mean: paidStat.mean, p50: paidStat.p50, p10: paidStat.p10, p90: paidStat.p90, min: paidStat.min, max: paidStat.max } : null,
+      difference: paidDifference,
+      differencePct: paidDifference != null && demandConfigured > 0 ? (paidDifference / demandConfigured) * 100 : null,
+      tolerance: demandTolerance,
+      within: demandWithin,
+      // the pass mark (5% of the demand or 30 DR, the smaller) and whether the average player is inside it
+      margin: demandMargin,
+      inMargin: demandPasses,
+      constraint: demandConstraint,
+      // 'proven' (a board limit binds) | 'jumps' (the spend jumps over the
+      // demand between two sets of boards) | 'not-settled' | null (met)
+      limit: demandConstraint == null ? null : demandConstraint === 'not-settled' ? (demandJump ? 'jumps' : 'not-settled') : 'proven',
+      jump: demandJump,
+      spendRange,
+      // The accounting, step by step (DR): what the economist gave the boards,
+      // the 80% merge-energy credit, the signed calibration, what was generated.
+      steps: { initial: allocation.totalBefore, energyCredit: allocation.creditTaken, calibration: allocation.calibrationTaken, generated: sum(draftBoards.map(mainChainSum)) },
+      calibrated: !!calibrateDemand,
+      calibration: allocation.calibrationTaken,
+      calibrationUnabsorbed: allocation.calibrationUnabsorbed,
+      completionRate: sub.evaluation?.summary ? (phase === 'rc' ? sub.evaluation.summary.rcPhaseCompletionRate : sub.evaluation.summary.mainPhaseCompletionRate) : null,
+      players: sub.evaluation?.runs ?? null,
+      passes: passes.map((p) => ({ pass: p.pass, paid: p.paid, calibration: p.calibration })),
+    },
     subsidy: {
       budget: allocation.totalBudget,
       afterCc: allocation.totalBefore,
@@ -1489,6 +1772,9 @@ export async function buildSegment({ phase, boards: givenBoards, mainBoards = nu
       effective: allocation.totalAfter,
       creditUnabsorbed: allocation.creditUnabsorbed,
       unabsorbedReason: allocation.unabsorbedReason,
+      // Taken off as well so the player pays the demand (never the energy credit twice).
+      calibration: allocation.calibrationTaken,
+      calibrationUnabsorbed: allocation.calibrationUnabsorbed,
       firstBoardCapped: allocation.firstBoardCapped,
       creditRate: ENERGY_CREDIT_RATE,
     },
@@ -1742,7 +2028,7 @@ function fitValuesOnFinalBoards({ phase, boards, mainBoards, sub, targets, autoC
 // and listed as such. The base segment's drops are generated; every other
 // segment is solved against those same drops (shared odds), moving only its
 // own tile items.
-export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
+export async function buildEvent({ phase, segments, onProgress, isCancelled, calibrateDemand = true }) {
   const key = buildInputsKey({ phase, segments })
   // One coin-item plan for every segment (from the base target); each
   // segment's own coin VALUES then land it on its own target.
@@ -1774,6 +2060,7 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
         continue
       }
       const result = await buildSegment({
+        calibrateDemand,
         phase,
         boards: seg.boards,
         mainBoards: seg.mainBoards,
@@ -1921,145 +2208,34 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
   // (In Recompletion the Twister items and their values are the normal
   // event's too: only each segment's price of a twist is set.)
   const byBuild = !rcPhase && !!segments[0]?.twisterByBuild && !!shared
-  let twister = await priceTwisterForBuild({ phase, segments, built: out, shared, runs: byBuild ? TWISTER_SIZING_RUNS : undefined, isCancelled })
-  if (byBuild && twister) {
-    const pristine = shared
-    // The Twister item starts at the size the build gave it (rank 1; with
-    // one item per merge, ranks 1 and 2 mixed).
-    const size = { minShare: 0, itemUnits: pristine.twisterItemUnits ?? 1, steady: !!pristine.steadyDrops }
-    // (With steady containers an in-between size is not a coin toss at each
-    // merge: the bigger item goes to whole merge ranks - rewardTargeting.js.)
-    const bigger = (units) => Math.min(TWISTER_MAX_ITEM_UNITS, units + 0.75)
-    let tier = resizeTwisterDrops(pristine, size)
-    let rounds = 0
-    let valueFactor = 1
-    // ENOUGH FINISHED ITEMS FIRST. Twister DR is only collected in whole
-    // rank-4 items (eight rank-1 items merged up). With the item counts per
-    // merge rank hard, there are few Twister items, and a segment with a lot
-    // of subsidy merges little: its typical player finishes one item, or
-    // none ("a typical player gets 0 of 15", found on a test build), and then
-    // every twist arrives in a single jump wherever that item happens to be
-    // finished - the economist's "some at 100% progression and some at 50".
-    // So while any segment that asks for twists has a typical player with
-    // fewer than TWISTER_MIN_COLLECTS finished items when twists are counted,
-    // the Twister items are made one step bigger (their rank only, rank 3 at
-    // most - no drop gains an item, no reward changes) and it is measured
-    // again. Switched off in step 4 ("Keep every segment's Twister steady"),
-    // the items are only made bigger while a segment would finish none.
-    const minCollects = segments[0]?.twisterSteady === false ? 0 : TWISTER_MIN_COLLECTS
-    const tooFewCollects = () => twister.rows.some((r) => r.twists > 0 && r.incomeMean != null && (!(r.incomeMedian > 0) || (minCollects > 0 && !((r.collectsMedian ?? 0) >= minCollects - 1e-9))))
-    while (rounds < MAX_TWISTER_SIZINGS && tooFewCollects() && size.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9) {
-      size.itemUnits = bigger(size.itemUnits)
-      rounds += 1
-      tier = resizeTwisterDrops(pristine, size)
-      shared = { ...pristine, dropGroups: tier.dropGroups, dropGroupsConfig: tier.dropGroupsConfig }
-      const drops = tier
-      out = out.map((s2) => (s2.status === 'skipped' || !s2.dropGroups ? s2 : { ...s2, dropGroups: drops.dropGroups, dropGroupsConfig: drops.dropGroupsConfig, ...(s2.index === 0 ? { generatedGroups: drops.dropGroups.filter((g) => g.auto) } : {}) }))
-      onProgress?.({ label: 'Making the Twister items bigger so every segment collects in steady steps' })
-      const again = await priceTwisterForBuild({ phase, segments, built: out, shared, runs: TWISTER_SIZING_RUNS, isCancelled })
-      if (!again) return null
-      twister = again
-    }
-    const sizedForCollects = rounds
-    // The Twister item at a new size, in every segment's drops. (The values
-    // the build sized are kept: they belong to the reward chain, not the drops.)
-    const applySize = () => {
-      tier = resizeTwisterDrops(pristine, size)
-      shared = { ...pristine, ...(shared.twisterLadder ? { twisterLadder: shared.twisterLadder } : {}), dropGroups: tier.dropGroups, dropGroupsConfig: tier.dropGroupsConfig }
-      const drops = tier
-      out = out.map((s2) => (s2.status === 'skipped' || !s2.dropGroups ? s2 : { ...s2, dropGroups: drops.dropGroups, dropGroupsConfig: drops.dropGroupsConfig, ...(s2.index === 0 ? { generatedGroups: drops.dropGroups.filter((g) => g.auto) } : {}) }))
-    }
-    while (!twisterValuesByBuild && rounds < MAX_TWISTER_SIZINGS) {
-      const need = twisterIncomeNeed(twister.rows, segments)
-      if (!(need > 1.05) || size.itemUnits >= TWISTER_MAX_ITEM_UNITS - 1e-9) break
-      // One step a round, at most a doubling, then measured again: the first
-      // measurement is of rank-1 items, of which a player collects almost
-      // nothing, and acting on it in one go overshoots badly.
-      size.itemUnits = Math.min(TWISTER_MAX_ITEM_UNITS, size.itemUnits * Math.min(2, need))
-      rounds += 1
-      applySize()
-      onProgress?.({ label: 'Raising the Twister drops to fit the twists' })
-      const again = await priceTwisterForBuild({ phase, segments, built: out, shared, runs: TWISTER_SIZING_RUNS, isCancelled })
-      if (!again) return null
-      twister = again
-    }
-    // THE VALUES AND THE PRICES, on the full number of simulated players.
-    // Values nobody typed are first scaled to the smallest ones at which
-    // every segment has a price that fits its twists (fitTwisterValues),
-    // measured on the same players the prices are then set on. They are
-    // always built up from this app's starting numbers, so a rebuild does not
-    // compound them. Bigger values cost nothing in play; they are written as
-    // round numbers (roundTwisterValues).
-    const base = withDefaultTwisterValues({})[TWISTER_TYPE].map((r) => r.prizeAmount)
-    const settle = async () => {
-      if (twisterValuesByBuild) {
-        onProgress?.({ label: 'Sizing the Twister values so every segment lands on its twists' })
-        const measured = await priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
-        if (!measured) return null
-        // The values these players were measured at (the build's inputs the
-        // first time, the values of the round before after that).
-        const top = measured.rows.find((r) => r.topValue > 0)?.topValue ?? base[3]
-        const already = base[3] > 0 && top > 0 ? top / base[3] : 1
-        const fitted = fitTwisterValues(measured.rows, segments, already)
-        if (fitted) valueFactor = fitted.factor
-        else {
-          // Nobody's typical player collects anything: size on the average.
-          const need = twisterIncomeNeed(measured.rows, segments, { typical: true }) * (TWISTER_VALUE_STEPS_AIM / TWISTER_PRICE_STEPS_AIM)
-          valueFactor = Number.isFinite(need) ? Math.max(1, already * need) : Math.max(1, already)
-        }
-        const values = fitted ? fitted.values : roundTwisterValues(valueFactor)
-        valueFactor = Math.round((values[3] / base[3]) * 10) / 10
-        // (A syntax holding one amount follows the new value; a blank one is
-        // written from the value at export - twisterSyntaxFor.)
-        const ladder = values.map((v, i) => {
-          const was = segments[0].boards[0].rewardChainConfig[TWISTER_TYPE]?.[i] ?? {}
-          return { ...was, syntax: syntaxWithAmount(was.syntax, v), prizeAmount: v, auto: true }
-        })
-        shared = { ...shared, twisterLadder: ladder }
-        out = out.map((s2) => (s2.status === 'skipped' || !s2.boards ? s2 : { ...s2, boards: s2.boards.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, [TWISTER_TYPE]: ladder } })) }))
-      }
-      return priceTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
-    }
-    let final = await settle()
-    if (!final) return null
-    // STILL EARLY? Three finished items are a floor, not a promise: the last
-    // one a player needs can still be finished well before twists are counted
-    // (found on a test event: a segment with a lot of subsidy had every twist
-    // at 75% of the phase, with three items). So while a segment's typical
-    // player has all the twists early and the Twister items can still grow,
-    // they are made one more step bigger and everything above is done again -
-    // the verdict the economist reads in step 6 is the test, not a stand-in
-    // for it. At rank 3 the build stops and the table says who is early.
-    while (minCollects > 0 && size.itemUnits < TWISTER_MAX_ITEM_UNITS - 1e-9 && final.rows.some((r) => r.twists > 0 && r.pace === 'early')) {
-      size.itemUnits = bigger(size.itemUnits)
-      rounds += 1
-      applySize()
-      onProgress?.({ label: 'Making the Twister items bigger so no segment has its twists early' })
-      final = await settle()
-      if (!final) return null
-    }
-    twister = final
-    const asked = twister.rows.filter((r) => r.twists > 0 && r.collectsMedian != null)
+  // The four Twister values and the price of a twist, per segment, fitted on
+  // the boards, drops and reward values this build ended with so that the
+  // typical player reaches the twists at 70-75% of the DR demand spent
+  // (twisterCadence.js: fitTwisterForBuild). The drops are not touched here.
+  let twister = await fitTwisterForBuild({ phase, segments, built: out, shared, isCancelled })
+  if (twister === undefined) return null
+  if (twister) {
+    out = out.map((s2) => {
+      const row = twister.rows.find((r) => r.index === s2.index)
+      return row?.ladder && s2.boards ? { ...s2, twisterLadder: row.ladder, boards: s2.boards.map((b) => ({ ...b, rewardChainConfig: { ...b.rewardChainConfig, [TWISTER_TYPE]: row.ladder } })) } : s2
+    })
+    const asked = twister.rows.filter((r) => r.twists > 0 && r.cost != null)
     twister.sizing = {
-      valuesByBuild: twisterValuesByBuild,
-      valueFactor,
-      values: shared.twisterLadder ? shared.twisterLadder.map((r) => r.prizeAmount) : null,
-      byBuild: true,
-      minShare: pristine.twisterMinShare ?? TWISTER_FILL_MIN_SHARE,
-      itemUnits: tier.itemUnits,
-      rank: tier.rank,
-      higher: tier.higher,
-      rounds,
-      // How many of those rounds were for a steady income, what was asked,
-      // and what the worst-off segment's typical player ended with.
-      sizedForCollects,
-      steady: minCollects > 0,
-      minCollects,
-      collectsMin: asked.length ? Math.min(...asked.map((r) => r.collectsMedian)) : null,
+      byBuild,
+      perSegment: true,
+      valuesByBuild: twisterValuesByBuild && !rcPhase,
+      values: null,
+      minShare: shared?.twisterMinShare ?? TWISTER_FILL_MIN_SHARE,
+      itemUnits: shared?.twisterItemUnits ?? 1,
+      inWindow: asked.filter((r) => r.fit?.inWindow).length,
+      asked: asked.length,
+      collectsMin: asked.length ? Math.min(...asked.map((r) => r.collectsMedian ?? 0)) : null,
       short: twister.rows.some((r) => r.tooLow),
       needsRebuild: false,
     }
   }
+  // The Twister's pass mark: a segment whose twists land more than 5 points outside the window says so.
+  out = withTwisterMarks(out, twister)
   return {
     twister,
     twisterKey: twisterInputsKey(segments),
@@ -2072,7 +2248,7 @@ export async function buildEvent({ phase, segments, onProgress, isCancelled }) {
     segments: out,
     builtCount: built.length,
     skippedCount: out.length - built.length,
-    status: built.length === 0 ? 'nothing-built' : built.some((s) => s.status === 'infeasible') ? 'infeasible' : built.every((s) => s.status === 'ok') ? 'ok' : 'review',
+    status: draftStatusOf(out),
   }
 }
 

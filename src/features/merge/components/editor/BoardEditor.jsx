@@ -1208,7 +1208,7 @@ export default function BoardEditor({
 
             <div className="flex flex-col gap-2 pt-3 border-t border-slate-100">
               <Button variant="secondary" size="sm" icon={Dice5} onClick={runLuckyDropSimulation}>
-                Run lucky-drop simulation ({LUCKY_SIM_RUNS} runs × {LUCKY_SIM_TAPS} taps)
+                Try it: {LUCKY_SIM_TAPS} taps × {LUCKY_SIM_RUNS} players
               </Button>
               {!luckyDropSim ? (
                 <InfoHint>

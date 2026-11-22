@@ -14,33 +14,65 @@ export function CommitNumber({ value, onCommit, min = 0, max = Infinity, integer
   const shown = value == null || (allowEmpty && value === 0) ? '' : String(value)
   const [text, setText] = useState(shown)
   useEffect(() => setText(shown), [shown])
+  // WHY A VALUE WAS NOT TAKEN, said next to the field. A value outside what
+  // the field allows used to be put back without a word: type 3,000 DR of
+  // demand, press Tab, and the old number is simply there again.
+  const [rejected, setRejected] = useState(null)
+  useEffect(() => {
+    if (!rejected) return undefined
+    const timer = setTimeout(() => setRejected(null), 6000)
+    return () => clearTimeout(timer)
+  }, [rejected])
+  const limit = (n) => (Number.isFinite(n) ? n.toLocaleString() : null)
 
   function commit() {
     if (text.trim() === '') {
       if (allowEmpty) onCommit(null)
-      else setText(shown)
+      else {
+        setText(shown)
+        if (shown !== '') setRejected('This field cannot be empty - the value was put back.')
+      }
       return
     }
     const typed = Number(text)
     const n = whole && Number.isFinite(typed) ? Math.round(typed) : typed
     if (!Number.isFinite(n) || (integer && !Number.isInteger(n)) || n < min || n > max) {
       setText(shown)
+      setRejected(
+        !Number.isFinite(n)
+          ? 'Not a number - the value was put back.'
+          : integer && !Number.isInteger(n)
+            ? `${text.trim()} was not taken: whole numbers only.`
+            : `${Number(text).toLocaleString()} was not taken: ${limit(max) == null ? `the smallest value here is ${limit(min)}` : `this field takes ${limit(min)} to ${limit(max)}`}.`,
+      )
       return
     }
+    setRejected(null)
     if (n !== typed) setText(String(n))
     if (n !== value) onCommit(n)
   }
 
   return (
-    <input
-      type="number"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-      className={`border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm font-medium text-slate-800 bg-white/80 tabular-nums focus:outline-none focus:ring-4 focus:ring-purple-200/60 focus:border-purple-400 disabled:bg-slate-50 disabled:text-slate-400 ${className}`}
-      {...props}
-    />
+    <>
+      <input
+        type="number"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value)
+          if (rejected) setRejected(null)
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        aria-invalid={rejected ? 'true' : undefined}
+        className={`border rounded-xl px-2.5 py-1.5 text-sm font-medium text-slate-800 bg-white/80 tabular-nums focus:outline-none focus:ring-4 focus:ring-purple-200/60 focus:border-purple-400 disabled:bg-slate-50 disabled:text-slate-400 ${rejected ? 'border-amber-400' : 'border-slate-200'} ${className}`}
+        {...props}
+      />
+      {rejected && (
+        <span role="alert" className="block max-w-[16rem] text-[11px] font-medium leading-snug text-amber-700" data-field-rejected>
+          {rejected}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -56,14 +88,14 @@ const CHIP = {
 }
 
 const CHIP_LABEL = {
-  draft: 'Draft',
-  applied: 'Applied',
-  estimated: 'Estimated',
-  validated: 'Simulation validated',
+  draft: 'Not in use',
+  applied: 'In use',
+  estimated: 'Not tested on players yet',
+  validated: 'Tested on players',
   stale: 'Out of date',
   infeasible: 'Needs a fix',
   review: 'Check',
-  none: 'Nothing built',
+  none: 'Nothing built yet',
 }
 
 export function StatusChip({ kind, children }) {
@@ -104,6 +136,37 @@ export function Panel({ title, subtitle, tag, children, className = '', ...props
       )}
       <div className="p-5">{children}</div>
     </section>
+  )
+}
+
+// A section that starts folded: shared with the Chef flow, so it lives in the
+// shared UI folder (see Collapsible.jsx for what it is and why it is a native
+// <details>).
+export { default as Collapsible } from '../../../../components/ui/Collapsible'
+
+const MATCH = {
+  close: { label: 'Close', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  within: { label: 'Within margin', className: 'bg-sky-100 text-sky-800 border-sky-200' },
+  off: { label: 'Off target', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+  none: { label: 'No target', className: 'bg-slate-50 text-slate-400 border-slate-200' },
+}
+export function MatchChip({ kind, children, ...props }) {
+  const m = MATCH[kind] ?? MATCH.none
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${m.className}`} data-match={kind} {...props}>
+      {children ?? m.label}
+    </span>
+  )
+}
+
+export function ProgressBar({ value, label }) {
+  const pct = Math.max(0, Math.min(100, Math.round((value ?? 0) * 100)))
+  return (
+    <div className="flex min-w-[14rem] flex-1 flex-col gap-1" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={label}>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-gradient-to-r from-purple-600 to-fuchsia-500 transition-[width] duration-300" style={{ width: `${Math.max(3, pct)}%` }} />
+      </div>
+    </div>
   )
 }
 

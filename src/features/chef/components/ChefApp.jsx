@@ -1,59 +1,49 @@
-import { useMemo, useRef, useState } from 'react'
-import {
-  ArrowLeft,
-  ChefHat,
-  Carrot,
-  UtensilsCrossed,
-  Gift,
-  CalendarDays,
-  Users,
-  TrendingUp,
-  Coins,
-  Save,
-  ShieldAlert,
-  ClipboardCheck,
-  Plus,
-  Copy,
-  Trash2,
-  Download,
-  Upload,
-} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, ChefHat, ChevronDown, Copy, Download, Plus, Save, Trash2, Upload } from 'lucide-react'
 import Button from '../../../components/ui/Button'
-import IngredientsTab from './IngredientsTab'
-import DishesTab from './DishesTab'
-import BasketsTab from './BasketsTab'
-import CalendarTab from './CalendarTab'
-import SegmentsTab from './SegmentsTab'
-import SimulationTab from './SimulationTab'
-import BasketValueTab from './BasketValueTab'
-import BlockerSourcesTab from './BlockerSourcesTab'
-import ValidationTab from './ValidationTab'
+import EventStep from './EventStep'
+import DishesStep from './DishesStep'
+import BasketsStep from './BasketsStep'
+import SimulateStep from './SimulateStep'
+import ValueStep from './ValueStep'
+import { StepFindings } from './chefUi'
 import * as halloweenChefData from '../data/halloweenChefData'
 import * as thanksgivingChefData from '../data/thanksgivingChefData'
-const { INGREDIENTS, DISHES, RECOMPLETION_DISHES, RECOMPLETION_INGREDIENT_CAPS, BASKETS, CALENDAR, SEGMENTS, TOTAL_CHEF_PRIZE } = halloweenChefData
 import { loadChefLibrary, saveChefLibrary, createConfigEntry, parseImportedLibrary } from '../lib/chefPersistence'
-import { createGrant, createIngredient, createDish, createBasket, createSegment, createCalendar, removeIngredientEverywhere } from '../lib/chefModel'
+import { CHEST_TYPES, createGrant, createIngredient, createDish, createBasket, createSegment, createCalendar, createPhase, removeIngredientEverywhere } from '../lib/chefModel'
 import { validateChefConfig } from '../lib/chefValidation'
 
-const TABS = [
-  { id: 'ingredients', label: 'Ingredients', icon: Carrot },
-  { id: 'dishes', label: 'Dishes', icon: UtensilsCrossed },
-  { id: 'baskets', label: 'Baskets', icon: Gift },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { id: 'segments', label: 'Segments', icon: Users },
-  { id: 'blocker-sources', label: 'Blocker sources', icon: ShieldAlert },
-  { id: 'validation', label: 'Validation', icon: ClipboardCheck },
-  { id: 'simulation', label: 'Simulation', icon: TrendingUp },
-  { id: 'basket-value', label: 'Basket value', icon: Coins },
+// THE CHEF FLOW. The same logic as the Merge "Build event" flow (economist:
+// "apply the logic of how we build the merge also to the chef. the flow and
+// etc."): five steps in the order the work is done, each saying what it is
+// for; a step shows what has to be typed or judged and folds the rest; what
+// is wrong is shown in the step that puts it right, never folded; results
+// lead, with their detail one click away; the rarely used actions sit in one
+// "More" menu; "Next" opens the next step at its top.
+//
+//   1 event      when it runs, its phases, the segments and their baskets a day
+//   2 dishes     the ingredients, each dish's recipe and prize
+//   3 baskets    what a basket gives in each phase; sales and events
+//   4 simulate   the event played by many players: who cooks what, and when
+//   5 value      what a basket is worth to a player
+//
+// Before this the feature was nine flat tabs (Ingredients, Dishes, Baskets,
+// Calendar, Segments, Blocker sources, Validation, Simulation, Basket
+// value). Nothing was taken away: every one of them is in a step - the
+// checks of "Validation" are shown in the step each belongs to and listed
+// whole in step 4, "Blocker sources" is a fold of step 3.
+const STEPS = [
+  { id: 'event', label: 'Event and players', purpose: 'when the event runs, the phases it is cut into, and how many baskets a day each segment opens' },
+  { id: 'dishes', label: 'Ingredients and dishes', purpose: 'what players collect, and what they cook with it' },
+  { id: 'baskets', label: 'Baskets', purpose: 'what a basket gives in each phase, and what is handed out besides' },
+  { id: 'simulate', label: 'Simulate', purpose: 'the event played by many players: who cooks what, and when' },
+  { id: 'value', label: 'Basket value', purpose: 'what a basket is worth to a player' },
 ]
+const STEP_LABELS = Object.fromEntries(STEPS.map((s, i) => [s.id, `Step ${i + 1}`]))
 
-// `totalChefPrize` now travels WITH each config's own state rather than
-// being read from one hardcoded module-level import - a real latent bug
-// this file's own original single-chef design had (Halloween's
-// TOTAL_CHEF_PRIZE was imported as a bare constant, never part of the
-// saved state at all), only exposed once a SECOND real chef with its own
-// Prize_sheet became possible to add. The two happen to carry identical
-// values today, which is exactly why this went unnoticed until now.
+// `totalChefPrize` travels WITH each chef's own state rather than being read
+// from one module-level import (it was a bare Halloween constant once, never
+// part of the saved state, which only showed when a second chef was added).
 function seedChefState(mod) {
   return {
     ingredients: mod.INGREDIENTS,
@@ -82,61 +72,98 @@ function blankChefState() {
   }
 }
 
-// Every real chef dataset this app has been given so far, selectable as a
-// starting point for a new config - by explicit economist request ("i
-// inserted chef thanksgiving into the repo... let's create the new chef in
-// the app"). Add a future chef here the same way once its own data has
-// been transcribed into its own `src/features/chef/data/*.js` module.
+// Every real chef this app has been given, to start a new one from
+// (economist: "i inserted chef thanksgiving into the repo... let's create
+// the new chef in the app"). A future chef is added the same way once its
+// data has been transcribed into its own `data/*.js` module.
 const TEMPLATES = [
   { id: 'halloween', name: 'Halloween chef', mod: halloweenChefData },
   { id: 'thanksgiving', name: 'Thanksgiving chef', mod: thanksgivingChefData },
 ]
 
-// A LIBRARY of chef configs, not just one - by explicit economist request
-// ("multiple saved event configs... so the next event's design doesn't
-// overwrite this one"), the top-ranked item from a GPT brainstorm review.
-// Falls back to a single config seeded from the real Halloween data if
-// nothing's ever been saved (see chefPersistence.js's migration note for
-// how an OLDER, pre-library single-config save is handled).
+// A LIBRARY of chefs, not one (economist: "multiple saved event configs...
+// so the next event's design doesn't overwrite this one"). With nothing
+// saved it starts as one chef made from the Halloween data.
 function initialLibrary() {
   const persisted = loadChefLibrary()
   if (persisted?.configs?.length) return persisted
   const entry = createConfigEntry('Halloween chef', seedChefState(halloweenChefData))
   return { configs: [entry], activeConfigId: entry.id }
 }
+// What "saved" compares: every chef's name and content (not which one is open, not when it was saved).
+const contentOf = (library) => JSON.stringify(library.configs.map((c) => [c.id, c.name, c.state]))
 
-// Phase 1+ scope (per the economist's own stated priorities - see
-// CLAUDE.md's Chef section): insert the real chef data, let it be
-// viewed/edited/grown per-tab, the day-by-day completion simulator, the
-// basket-value estimator, and (per a later GPT-brainstorm-review request)
-// a "trustworthy-sim core" and a "reusable-configs core" - add/remove/
-// duplicate for every entity list, multiple saved configs, and a portable
-// backup file.
+function MenuItem({ icon: Icon, children, ...props }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-800 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-700"
+      {...props}
+    >
+      {Icon && <Icon size={14} className="shrink-0 text-slate-400" />}
+      {children}
+    </button>
+  )
+}
+
 export default function ChefApp({ onHome }) {
-  const [tab, setTab] = useState('ingredients')
+  const [step, setStep] = useState('event')
   const [library, setLibrary] = useState(initialLibrary)
+  const [baseline, setBaseline] = useState(() => contentOf(library))
   const [savedAt, setSavedAt] = useState(null)
   const [importError, setImportError] = useState(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  // The last simulation of each chef, with a fingerprint of the chef it was
+  // played on (SimulateStep marks it out of date once the chef has changed).
+  const [sims, setSims] = useState({})
   const fileInputRef = useRef(null)
+  const moreRef = useRef(null)
 
   const activeConfig = library.configs.find((c) => c.id === library.activeConfigId) ?? library.configs[0]
   const state = activeConfig.state
   const { ingredients, dishes, recompletionDishes, recompletionCaps, baskets, calendar, segments, grants } = state
-  // A save from before totalChefPrize became part of a config's own state
-  // (see seedChefState's doc comment) won't have this field yet - fall back
-  // to the Halloween data's own value rather than crashing downstream.
-  const totalChefPrize = state.totalChefPrize ?? TOTAL_CHEF_PRIZE
+  // A save from before totalChefPrize became part of a chef's own state has
+  // none: the Halloween values stand in rather than crash what reads it.
+  const totalChefPrize = state.totalChefPrize ?? halloweenChefData.TOTAL_CHEF_PRIZE
+  const configKey = useMemo(() => JSON.stringify(state), [state])
+  const unsaved = useMemo(() => contentOf(library) !== baseline, [library, baseline])
 
-  // Every edit routes through this one updater - it's the only place that
-  // knows HOW an edit reaches the active config inside the library array,
-  // so every per-field setter below stays a simple, flat function.
+  // A step opens at its top (economist, of the Merge flow: "it should take me
+  // to the top part of the page and not make me scroll up").
+  const openedStep = useRef(step)
+  useEffect(() => {
+    if (openedStep.current === step) return
+    openedStep.current = step
+    window.scrollTo({ top: 0 })
+  }, [step])
+
+  useEffect(() => {
+    if (!moreOpen) return undefined
+    const onDown = (e) => {
+      if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false)
+    }
+    const onKey = (e) => e.key === 'Escape' && setMoreOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [moreOpen])
+  const fromMenu = (action) => () => {
+    setMoreOpen(false)
+    action()
+  }
+
+  // Every edit goes through this one updater - the only place that knows how
+  // an edit reaches the open chef inside the library.
   function updateActiveState(updater) {
     setLibrary((lib) => ({
       ...lib,
       configs: lib.configs.map((c) => (c.id === lib.activeConfigId ? { ...c, state: typeof updater === 'function' ? updater(c.state) : updater } : c)),
     }))
   }
-
   function setField(field) {
     return (updater) => updateActiveState((s) => ({ ...s, [field]: typeof updater === 'function' ? updater(s[field]) : updater }))
   }
@@ -150,54 +177,41 @@ export default function ChefApp({ onHome }) {
   const setRecompletionCaps = setField('recompletionCaps')
 
   function handleSave() {
-    setLibrary((lib) => {
-      const next = { ...lib, configs: lib.configs.map((c) => (c.id === lib.activeConfigId ? { ...c, updatedAt: new Date().toISOString() } : c)) }
-      saveChefLibrary(next)
-      return next
-    })
+    const next = { ...library, configs: library.configs.map((c) => (c.id === library.activeConfigId ? { ...c, updatedAt: new Date().toISOString() } : c)) }
+    saveChefLibrary(next)
+    setLibrary(next)
+    setBaseline(contentOf(next))
     setSavedAt(new Date())
   }
 
-  // --- Config library management ---
-  // `templateId` of '' (the <select>'s own placeholder option) means a
-  // genuinely blank config; any other value picks one of TEMPLATES' real
-  // seed datasets as the new config's starting point.
+  // --- The library of chefs ---
   function handleNewConfig(templateId) {
     const template = TEMPLATES.find((t) => t.id === templateId)
     const name = template ? template.name : `New chef ${library.configs.length + 1}`
     const entry = createConfigEntry(name, template ? seedChefState(template.mod) : blankChefState())
     setLibrary((lib) => ({ ...lib, configs: [...lib.configs, entry], activeConfigId: entry.id }))
+    setStep('event')
   }
-
   function handleDuplicateConfig() {
     const entry = createConfigEntry(`${activeConfig.name} copy`, JSON.parse(JSON.stringify(activeConfig.state)))
     setLibrary((lib) => ({ ...lib, configs: [...lib.configs, entry], activeConfigId: entry.id }))
   }
-
   function handleRenameConfig(name) {
     setLibrary((lib) => ({ ...lib, configs: lib.configs.map((c) => (c.id === lib.activeConfigId ? { ...c, name } : c)) }))
   }
-
   function handleSwitchConfig(id) {
     setLibrary((lib) => ({ ...lib, activeConfigId: id }))
   }
-
-  // Deleting a whole saved config is meaningfully more destructive than
-  // deleting one ingredient/dish/basket/segment (which stay no-confirm, per
-  // this app's own established convention - see Diamond Mine's gem
-  // deletion in CLAUDE.md) - real work across every tab can live in one
-  // config, so this is the one delete in the feature that asks first.
-  function handleDeleteConfig(id) {
+  // Deleting a whole chef takes the work of every step with it, so it is the
+  // one delete in the feature that asks first.
+  function handleDeleteConfig() {
     if (library.configs.length <= 1) return
-    const target = library.configs.find((c) => c.id === id)
-    if (!window.confirm(`Delete "${target?.name}"? This can't be undone.`)) return
+    if (!window.confirm(`Delete "${activeConfig.name}"? This can't be undone.`)) return
     setLibrary((lib) => {
-      const configs = lib.configs.filter((c) => c.id !== id)
-      const activeConfigId = lib.activeConfigId === id ? configs[0].id : lib.activeConfigId
-      return { ...lib, configs, activeConfigId }
+      const configs = lib.configs.filter((c) => c.id !== activeConfig.id)
+      return { ...lib, configs, activeConfigId: configs[0].id }
     })
   }
-
   function handleExportBackup() {
     const blob = new Blob([JSON.stringify(library, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -207,7 +221,6 @@ export default function ChefApp({ onHome }) {
     a.click()
     URL.revokeObjectURL(url)
   }
-
   function handleImportFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -215,310 +228,313 @@ export default function ChefApp({ onHome }) {
     reader.onload = () => {
       const parsed = parseImportedLibrary(String(reader.result))
       if (!parsed) {
-        setImportError('That file doesn’t look like a Chef backup — nothing was changed.')
+        setImportError('That file is not a Chef backup. Nothing was changed.')
         return
       }
       setImportError(null)
       setLibrary(parsed)
       saveChefLibrary(parsed)
+      setBaseline(contentOf(parsed))
+      setSims({})
     }
     reader.readAsText(file)
     e.target.value = ''
   }
 
-  function updateIngredient(id, patch) {
-    setIngredients((prev) => prev.map((ing) => (ing.id === id ? { ...ing, ...patch } : ing)))
-  }
-
-  function addIngredient() {
-    setIngredients((prev) => [...prev, createIngredient({ name: `Ingredient ${prev.length + 1}` })])
-  }
-
+  // --- Ingredients ---
+  const updateIngredient = (id, patch) => setIngredients((prev) => prev.map((ing) => (ing.id === id ? { ...ing, ...patch } : ing)))
+  const addIngredient = () => setIngredients((prev) => [...prev, createIngredient({ name: `Ingredient ${prev.length + 1}` })])
   function duplicateIngredient(id) {
     const ing = ingredients.find((i) => i.id === id)
-    if (!ing) return
-    setIngredients((prev) => [...prev, createIngredient({ ...ing, id: undefined, name: `${ing.name} copy` })])
+    if (ing) setIngredients((prev) => [...prev, createIngredient({ ...ing, id: undefined, name: `${ing.name} copy` })])
   }
-
+  // (Goes out of every recipe, basket and sale with it: removeIngredientEverywhere.)
   function removeIngredient(id) {
-    const cascaded = removeIngredientEverywhere(id, { dishes, recompletionDishes, baskets, grants })
-    updateActiveState((s) => ({
-      ...s,
-      ingredients: s.ingredients.filter((i) => i.id !== id),
-      dishes: cascaded.dishes,
-      recompletionDishes: cascaded.recompletionDishes,
-      baskets: cascaded.baskets,
-      grants: cascaded.grants,
-    }))
+    updateActiveState((s) => {
+      const cascaded = removeIngredientEverywhere(id, { dishes: s.dishes, recompletionDishes: s.recompletionDishes, baskets: s.baskets, grants: s.grants ?? [] })
+      return { ...s, ingredients: s.ingredients.filter((i) => i.id !== id), ...cascaded }
+    })
   }
 
-  function updateDish(id, patch, list = 'main') {
-    const setter = list === 'main' ? setDishes : setRecompletionDishes
-    setter((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
-  }
-
-  function addDish(list = 'main') {
-    const setter = list === 'main' ? setDishes : setRecompletionDishes
-    setter((prev) => [...prev, createDish({ name: `Dish ${prev.length + 1}` })])
-  }
-
+  // --- Dishes (the two lists) ---
+  const dishSetter = (list) => (list === 'main' ? setDishes : setRecompletionDishes)
+  const updateDish = (id, patch, list = 'main') => dishSetter(list)((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
+  const addDish = (list = 'main') => dishSetter(list)((prev) => [...prev, createDish({ name: `Dish ${prev.length + 1}` })])
   function duplicateDish(id, list = 'main') {
     const source = (list === 'main' ? dishes : recompletionDishes).find((d) => d.id === id)
-    if (!source) return
-    const setter = list === 'main' ? setDishes : setRecompletionDishes
-    setter((prev) => [...prev, createDish({ ...source, id: undefined, name: `${source.name} copy` })])
+    if (source) dishSetter(list)((prev) => [...prev, createDish({ ...source, id: undefined, recipe: source.recipe.map((r) => ({ ...r })), name: `${source.name} copy` })])
   }
+  const removeDish = (id, list = 'main') => dishSetter(list)((prev) => prev.filter((d) => d.id !== id))
+  const updateRecompletionCap = (ingredientId, value) => setRecompletionCaps((prev) => ({ ...prev, [ingredientId]: value }))
+  const updateTotalPrize = (tier, value) => updateActiveState((s) => ({ ...s, totalChefPrize: { ...(s.totalChefPrize ?? halloweenChefData.TOTAL_CHEF_PRIZE), [tier]: value } }))
 
-  function removeDish(id, list = 'main') {
-    const setter = list === 'main' ? setDishes : setRecompletionDishes
-    setter((prev) => prev.filter((d) => d.id !== id))
-  }
-
-  function updateSegment(id, patch) {
-    setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
-  }
-
-  function addSegment() {
-    setSegments((prev) => [...prev, createSegment({ name: `Segment ${prev.length + 1}` })])
-  }
-
+  // --- Segments ---
+  const updateSegment = (id, patch) => setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
+  const addSegment = () => setSegments((prev) => [...prev, createSegment({ name: `Segment ${prev.length + 1}` })])
   function duplicateSegment(id) {
     const seg = segments.find((s) => s.id === id)
-    if (!seg) return
-    setSegments((prev) => [...prev, createSegment({ ...seg, id: undefined, name: `${seg.name} copy` })])
+    if (seg) setSegments((prev) => [...prev, createSegment({ ...seg, id: undefined, avgBasketsPerDay: { ...seg.avgBasketsPerDay }, name: `${seg.name} copy` })])
   }
+  const removeSegment = (id) => setSegments((prev) => prev.filter((s) => s.id !== id))
 
-  function removeSegment(id) {
-    setSegments((prev) => prev.filter((s) => s.id !== id))
+  // --- Baskets ---
+  const updateBasket = (id, patch) => setBaskets((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+  // A new basket goes to the phase in view, as the first type that phase has none of.
+  function addBasket(phaseId = calendar.phases[0]?.id ?? null) {
+    setBaskets((prev) => {
+      const taken = new Set(prev.filter((b) => b.phaseId === phaseId).map((b) => b.chestType))
+      const chestType = CHEST_TYPES.find((t) => !taken.has(t)) ?? 'basic'
+      return [...prev, createBasket({ chestType, phaseId, totalMin: 1, totalMax: 1, ingredientWeights: ingredients.map((i) => ({ ingredientId: i.id, min: 0, max: 1, weight: 0 })) })]
+    })
   }
-
-  function updateBasket(id, patch) {
-    setBaskets((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)))
-  }
-
-  function addBasket() {
-    const firstPhaseId = calendar.phases[0]?.id ?? null
-    setBaskets((prev) => [
-      ...prev,
-      createBasket({ chestType: 'basic', phaseId: firstPhaseId, totalMin: 1, totalMax: 1, ingredientWeights: ingredients.map((i) => ({ ingredientId: i.id, min: 0, max: 1, weight: 0 })) }),
-    ])
-  }
-
   function duplicateBasket(id) {
     const basket = baskets.find((b) => b.id === id)
-    if (!basket) return
-    setBaskets((prev) => [...prev, createBasket({ ...basket, id: undefined })])
+    if (basket) setBaskets((prev) => [...prev, createBasket({ ...JSON.parse(JSON.stringify(basket)), id: undefined })])
+  }
+  const removeBasket = (id) => setBaskets((prev) => prev.filter((b) => b.id !== id))
+
+  // --- Calendar ---
+  const updateCalendarPhase = (id, patch) => setCalendar((prev) => ({ ...prev, phases: prev.phases.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
+  const updateCalendarStartDate = (startDate) => setCalendar((prev) => ({ ...prev, startDate }))
+  const updateCalendarTotalDays = (totalDays) => setCalendar((prev) => ({ ...prev, totalDays }))
+  function addPhase() {
+    setCalendar((prev) => {
+      const ids = new Set(prev.phases.map((p) => p.id))
+      let n = prev.phases.length + 1
+      while (ids.has(`phase${n}`)) n += 1
+      return { ...prev, phases: [...prev.phases, createPhase({ id: `phase${n}`, label: `Phase ${n}`, days: 1 })] }
+    })
+  }
+  // (Its baskets go with it: a basket of no phase is never opened by anyone.)
+  function removePhase(id) {
+    updateActiveState((s) => ({ ...s, calendar: { ...s.calendar, phases: s.calendar.phases.filter((p) => p.id !== id) }, baskets: s.baskets.filter((b) => b.phaseId !== id) }))
   }
 
-  function removeBasket(id) {
-    setBaskets((prev) => prev.filter((b) => b.id !== id))
-  }
+  // --- Sales and events ---
+  const addGrant = () => setGrants((prev) => [...(prev ?? []), createGrant({ day: 1, ingredientId: ingredients[0]?.id, amount: 0 })])
+  const updateGrant = (id, patch) => setGrants((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)))
+  const removeGrant = (id) => setGrants((prev) => prev.filter((g) => g.id !== id))
 
-  function updateCalendarPhase(id, patch) {
-    setCalendar((prev) => ({ ...prev, phases: prev.phases.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
-  }
-
-  function updateCalendarStartDate(startDate) {
-    setCalendar((prev) => ({ ...prev, startDate }))
-  }
-
-  function updateCalendarTotalDays(totalDays) {
-    setCalendar((prev) => ({ ...prev, totalDays }))
-  }
-
-  function addGrant() {
-    setGrants((prev) => [...prev, createGrant({ day: 1, ingredientId: ingredients[0]?.id, amount: 0 })])
-  }
-
-  function updateGrant(id, patch) {
-    setGrants((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)))
-  }
-
-  function removeGrant(id) {
-    setGrants((prev) => prev.filter((g) => g.id !== id))
-  }
-
-  function updateRecompletionCap(ingredientId, value) {
-    setRecompletionCaps((prev) => ({ ...prev, [ingredientId]: value }))
-  }
-
-  const blockCount = useMemo(
-    () => validateChefConfig({ ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants }).filter((f) => f.severity === 'block').length,
-    [ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants]
+  const safeGrants = grants ?? []
+  const findings = useMemo(
+    () => validateChefConfig({ ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants: safeGrants }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants],
   )
+  const findingsOf = (id) => findings.filter((f) => f.step === id)
+  const stepIndex = STEPS.findIndex((s) => s.id === step)
+  const current = STEPS[stepIndex]
+  const previous = STEPS[stepIndex - 1]
+  const next = STEPS[stepIndex + 1]
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen chef-app">
       <div className="app-backdrop" aria-hidden="true" />
-      <header className="max-w-6xl mx-auto px-6 pt-8 pb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onHome}
-            className="grid place-items-center w-9 h-9 rounded-xl bg-white/80 border border-white ring-1 ring-slate-200/70 text-slate-500 hover:text-purple-600 transition-colors"
-          >
+      <header className="mx-auto flex max-w-[1760px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 pb-2 pt-4" data-testid="chef-header">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <button type="button" onClick={onHome} aria-label="Back to the features" title="Back to the features" className="grid h-9 w-9 place-items-center rounded-xl border border-white bg-white/80 text-slate-500 ring-1 ring-slate-200/70 transition-colors hover:text-purple-600">
             <ArrowLeft size={16} />
           </button>
-          <span className="grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30">
             <ChefHat size={18} strokeWidth={2.25} />
           </span>
-          <h1 className="font-display text-xl font-bold text-slate-900 tracking-tight">Chef</h1>
+          <h1 className="font-display text-xl font-bold tracking-tight text-slate-900">Chef</h1>
+          {library.configs.length > 1 && (
+            <select value={activeConfig.id} aria-label="The chef in view" data-testid="chef-picker" onChange={(e) => handleSwitchConfig(e.target.value)} className="rounded-lg border border-slate-200 bg-white/90 px-2 py-1.5 text-sm font-semibold text-slate-700">
+              {library.configs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            value={activeConfig.name}
+            aria-label="Name of this chef"
+            data-testid="chef-name"
+            onChange={(e) => handleRenameConfig(e.target.value)}
+            className="w-56 min-w-0 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-semibold text-slate-700 hover:border-slate-200 focus:border-purple-300 focus:bg-white/80 focus:outline-none"
+            placeholder="Name of this chef"
+          />
         </div>
         <div className="flex items-center gap-3">
-          {savedAt && <span className="text-xs text-slate-400">Saved {savedAt.toLocaleTimeString()}</span>}
-          <Button variant="dark" icon={Save} onClick={handleSave}>
+          <span className={`text-xs font-medium ${unsaved ? 'text-amber-700' : 'text-slate-400'}`} data-testid="chef-save-state">
+            {unsaved ? 'Unsaved changes' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : 'Saved'}
+          </span>
+          <div className="relative" ref={moreRef}>
+            <Button variant="secondary" onClick={() => setMoreOpen((open) => !open)} aria-haspopup="menu" aria-expanded={moreOpen} data-testid="chef-more">
+              More <ChevronDown size={14} />
+            </Button>
+            {moreOpen && (
+              <div role="menu" data-testid="chef-more-panel" className="absolute right-0 z-30 mt-2 w-max min-w-[15rem] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-purple-950/10">
+                <MenuItem icon={Plus} onClick={fromMenu(() => handleNewConfig('blank'))}>
+                  New chef: blank
+                </MenuItem>
+                {TEMPLATES.map((t) => (
+                  <MenuItem key={t.id} icon={Plus} onClick={fromMenu(() => handleNewConfig(t.id))}>
+                    New chef: from the {t.name}
+                  </MenuItem>
+                ))}
+                <MenuItem icon={Copy} onClick={fromMenu(handleDuplicateConfig)}>
+                  Duplicate this chef
+                </MenuItem>
+                <MenuItem icon={Trash2} onClick={fromMenu(handleDeleteConfig)} disabled={library.configs.length <= 1} title={library.configs.length <= 1 ? 'The only chef cannot be deleted.' : undefined}>
+                  Delete this chef
+                </MenuItem>
+                <div className="my-1 border-t border-slate-100" />
+                <MenuItem icon={Download} onClick={fromMenu(handleExportBackup)} title="One file with every chef saved here.">
+                  Export backup
+                </MenuItem>
+                <MenuItem icon={Upload} onClick={fromMenu(() => fileInputRef.current?.click())} title="Replaces every chef here with the ones in the file.">
+                  Import backup
+                </MenuItem>
+              </div>
+            )}
+          </div>
+          <Button variant="dark" icon={Save} onClick={handleSave} data-testid="chef-save">
             Save
           </Button>
+          <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportFile} className="hidden" data-testid="chef-import-file" />
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 mb-4 flex flex-wrap items-center gap-2 bg-white/70 border border-slate-200 rounded-2xl p-2.5">
-        <select
-          value={library.activeConfigId}
-          onChange={(e) => handleSwitchConfig(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 bg-white/90 font-semibold text-slate-700"
-        >
-          {library.configs.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <input
-          value={activeConfig.name}
-          onChange={(e) => handleRenameConfig(e.target.value)}
-          className="text-sm font-medium text-slate-600 bg-transparent border-b border-transparent focus:border-purple-300 focus:outline-none px-1 min-w-0 flex-1"
-          placeholder="Config name"
-        />
-        <label className="flex items-center gap-1 text-xs font-semibold text-purple-600 px-2 py-1">
-          <Plus size={13} />
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) handleNewConfig(e.target.value)
-            }}
-            className="bg-transparent focus:outline-none cursor-pointer"
-            title="Start a new config — blank, or from a real chef dataset already in the app"
-          >
-            <option value="" disabled>
-              New…
-            </option>
-            <option value="blank">Blank</option>
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                From: {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={handleDuplicateConfig} className="flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-800 px-2 py-1">
-          <Copy size={13} /> Duplicate
-        </button>
-        <button
-          type="button"
-          onClick={() => handleDeleteConfig(activeConfig.id)}
-          disabled={library.configs.length <= 1}
-          className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-red-600 px-2 py-1 disabled:opacity-40 disabled:hover:text-slate-400"
-        >
-          <Trash2 size={13} /> Delete
-        </button>
-        <span className="w-px h-4 bg-slate-200" />
-        <button type="button" onClick={handleExportBackup} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1">
-          <Download size={13} /> Export backup
-        </button>
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1">
-          <Upload size={13} /> Import backup
-        </button>
-        <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportFile} className="hidden" />
-      </div>
-
       {importError && (
-        <div className="max-w-6xl mx-auto px-6 mb-4">
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{importError}</p>
+        <div className="mx-auto max-w-[1760px] px-6 pb-2">
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="chef-import-error">
+            {importError}
+          </p>
         </div>
       )}
 
-      <nav className="max-w-6xl mx-auto px-6 flex flex-wrap gap-2 mb-6">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              tab === id ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30' : 'bg-white/70 text-slate-600 hover:bg-white'
-            }`}
-          >
-            <Icon size={14} strokeWidth={2.5} /> {label}
-            {id === 'validation' && blockCount > 0 && (
-              <span className="grid place-items-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">{blockCount}</span>
-            )}
-          </button>
-        ))}
+      <nav className="mx-auto max-w-[1760px] px-6 pb-3" aria-label="Steps">
+        <ol className="flex flex-wrap gap-2">
+          {STEPS.map((s, i) => {
+            const blocks = findingsOf(s.id).filter((f) => f.severity === 'block').length
+            const looks = findingsOf(s.id).filter((f) => f.severity === 'review').length
+            const active = s.id === step
+            return (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  data-chef-step={s.id}
+                  aria-current={active ? 'step' : undefined}
+                  onClick={() => setStep(s.id)}
+                  className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${active ? 'bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30' : 'bg-white/70 text-slate-600 hover:bg-white'}`}
+                >
+                  <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${active ? 'bg-white/25 text-white' : 'bg-slate-200/80 text-slate-600'}`}>{i + 1}</span>
+                  {s.label}
+                  {blocks > 0 && (
+                    <span className="grid h-[1.1rem] min-w-[1.1rem] place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white" data-step-blocks title={`${blocks} to fix in this step`}>
+                      {blocks}
+                    </span>
+                  )}
+                  {blocks === 0 && looks > 0 && <span className="h-2 w-2 rounded-full bg-amber-400" data-step-looks title={`${looks} worth a look in this step`} />}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 pb-16">
-        {tab === 'ingredients' && (
-          <IngredientsTab ingredients={ingredients} onUpdate={updateIngredient} onAdd={addIngredient} onDuplicate={duplicateIngredient} onRemove={removeIngredient} />
+      <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-6 pb-12" data-chef-page={step}>
+        <p className="text-sm text-slate-600" data-testid="chef-step-purpose">
+          <span className="font-semibold text-slate-800">
+            Step {stepIndex + 1} of {STEPS.length}
+          </span>{' '}
+          · {current.purpose}.
+        </p>
+        {step !== 'simulate' && step !== 'value' && <StepFindings findings={findingsOf(step)} />}
+
+        {step === 'event' && (
+          <EventStep
+            key={activeConfig.id}
+            calendar={calendar}
+            segments={segments}
+            onUpdateStartDate={updateCalendarStartDate}
+            onUpdateTotalDays={updateCalendarTotalDays}
+            onUpdatePhase={updateCalendarPhase}
+            onAddPhase={addPhase}
+            onRemovePhase={removePhase}
+            onUpdateSegment={updateSegment}
+            onAddSegment={addSegment}
+            onDuplicateSegment={duplicateSegment}
+            onRemoveSegment={removeSegment}
+          />
         )}
-        {tab === 'dishes' && (
-          <DishesTab
+        {step === 'dishes' && (
+          <DishesStep
+            key={activeConfig.id}
             ingredients={ingredients}
             dishes={dishes}
             recompletionDishes={recompletionDishes}
-            recompletionCaps={recompletionCaps}
+            recompletionCaps={recompletionCaps ?? {}}
             totalChefPrize={totalChefPrize}
-            onUpdate={updateDish}
+            onUpdateIngredient={updateIngredient}
+            onAddIngredient={addIngredient}
+            onDuplicateIngredient={duplicateIngredient}
+            onRemoveIngredient={removeIngredient}
+            onUpdateDish={updateDish}
+            onAddDish={addDish}
+            onDuplicateDish={duplicateDish}
+            onRemoveDish={removeDish}
             onUpdateRecompletionCap={updateRecompletionCap}
-            onAdd={addDish}
-            onDuplicate={duplicateDish}
-            onRemove={removeDish}
+            onUpdateTotalPrize={updateTotalPrize}
           />
         )}
-        {tab === 'baskets' && (
-          <BasketsTab ingredients={ingredients} baskets={baskets} calendar={calendar} onUpdate={updateBasket} onAdd={addBasket} onDuplicate={duplicateBasket} onRemove={removeBasket} />
-        )}
-        {tab === 'calendar' && (
-          <CalendarTab
-            calendar={calendar}
+        {step === 'baskets' && (
+          <BasketsStep
+            key={activeConfig.id}
             ingredients={ingredients}
-            grants={grants}
-            onUpdatePhase={updateCalendarPhase}
-            onUpdateStartDate={updateCalendarStartDate}
-            onUpdateTotalDays={updateCalendarTotalDays}
+            baskets={baskets}
+            calendar={calendar}
+            grants={safeGrants}
+            findings={findingsOf('baskets')}
+            onUpdateBasket={updateBasket}
+            onAddBasket={addBasket}
+            onDuplicateBasket={duplicateBasket}
+            onRemoveBasket={removeBasket}
             onAddGrant={addGrant}
             onUpdateGrant={updateGrant}
             onRemoveGrant={removeGrant}
           />
         )}
-        {tab === 'segments' && <SegmentsTab segments={segments} onUpdate={updateSegment} onAdd={addSegment} onDuplicate={duplicateSegment} onRemove={removeSegment} />}
-        {tab === 'blocker-sources' && <BlockerSourcesTab ingredients={ingredients} baskets={baskets} calendar={calendar} grants={grants} />}
-        {tab === 'validation' && (
-          <ValidationTab ingredients={ingredients} dishes={dishes} recompletionDishes={recompletionDishes} baskets={baskets} calendar={calendar} segments={segments} grants={grants} />
-        )}
-        {tab === 'simulation' && (
-          <SimulationTab
+        {step === 'simulate' && (
+          <SimulateStep
+            key={activeConfig.id}
             segments={segments}
             dishes={dishes}
             recompletionDishes={recompletionDishes}
             baskets={baskets}
             calendar={calendar}
-            grants={grants}
+            grants={safeGrants}
             ingredients={ingredients}
             totalChefPrize={totalChefPrize}
+            findings={findings}
+            stepLabels={STEP_LABELS}
+            configKey={configKey}
+            sim={sims[activeConfig.id] ?? null}
+            onSim={(run) => setSims((prev) => ({ ...prev, [activeConfig.id]: run }))}
+            onGoTo={setStep}
           />
         )}
-        {tab === 'basket-value' && (
-          <BasketValueTab
-            dishes={dishes}
-            recompletionDishes={recompletionDishes}
-            baskets={baskets}
-            calendar={calendar}
-            totalChefPrize={totalChefPrize}
-            ingredients={ingredients}
-            segments={segments}
-            grants={grants}
-          />
+        {step === 'value' && (
+          <ValueStep key={activeConfig.id} dishes={dishes} recompletionDishes={recompletionDishes} baskets={baskets} calendar={calendar} totalChefPrize={totalChefPrize} ingredients={ingredients} segments={segments} grants={safeGrants} />
         )}
+
+        <div className="flex items-center justify-between gap-3 pt-2" data-testid="chef-step-nav">
+          {previous ? (
+            <Button variant="secondary" icon={ArrowLeft} onClick={() => setStep(previous.id)} data-testid="chef-back">
+              {previous.label}
+            </Button>
+          ) : (
+            <span />
+          )}
+          {next && (
+            <Button variant="primary" onClick={() => setStep(next.id)} data-testid="chef-next">
+              Next: {next.label} <ArrowRight size={16} />
+            </Button>
+          )}
+        </div>
       </main>
     </div>
   )

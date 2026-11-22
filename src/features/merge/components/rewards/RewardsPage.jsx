@@ -314,7 +314,7 @@ export default function RewardsPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-2.5 text-xs text-slate-600" data-testid="rewards-advanced-note">
+      <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-2.5 text-xs text-slate-600" data-testid="rewards-advanced-note" data-note>
         <span className="font-semibold text-slate-700">Advanced reward tools.</span> This page edits the same configuration as the <span className="font-semibold">Build event</span>{' '}
         tab, in detail: item syntax and values, pinned reward items, drop groups, weights and locks. Anything changed here that affects what a player collects - including
         this page&apos;s own Generate and Apply - changes rewards only. It does not rebuild main-chain queues or re-take the energy credit, so the design is marked out of date
@@ -386,7 +386,7 @@ export default function RewardsPage({
                 is played and exported; the next build starts again from the values here.
               </div>
             )}
-            <div id="reward-definitions" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div id="reward-definitions" className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
               {ALL_REWARD_TYPES.map((type) => (
                 <div key={type} className="rounded-2xl border border-slate-100 p-3" data-reward-ladder={type}>
                   <div className="font-display font-semibold text-slate-700 mb-2">
@@ -413,14 +413,16 @@ export default function RewardsPage({
                       <div key={rank} className="grid grid-cols-[2rem_1fr_1fr_6rem] gap-2 items-center">
                         <span className="text-xs text-slate-400">R{rank}</span>
                         <input
-                          className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-sm bg-white/70"
+                          className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-mono bg-white/70"
                           placeholder="Ops syntax"
+                          title={rewardChainConfig[type][rank - 1].syntax}
                           value={rewardChainConfig[type][rank - 1].syntax}
                           onChange={(e) => updateRewardRank(type, rank - 1, { syntax: e.target.value })}
                         />
                         <input
-                          className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-sm bg-white/70"
+                          className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-mono bg-white/70"
                           placeholder="Asset ID"
+                          title={rewardChainConfig[type][rank - 1].asset}
                           value={rewardChainConfig[type][rank - 1].asset}
                           onChange={(e) => updateRewardRank(type, rank - 1, { asset: e.target.value })}
                         />

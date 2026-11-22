@@ -128,7 +128,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
       bundleWith: companion ? { type: companion[0], rank: companion[1] } : null,
     })
     // A rule written here is the economist's own: the build keeps it and no
-    // longer sizes the Twister drops itself (Build event, step 4, turns that
+    // longer sizes the Twister drops itself (Build event, step 3, turns that
     // back on).
     baseList.syncRewardConfig({ dropGroups: result.dropGroups, dropGroupsConfig: result.dropGroupsConfig, twisterByBuild: false })
     setRuleFindings(result.findings)
@@ -239,7 +239,9 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
       needsGeneration: keys[i] != null && !usingDraft && (boardsNeedGeneration(seg.list.boards) || (phase === 'rc' && boardsNeedGeneration(seg.mainList.boards))),
       // What the applied cost was derived from, and whether that still holds.
       basis,
-      basisCurrent: !!basis && basis.source === (usingDraft ? 'draft' : 'applied') && basis.hash === (keys[i] ? hashOf(keys[i]) : null),
+      // (It holds when it was derived from exactly the boards selected here - whichever of the two
+      // names they were measured under: a build in use and the event in use are the same boards.)
+      basisCurrent: !!basis && basis.hash != null && basis.hash === (keys[i] ? hashOf(keys[i]) : null),
       suggestion: suggestionFresh ? s.result : null,
       suggestionStale: !!s && !suggestionFresh,
       currentCost,
@@ -407,7 +409,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
                     <GameArt asset="twister" rank={rank} size={22} /> R{rank}
                   </span>
                   <input
-                    className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-sm bg-white/70"
+                    className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-mono bg-white/70"
                     placeholder={twisterItemSyntax(ladder[rank - 1].prizeAmount ?? 0) || 'Ops item syntax'}
                     title="Left empty, the export writes the amount as shown here (dr-twister is this tool's own name, not a confirmed Ops one)"
                     aria-label={`Twister rank ${rank} item syntax`}
@@ -540,7 +542,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
             </div>
             {baseList.boards[0]?.twisterByBuild && (
               <p className="mt-2 text-xs text-amber-700" data-testid="twister-by-build-note">
-                The build sets the Twister drops for this list (Build event, step 4): it puts the Twister item into the containers and sizes it for the twists you typed.
+                The build sets the Twister drops for this list (Build event, step 3): it puts the Twister item into the containers and sizes it for the twists you typed.
                 Setting a drop here replaces that with your own fixed chance, which the build then keeps as it is.
               </p>
             )}
@@ -704,7 +706,12 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
             Enter how many spins a player should be able to afford by the checkpoint - a price cannot be derived without it. Income can still be analyzed first.
           </p>
         )}
-        <div className="mt-3 rounded-2xl bg-slate-50/70 border border-slate-100 px-4 py-3 text-xs text-slate-600 leading-relaxed" data-testid="twister-checkpoint-definition">
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-xs text-amber-900 leading-relaxed" data-testid="twister-two-clocks" data-note>
+          <span className="font-semibold">This tool and the build use two different clocks.</span> The build (Build event, step 4) sets every segment&apos;s Twister values and price so the twists are reached when the player has
+          paid 70-75% of the segment&apos;s DR demand - progress there is paid generator DR. This older tool measures income against main-chain progress (below). Use it for a closer look at the drops; the values and prices
+          of an event are the build&apos;s.
+        </div>
+        <div className="mt-3 rounded-2xl bg-slate-50/70 border border-slate-100 px-4 py-3 text-xs text-slate-600 leading-relaxed" data-testid="twister-checkpoint-definition" data-note>
           <span className="font-semibold text-slate-700">What the checkpoint measures.</span> Progress = the main-chain DR value the player has in play ÷ the DR value
           of the {phase === 'rc' ? 'rank-14' : 'rank-12'} item ({phase === 'rc' ? '8,192' : '2,048'} DR). &quot;In play&quot; counts every main-chain item the player
           can see: what the generator produced, plus subsidy once it is revealed (semi tiles when their board comes into play, blocked tiles when revealed). Value
@@ -805,7 +812,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
           </div>
         )}
 
-        <div className="mt-3 text-xs text-slate-500 leading-relaxed" data-testid="twister-run-settings">
+        <div className="mt-3 text-xs text-slate-500 leading-relaxed" data-testid="twister-run-settings" data-note>
           Checkpoint <span className="font-semibold text-slate-700">{fmt(plan.checkpointPct, 1)}%</span> of main-chain DR progress ·{' '}
           <span className="font-semibold text-slate-700">{plan.runs}</span> seeded runs per segment · seed{' '}
           <span className="font-semibold text-slate-700">{plan.seed}</span> · collection policy: the simulated player merges Twister items toward rank {REWARD_MAX_RANK},
@@ -950,7 +957,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
                               : row.basis.source === 'build'
                                 ? 'set by the build (Build event), from the twists you typed there'
                                 : row.basisCurrent
-                                ? `from this ${row.basis.source === 'draft' ? 'draft' : 'applied design'}`
+                                ? `from this ${usingDraft ? 'draft' : 'applied design'}`
                                 : row.basis.source !== (usingDraft ? 'draft' : 'applied')
                                   ? `derived from ${row.basis.source === 'draft' ? 'a draft' : 'the applied design'}, not the configuration selected here`
                                   : `from ${row.basis.source === 'draft' ? 'a draft' : 'the applied design'} that has since changed`}

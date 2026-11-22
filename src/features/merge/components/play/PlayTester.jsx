@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { PlayCircle, RotateCcw, Lock, Gamepad2, Zap, Trophy, CheckCircle2, Package, ArrowDownToLine } from 'lucide-react'
+import { PlayCircle, RotateCcw, Lock, Gamepad2, Zap, Trophy, CheckCircle2, Package } from 'lucide-react'
+import InfoHint from '../../../../components/ui/InfoHint'
 import Card from '../../../../components/ui/Card'
 import Button from '../../../../components/ui/Button'
 import RanksBar from './RanksBar'
@@ -207,7 +208,6 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
     <>
     <Card
       title="Play tester"
-      subtitle="Manually play this board with the same rules the simulator uses — a ground-truth check on whether the automatic simulation actually matches how the game should feel"
       icon={Gamepad2}
       action={
         <Button variant="secondary" size="sm" icon={RotateCcw} onClick={reset}>
@@ -218,7 +218,7 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
       {rcBlankBoards.length > 0 && (
         <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="rc-not-built">
           Recompletion is not built: Recompletion board{rcBlankBoards.length === 1 ? "" : "s"} {rcBlankBoards.join(", ")} {rcBlankBoards.length === 1 ? "has" : "have"} tiles but no items under them, so after rank
-          12 nothing will open there. Build Recompletion in Build event (step 6) and apply it (step 7), then play again.
+          12 nothing will open there. Build the event in Build event (step 4), then play again.
         </p>
       )}
       {needsGeneration ? (
@@ -305,44 +305,30 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <Lock size={11} className="text-slate-500" />
-                  Stuck — merge-into only until cleared, then fully free
-                </span>
-                <span className="text-slate-400">· drag (or click, then click a target) to move or merge a free item</span>
-              </div>
+              {/* How to play, one click away (it was three lines under every board). */}
+              <InfoHint>
+                Drag an item (or click it, then click a target) to move it or merge it. An item with a lock is stuck: it can only be merged into, and is free after that.{' '}
+                {nextBoard
+                  ? `Next wave: ${nextBoard.name} pushes in (${Math.min(nextBoard.rows, 3)} row${Math.min(nextBoard.rows, 3) === 1 ? '' : 's'}) once every blocked and semi-blocked tile of this board is cleared.`
+                  : inEndless
+                    ? 'Endless mode: the board stays as it is, and play never ends.'
+                    : 'No more boards are queued: this board gets no new waves.'}{' '}
+                Items pushed off the bottom when a new board comes in wait in the inventory, ready to place back on a free cell.
+              </InfoHint>
 
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <ArrowDownToLine size={12} className="text-slate-400 shrink-0" />
-                {nextBoard ? (
-                  <span>
-                    Next wave: <span className="font-medium text-slate-700">{nextBoard.name}</span> pushes in (
-                    {Math.min(nextBoard.rows, 3)} row{Math.min(nextBoard.rows, 3) === 1 ? '' : 's'}) once this board's
-                    blocked/semi tiles fully clear.
+              {/* The inventory shows when something is in it. */}
+              {session.inventory.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5" data-testid="play-inventory">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1">
+                    <Package size={12} strokeWidth={2.5} /> Inventory
                   </span>
-                ) : (
-                  <span>{inEndless ? 'Endless mode — the board stays as it is, and play never ends.' : "No more boards queued — this board won't get any new waves."}</span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1">
-                  <Package size={12} strokeWidth={2.5} /> Inventory
-                </span>
-                {session.inventory.length === 0 ? (
-                  <p className="text-xs text-slate-400 px-1">
-                    Empty — items pushed off the bottom when a new board comes in land here, ready to place back on
-                    a free cell.
-                  </p>
-                ) : (
                   <div className="flex flex-wrap gap-1.5 px-1">
                     {session.inventory.map((rank, i) => (
                       <InventoryChip key={i} value={rank} showDr theme={theme} onClick={() => handleInventoryClick(i)} />
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-4 flex-1 min-w-64">
@@ -363,7 +349,7 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
 
               {/* Test shortcuts: skip the climb and land in a later phase. */}
               {rcBoards && rcBoards.length > 0 && (
-                <div className="flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5" data-testid="phase-jump">
+                <div className="order-1 flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5" data-testid="phase-jump">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1">Jump ahead (test shortcut)</span>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -409,11 +395,13 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
                 </div>
               )}
 
-              <div className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1">
-                  <Trophy size={12} strokeWidth={2.5} /> Rank progress
-                </span>
-                <div className="grid grid-cols-[1fr_4rem_4rem] gap-x-2 gap-y-1 items-center text-xs px-1">
+              <details className="group order-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5" data-collapsible="play-rank-list">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1 [&::-webkit-details-marker]:hidden">
+                  <Trophy size={12} strokeWidth={2.5} /> DR spent at each rank
+                  <span className="ml-auto normal-case tracking-normal text-purple-700 group-open:hidden">Show</span>
+                  <span className="ml-auto hidden normal-case tracking-normal text-slate-400 group-open:inline">Hide</span>
+                </summary>
+                <div className="mt-1 grid grid-cols-[1fr_4rem_4rem] gap-x-2 gap-y-1 items-center text-xs px-1">
                   <div className="contents text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     <span />
                     <span className="text-right">DR</span>
@@ -439,7 +427,7 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
                     )
                   })}
                 </div>
-              </div>
+              </details>
 
               <div className="flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-50/70 p-2.5">
                 <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 px-1">
@@ -532,12 +520,12 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
               {/* The automatic simulator stops at rank 14, so there is nothing
                   to compare an endless session against. */}
               {!inEndless && !session.jumped && (
-                <Button variant="secondary" onClick={() => setCompared(compareToSimulator(session))}>
+                <Button variant="secondary" className="order-2" onClick={() => setCompared(compareToSimulator(session))}>
                   Compare to automatic simulator at {session.drSpent} DR
                 </Button>
               )}
               {compared && (
-                <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
+                <div className="order-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-1">
                   <span className="font-semibold text-slate-700">Simulator's reachedAt at this DR spend:</span>
                   {Object.keys(compared.reachedAt).length === 0 ? (
                     <span className="text-slate-400">nothing reached yet</span>
@@ -553,7 +541,7 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
                 </div>
               )}
 
-              <div className="flex flex-col gap-1 text-[11px] font-mono text-slate-500 max-h-72 overflow-y-auto bg-slate-50/70 border border-slate-100 rounded-xl p-2.5">
+              <div className="order-2 flex flex-col gap-1 text-[11px] font-mono text-slate-500 max-h-40 overflow-y-auto bg-slate-50/70 border border-slate-100 rounded-xl p-2.5">
                 {session.events
                   .slice()
                   .reverse()
@@ -564,7 +552,7 @@ export default function PlayTester({ boards, boardIndex, rcBoards }) {
         </div>
       )}
     </Card>
-    {!needsGeneration && <RewardProgressionChart events={session.events} />}
+    {!needsGeneration && <RewardProgressionChart events={session.events} hideEmpty />}
     {fx.layer}
     </>
   )

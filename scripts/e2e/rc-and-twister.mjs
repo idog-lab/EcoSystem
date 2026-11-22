@@ -71,7 +71,7 @@ const allText = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
 ok(`"Build whole event" reports Recompletion built and usable ("${(allText.match(/Recompletion: [^.]*\./) ?? [''])[0]}")`, /Recompletion: 1 segment built/.test(allText) && !/Recompletion: [^.]*needs a fix/.test(allText))
 {
   const note = page.getByTestId('effort-fit-note')
-  ok('with no effort curve typed, step 6 says the boards were simply generated', (await note.count()) === 1 && /No effort distribution was typed/.test(await note.innerText()))
+  ok('with no effort shape typed, step 4 says the boards were simply generated', (await note.count()) === 1 && /No effort shape was typed/.test(await note.innerText()))
 }
 {
   // The Normal phase's Twister table shows each segment at 70% and 75% of the phase.
@@ -81,11 +81,10 @@ ok(`"Build whole event" reports Recompletion built and usable ("${(allText.match
   const at75 = page.locator('[data-twister-price="0"] [data-mark="75"]')
   const t70 = (await at70.innerText()).replace(/\s+/g, ' ')
   const t75 = (await at75.innerText()).replace(/\s+/g, ' ')
-  ok(`step 6 shows what a typical player has at 70% ("${t70}") and at 75% ("${t75}") of the phase, in Twister DR and twists`, /\d+ DR/.test(t70) && /twist/.test(t70) && /\d+ DR/.test(t75))
+  ok(`step 6 shows the twists a typical player has at 70% ("${t70}") and at 75% ("${t75}") of the DR demand spent`, /\d+ twists?/.test(t70) && /\d+ twists?/.test(t75))
 }
 await step(page, 'finalize').click()
 await page.waitForTimeout(300)
-await page.getByTestId('finalize-apply-all').click()
 await page.waitForTimeout(800)
 await page.getByRole('button', { name: 'Save', exact: true }).click()
 await page.waitForTimeout(300)

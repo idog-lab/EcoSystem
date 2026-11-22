@@ -3,7 +3,7 @@
 // subsidy and board budgets follow. See helpers.mjs.
 // Run: npx vite-node scripts/e2e/rc-demand.mjs
 import { createBoard } from '../../src/features/merge/lib/core/board.js'
-import { createChecker, launch, openMerge, tab, SAVE_KEY } from './helpers.mjs'
+import { createChecker, launch, openMerge, tab, SAVE_KEY, showSegments } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
 const step = (page, id) => page.locator(`[data-step="${id}"]`)
@@ -16,7 +16,7 @@ const phase = async (page, label) => {
   await page.locator('[data-testid="build-scope"] button', { hasText: label }).click()
   await page.waitForTimeout(300)
 }
-const row = (page, i) => page.locator(`[data-setup-segment="${i}"]`)
+const row = (page, i) => page.locator(`[data-testid="setup-segments"] [data-setup-segment="${i}"]`)
 const num = (text) => Number(String(text).replace(/[^0-9.-]/g, ''))
 
 {
@@ -24,6 +24,7 @@ const num = (text) => Number(String(text).replace(/[^0-9.-]/g, ''))
   await openMerge(page)
   await step(page, 'setup').click()
   await page.waitForTimeout(200)
+  await showSegments(page, 3)
 
   // Three Recompletion boards, before any amount exists.
   await phase(page, 'Recompletion')
@@ -91,7 +92,8 @@ const num = (text) => Number(String(text).replace(/[^0-9.-]/g, ''))
   await step(page, 'setup').click()
   await phase(page, 'Recompletion')
   ok('an older save with its own Recompletion amount is brought in line with the normal demand (500 -> 5,644 DR)', (await row(page, 0).locator('[data-field="demand"]').inputValue()) === '500' && num(await row(page, 0).locator('[data-field="subsidy-needed"]').innerText()) === 5644)
-  const cells = await row(page, 0).locator('input[type="number"]').evaluateAll((els) => els.map((e) => e.value))
+  // (The demand is in the main table, the boards' budgets in the folded one under it.)
+  const cells = await page.locator('[data-setup-segment="0"] input[type="number"]').evaluateAll((els) => els.map((e) => e.value))
   ok(`its typed board budgets are kept; the last board closes the gap (${cells.slice(1, 4).join(' + ')})`, cells[1] === '150' && cells[2] === '1000' && cells[3] === '4494')
   ok('older save: zero page errors', errors.length === 0)
   await browser.close()
