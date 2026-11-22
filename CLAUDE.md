@@ -720,8 +720,11 @@ has them), never use merged cells, keep row order. `exceljs` for styling;
 Google Sheets via a browser OAuth token, values only, `RAW` input. The
 economist's live reference spreadsheet is the authority on format. Reward
 keys in queue/layout cells and every V2 / Twister / Endless tab are
-unverified and labelled so. The Twister rows of Small Rewards are written
-`[dynamic(dr-twister:value)]` when no syntax was typed (`twisterSyntaxFor`;
+unverified and labelled so. The Twister rows of Small Rewards and of V2
+Reward Chain are written `[dynamic(dr-twister:value)]` when no syntax was
+typed (`twisterSyntaxFor` - V2 Reward Chain left them blank until the
+economist saw it: "we are missing in the config the twister value in the
+reward chain";
 `dr-twister` is our own name), and a typed one-amount syntax follows the
 values the build sizes (`syntaxWithAmount`). Open questions on the Small Rewards sheets
 (literal coins vs allowance, which extra tabs belong) were asked and not yet

@@ -229,7 +229,11 @@ const twisterSheet = await page.locator('table').first().innerText()
 ok('V2 Twister lists this segment\'s cost as runtime and the targets as design metadata', twisterSheet.includes('Runtime - segment-specific') && twisterSheet.includes('DR cost per spin') && twisterSheet.includes(String(sug0)) && twisterSheet.includes('Design metadata - not runtime') && twisterSheet.includes('Target spins by the checkpoint'))
 await syntaxView(page, 'V2 Reward Chain')
 await page.waitForTimeout(200)
-ok('the shared Twister ladder is exported with the reward definitions', (await page.locator('table').first().innerText()).includes('dr-twister-r4'))
+{
+  const chainRows = await page.locator('table').first().locator('tr').allInnerTexts()
+  const twisterRows = chainRows.filter((t) => t.includes('dr-twister-r'))
+  ok(`the shared Twister ladder is exported with the reward definitions, each rank with its syntax (${twisterRows.map((t) => t.match(/\[dynamic\([^\]]*\]|my-[^\s]*/)?.[0] ?? 'NO SYNTAX').join(' ')})`, twisterRows.length >= 4 && twisterRows.every((t) => /dynamic\(dr-twister:\d|\S+:\d/.test(t.split('\t')[4] ?? t)) && twisterRows.some((t) => t.includes('dr-twister-r4')))
+}
 await syntaxView(page, 'V2 Drop Groups')
 await page.waitForTimeout(200)
 ok('the shared Twister drop is exported with the drop groups', /Twister DR rank/.test(await page.locator('table').first().innerText()) && (await page.locator('table').first().innerText()).includes('Twister DR R2'))

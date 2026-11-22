@@ -324,12 +324,15 @@ export function buildV2RewardChainSheet(boards, recompletionBoards = [], recompl
     const cells = []
     // Twister DR's ladder is listed with the other definitions (it is a
     // shared reward definition); its rows are drop-only items and its key is
-    // never written in a queue or layout cell.
+    // never written in a queue or layout cell. Its syntax is the one typed,
+    // else its amount in the other rewards' pattern - as on the Small Rewards
+    // sheet (twisterSyntaxFor). Nobody types one, so it used to be blank here.
     for (const type of ALL_REWARD_TYPES) {
       for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) {
         const entry = config[type]?.[rank - 1]
         if (!entry) continue
-        cells.push([REWARD_TYPE_LABELS[type], rank, smallRewardKey(type, rank), entry.syntax, entry.asset ?? '', entry.prizeAmount])
+        const syntax = type === TWISTER_TYPE ? twisterSyntaxFor(entry) : entry.syntax
+        cells.push([REWARD_TYPE_LABELS[type], rank, smallRewardKey(type, rank), syntax, entry.asset ?? '', entry.prizeAmount])
       }
     }
     const same = blocks.find((b) => JSON.stringify(b.cells) === JSON.stringify(cells))

@@ -390,6 +390,12 @@ console.log('--- 4g. The Twister rows of the Small Rewards sheet carry their amo
   const typed = JSON.parse(JSON.stringify(board))
   typed.rewardChainConfig[TWISTER_TYPE][3].syntax = 'my-twister:30'
   check('a syntax typed by hand is kept as typed', rowsOf(typed)[3][1] === 'my-twister:30')
+  // The V2 Reward Chain sheet writes the Twister the same way (its syntax cells were blank).
+  const { buildV2RewardChainSheet } = await import('../../src/features/merge/lib/export/eventSheets.js')
+  const chainOf = (b) => buildV2RewardChainSheet([b]).rows.map((r) => r.cells).filter((c) => c[1] === 'Twister DR')
+  const chain = chainOf(board)
+  check(`the reward chain writes each Twister rank with its amount (${chain.map((c) => c[4]).join(' ')})`, chain.length === 4 && chain.map((c) => c[4]).join() === rows.map((r) => r[1]).join() && chain.map((c) => c[6]).join() === '2,5,12,30')
+  check('...and a syntax typed by hand as typed there too', chainOf(typed)[3][4] === 'my-twister:30')
   check('a syntax holding one amount follows a new value (the build resizing the Twister)', syntaxWithAmount('[dynamic(dr-twister:30)]', 165) === '[dynamic(dr-twister:165)]' && syntaxWithAmount('a:1+b:2', 5) === 'a:1+b:2')
 }
 

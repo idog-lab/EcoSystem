@@ -7466,3 +7466,15 @@ segment, and a segment the build gives exactly the typed values has none (the
 same fact that made a segment lose its values in the round before). It only
 shows on a draw where that happens - the suite had passed three times that
 day. The check now reads the typed values for such a segment.
+
+## The Twister's syntax in the V2 Reward Chain sheet
+
+Economist: "it looks like we are missing in the config the twister value in the
+reward chain." The V2 Reward Chain sheet wrote each rank's typed syntax as it
+was. Nobody types one for the Twister (its values come from the build), so its
+four "Item syntax" cells were blank, while the Small Rewards sheet already
+wrote them as `[dynamic(dr-twister:N)]`. The reward chain now uses the same
+`twisterSyntaxFor`: the typed syntax, else the amount in that pattern
+(`dr-twister` is still this app's own, unverified name). The amounts in the
+"Prize amount" column were always there; nothing in the economy changed.
+Held by verify-containers and twister-workflow.
