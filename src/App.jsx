@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { setEffortTargetForBuild } from './features/merge/lib/build/eventBuild'
-import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer, Menu, Info, Plus } from 'lucide-react'
+import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer, Menu, Info, Plus, CalendarDays } from 'lucide-react'
 import BoardList from './features/merge/components/editor/BoardList'
 import BoardEditor from './features/merge/components/editor/BoardEditor'
 import PlayTester from './features/merge/components/play/PlayTester'
@@ -20,6 +20,8 @@ import { RC_MIN_RANK_UNDER_TILES, RC_FIRST_BOARD_SUBSIDY_CAP_DR, createBoard, in
 import { rcSubsidyForMainSubsidy, spreadSubsidy, fillLastBoard } from './features/merge/lib/core/subsidyBudget'
 import { useBoardListState } from './features/merge/lib/state/useBoardListState'
 import { loadState, saveState, clearState } from './features/merge/lib/state/persistence'
+import { listSavedEvents, saveEvent, loadEvent, renameEvent, deleteEvent, openEventId, setOpenEventId } from './features/merge/lib/state/savedEvents'
+import SavedEventsPanel from './features/merge/components/SavedEventsPanel'
 import { DEFAULT_TARGET_EV } from './features/merge/lib/core/luckyDrop'
 import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from './features/merge/lib/core/generatorTier'
 import { encodeStage, decodeStage, MAX_SAFE_STAGE_CHARS } from './features/merge/lib/share/stageShare'
@@ -1361,6 +1363,60 @@ function EditorApp({ onHome }) {
     setSavedAt(new Date())
   }
 
+  // SAVED EVENTS (savedEvents.js): whole events kept in this browser, named by
+  // their dates. Saving one also saves the project as Save does, so "Unsaved
+  // changes" means changed since the last save of either kind.
+  const [savedEventsShown, setSavedEventsShown] = useState(false)
+  const [savedEvents, setSavedEvents] = useState(() => listSavedEvents())
+  const [openSavedId, setOpenSavedId] = useState(() => openEventId())
+  const [savedEventsMessage, setSavedEventsMessage] = useState(null)
+  const eventDates = { startDate: segments[0].eventStartDate ?? null, days: segments[0].eventDurationDays ?? null }
+  function storeEvent({ id = null, name }) {
+    const result = saveEvent({ id, name, ...eventDates, payload: backupPayload() })
+    if (!result.ok) {
+      setSavedEventsMessage({ ok: false, text: result.message })
+      return
+    }
+    handleSave()
+    setOpenEventId(result.event.id)
+    setOpenSavedId(result.event.id)
+    setSavedEvents(listSavedEvents())
+    setSavedEventsMessage({ ok: true, text: id ? `"${result.event.name}" is updated.` : `Saved as "${result.event.name}".` })
+  }
+  function openSavedEvent(event) {
+    if (unsaved && !window.confirm(`Open "${event.name}"?\n\nIt replaces what is open now, which has changes that are not saved. To keep them, close this and save first.`)) return
+    const payload = loadEvent(event.id)
+    if (!payload || !applyBackup(payload)) {
+      setSavedEventsMessage({ ok: false, text: `"${event.name}" could not be read. Nothing was changed.` })
+      return
+    }
+    // What was opened is the project now, as if it had just been saved.
+    saveState({ leftoverRule: payload.leftoverRule, segments: payload.segments })
+    savedSignature.current = null
+    setUnsaved(false)
+    setSavedAt(null)
+    setOpenEventId(event.id)
+    setOpenSavedId(event.id)
+    setSavedEventsMessage({ ok: true, text: `"${event.name}" is open.` })
+  }
+  function deleteSavedEvent(event) {
+    if (!window.confirm(`Delete "${event.name}" from the saved events?\n\nIt cannot be brought back unless you downloaded it as a file.${event.id === openSavedId ? ' What is open now stays open.' : ''}`)) return
+    deleteEvent(event.id)
+    if (event.id === openSavedId) setOpenSavedId(null)
+    setSavedEvents(listSavedEvents())
+    setSavedEventsMessage({ ok: true, text: `"${event.name}" is deleted.` })
+  }
+  function downloadSavedEvent(event) {
+    const payload = loadEvent(event.id)
+    if (!payload) {
+      setSavedEventsMessage({ ok: false, text: `"${event.name}" could not be read.` })
+      return
+    }
+    // "August - test A" -> "August-test-A.json"
+    downloadPayload(payload, `${event.name.replace(/[^\w]+/g, ' ').trim().replace(/\s+/g, '-') || 'merge-mania-event'}.json`)
+  }
+  const openSavedEvent_ = savedEvents.find((e) => e.id === openSavedId) ?? null
+
   // Encodes the current (main) board list into the URL and copies a
   // shareable player link - recompletion boards aren't part of a shared
   // player stage, only the main list is. The recipient's browser never
@@ -1495,22 +1551,28 @@ function EditorApp({ onHome }) {
   // file, same shape handleSave writes (buildSaveShape) since they're
   // already saved together. This is ADDITIONAL to handleSave/localStorage,
   // not a replacement for it.
-  function handleExportBackup() {
-    // Besides the project: the drafts waiting in Build event and the effort
-    // shape typed in step 4 (both live outside the project save), so a file
-    // sent to reproduce an issue opens on the same draft, not on a new build.
-    const payload = {
+  // Besides the project: the drafts waiting in Build event and the effort
+  // shape typed in step 4 (both live outside the project save), so a file
+  // sent to reproduce an issue opens on the same draft, not on a new build.
+  // A saved event (Saved events, in the "More" menu) holds exactly this too.
+  function backupPayload() {
+    return {
       ...buildSaveShape(segments),
       ...(buildDrafts.main || buildDrafts.rc ? { buildDrafts: JSON.parse(serializeDrafts({ drafts: buildDrafts, validation: buildValidation })) } : {}),
       effortTargets: { main: mainTargetPctInputs, rc: recompletionTargetPctInputs },
     }
+  }
+  function downloadPayload(payload, fileName) {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `merge-mania-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = fileName
     a.click()
     URL.revokeObjectURL(url)
+  }
+  function handleExportBackup() {
+    downloadPayload(backupPayload(), `merge-mania-backup-${new Date().toISOString().slice(0, 10)}.json`)
   }
 
   // Reads a file produced by handleExportBackup (current 4-segment shape, OR
@@ -1527,11 +1589,20 @@ function EditorApp({ onHome }) {
       setImportError('That file looks invalid or corrupted - it could not be read as backup JSON. Nothing was changed.')
       return
     }
-    const imported = segmentsFromPersisted(parsed)
-    if (!imported) {
+    if (!applyBackup(parsed)) {
       setImportError('That file looks invalid or corrupted - it does not contain any segment/board data. Nothing was changed.')
       return
     }
+    // What is open now came from a file, not from the list of saved events.
+    setOpenEventId(null)
+    setOpenSavedId(null)
+  }
+
+  // Puts the contents of a backup (a file, or a saved event) on screen.
+  // False, and nothing changed, when it holds no segment data.
+  function applyBackup(parsed) {
+    const imported = segmentsFromPersisted(parsed)
+    if (!imported) return false
 
     segments.forEach((seg, i) => {
       const data = imported[i]
@@ -1575,6 +1646,7 @@ function EditorApp({ onHome }) {
       set(blank)
     }
     setImportError(null)
+    return true
   }
 
   function handleImportChange(e) {
@@ -1604,6 +1676,8 @@ function EditorApp({ onHome }) {
     // The way back: what is being cleared, as a backup file.
     handleExportBackup()
     clearState()
+    setOpenEventId(null)
+    setOpenSavedId(null)
     // What is left after clearing is the new starting point, not an unsaved change.
     savedSignature.current = null
     segments.forEach((seg, i) => {
@@ -1652,6 +1726,11 @@ function EditorApp({ onHome }) {
             <h1 className="font-display text-lg font-bold text-slate-900 leading-tight tracking-tight whitespace-nowrap">Merge Mania Board Simulator</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {openSavedEvent_ && (
+              <button type="button" onClick={() => { setSavedEventsMessage(null); setSavedEventsShown(true) }} className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-purple-700 whitespace-nowrap hover:bg-purple-50" title="The saved event open now - click for the list" data-testid="open-event-name">
+                <CalendarDays size={13} /> {openSavedEvent_.name}
+              </button>
+            )}
             {unsaved ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 whitespace-nowrap" data-testid="unsaved-changes" title="The project is kept in this browser only when you press Save">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
@@ -1670,6 +1749,9 @@ function EditorApp({ onHome }) {
               {moreOpen && (
                 <div className="absolute right-0 top-full z-40 mt-2 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-purple-950/10" data-testid="more-menu-panel">
                   <div className="px-2.5 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Project</div>
+                  <MenuItem icon={CalendarDays} onClick={fromMenu(() => { setSavedEvents(listSavedEvents()); setSavedEventsMessage(null); setSavedEventsShown(true) })} title="Whole events kept in this browser, by their dates: save this one, open another" data-testid="saved-events-toggle">
+                    Saved events
+                  </MenuItem>
                   <MenuItem icon={planCopied ? Check : Eye} onClick={fromMenu(handleSharePlan)} title="A read-only link for coworkers to see every segment's design and run the full simulator — no editing">
                     Share planning
                   </MenuItem>
@@ -1775,6 +1857,22 @@ function EditorApp({ onHome }) {
         </div>
       </header>
 
+      {savedEventsShown && (
+        <SavedEventsPanel
+          events={savedEvents}
+          openId={openSavedId}
+          current={eventDates}
+          unsaved={unsaved}
+          message={savedEventsMessage}
+          onSaveNew={(name) => storeEvent({ name })}
+          onUpdate={() => storeEvent({ id: openSavedId, name: openSavedEvent_?.name })}
+          onOpen={openSavedEvent}
+          onRename={(id, name) => { renameEvent(id, name); setSavedEvents(listSavedEvents()) }}
+          onDownload={downloadSavedEvent}
+          onDelete={deleteSavedEvent}
+          onClose={() => setSavedEventsShown(false)}
+        />
+      )}
       {backupInfo && (
         <div className="mx-auto mt-2 mb-2 flex max-w-5xl flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-sm" data-testid="backup-contents">
           <div className="min-w-[16rem] flex-1 leading-relaxed">

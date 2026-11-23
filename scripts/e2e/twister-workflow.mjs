@@ -235,7 +235,7 @@ await page.waitForTimeout(200)
   const rewardRows = await page.locator('table').first().locator('tr').allInnerTexts()
   const twisterRows = rewardRows.filter((t) => t.includes('dr-twister-r'))
   ok(`the Twister ladder is exported on Small Rewards, each rank with its syntax (${twisterRows.map((t) => t.match(/\[dynamic\([^\]]*\]|my-[^\s]*/)?.[0] ?? 'NO SYNTAX').join(' ')})`, twisterRows.length === 4 && twisterRows.every((t) => /dynamic\(dr-twister:\d|\S+:\d/.test(t)))
-  ok('...and each with its asset, merge-config-twister-v3', twisterRows.every((t) => t.includes('merge-config-twister-v3')))
+  ok('...and each with its asset, merge-config-twister-v2', twisterRows.every((t) => t.includes('merge-config-twister-v2')))
 }
 await syntaxView(page, 'Small Rewards Bank')
 await page.waitForTimeout(200)

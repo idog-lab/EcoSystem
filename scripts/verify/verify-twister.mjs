@@ -103,7 +103,7 @@ check('Twister is NOT one of the four source-allocated resources', !REWARD_TYPES
 check('Twister is labelled distinctly from merge energy', REWARD_TYPE_LABELS.twister === 'Twister DR' && REWARD_TYPE_LABELS.energy === 'Merge Energy' && smallRewardKey(TWISTER_TYPE, 2) === 'dr-twister-r2' && smallRewardKey('energy', 2) === 'dr-r2')
 {
   const fresh = createRewardChainConfig()
-  check('a fresh Twister ladder has no syntax or value invented; its asset is the one the economist gave (merge-config-twister-v3)', fresh.twister.every((r) => r.syntax === '' && r.asset === 'merge-config-twister-v3' && r.prizeAmount === 0) && !twisterIsConfigured(fresh))
+  check('a fresh Twister ladder has no syntax or value invented; its asset is the one the economist gave (merge-config-twister-v2)', fresh.twister.every((r) => r.syntax === '' && r.asset === 'merge-config-twister-v2' && r.prizeAmount === 0) && !twisterIsConfigured(fresh))
   const { twister: _t, ...legacy } = createRewardChainConfig()
   legacy.coins[2].prizeAmount = 4242
   const ensured = ensureRewardChainConfig(legacy)

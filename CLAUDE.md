@@ -550,8 +550,8 @@ should take me to the top part of the page and not make me scroll up").
 **The header** (economist: "the app is very heavy in text and buttons"; of the
 advanced tools: "i use only the builder as for the last runs"): the three
 tools of the main path (Build event, Play tester, Syntax), Share stage, Save,
-and one **"More" menu** holding the project actions (Share planning, Export
-backup, Import backup, What a backup holds, Clear data) and the five advanced
+and one **"More" menu** holding the project actions (Saved events, Share planning,
+Export backup, Import backup, What a backup holds, Clear data) and the five advanced
 tools. An advanced tool that is open shows as a tab while it is open. Every
 tool works on the same state. Do not put a project action or an advanced tool
 back in the bar.
@@ -717,7 +717,7 @@ Bank and Weights are one table for all). **Removed: V2 Reward Chain, V2 Drop
 Groups, V2 Economy, V2 Twister** - so **the price of a twist is not in the
 output** (it was only on "V2 Twister"; it is on screen and travels in a stage
 link). The assets are on Small Rewards (economist: "in the small rewards page
-is where we should see the asset"); the Twister's is `merge-config-twister-v3`
+is where we should see the asset"); the Twister's is `merge-config-twister-v2` (every other asset is v3)
 on all four ranks (`TWISTER_ASSET`; economist, with a picture of their sheet:
 "we are missing the assets of the twister"), filled in on opening a project
 saved without it, an asset typed kept. The builders of the removed pages are kept in
@@ -834,6 +834,22 @@ same draft; "What a backup holds" in the "More" menu says so. Import restores th
 data downloads a backup first**, so it can be undone. Older shapes migrate
 through `segmentsFromPersisted` (a pre-segment save lands on Segment 1, an
 older second Recompletion list is kept for explicit recovery).
+
+**Saved events** (economist: "i want to be able to save full events in the
+app ... like to save the events in the specific time frame"; asked, and chose
+"This browser" and "By dates, newest first"). "Saved events" in the "More"
+menu: a list of whole events, each holding exactly what a backup file holds
+(`backupPayload` in App.jsx), kept compressed in this browser
+(`lib/state/savedEvents.js`: an index under `merge-mania-saved-events`, one
+key per event, the open one under `merge-mania-saved-event-open`). A new
+event is named from its dates ("Merge Mania 19-25 Aug 2026", editable); the
+list is sorted by start date, newest first, events with no dates last. Save
+as new, Update the open one, Open (asks first when there are unsaved
+changes; it is then the project, as if just saved), Rename, Download as a
+backup file, Delete (asks). Saving an event also does what Save does. The
+header names the event open. The browser gives the site a few MB in all:
+when it is full, saving says so and nothing is overwritten. Held by
+`scripts/e2e/saved-events.mjs`.
 
 ## Open questions (do not resolve silently)
 

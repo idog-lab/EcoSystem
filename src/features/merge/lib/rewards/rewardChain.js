@@ -184,9 +184,10 @@ const REFERENCE_REWARD_CHAIN_SEED = {
 // tab; until then Twister items are worth nothing and the Twister workflow
 // says it is not configured.
 // The Twister's asset, given by the economist (a picture of their sheet:
-// "we are missing the assets of the twister" - merge-config-twister-v3 on
-// all four ranks). Its syntax and values stay the build's / the economist's.
-export const TWISTER_ASSET = 'merge-config-twister-v3'
+// "we are missing the assets of the twister" - on all four ranks). It stays
+// v2 while the others are v3 (economist: "the twister should have v2 and not
+// v3"). Its syntax and values stay the build's / the economist's.
+export const TWISTER_ASSET = 'merge-config-twister-v2'
 export function createRewardChainConfig() {
   const config = {}
   for (const type of REWARD_TYPES) config[type] = createRewardTypeConfig(REFERENCE_REWARD_CHAIN_SEED[type])
@@ -218,8 +219,13 @@ export function ensureRewardChainConfig(config) {
     if (next === config) next = { ...config }
     next[TWISTER_TYPE] = next[TWISTER_TYPE].map((r) => (String(r?.asset ?? '').trim() ? r : { ...r, asset: TWISTER_ASSET }))
   }
-  // THE ASSETS ARE V3 (economist: "all should ve v3"). An asset saved as one of
-  // the old v2 names becomes its v3 name; any other asset typed is kept.
+  // THE ASSETS ARE V3 (economist: "all should ve v3") - but the Twister's is
+  // v2 ("the twister should have v2 and not v3"). An asset saved as one of the
+  // old names becomes the right one; any other asset typed is kept.
+  if ((next[TWISTER_TYPE] ?? []).some((r) => r?.asset === 'merge-config-twister-v3')) {
+    if (next === config) next = { ...config }
+    next[TWISTER_TYPE] = next[TWISTER_TYPE].map((r) => (r?.asset === 'merge-config-twister-v3' ? { ...r, asset: TWISTER_ASSET } : r))
+  }
   for (const type of ALL_REWARD_TYPES) {
     if (!(next[type] ?? []).some((r) => OLD_V2_ASSETS.has(r?.asset))) continue
     if (next === config) next = { ...config }
@@ -228,7 +234,7 @@ export function ensureRewardChainConfig(config) {
   return next
 }
 
-const OLD_V2_ASSETS = new Set(['coin', 'dr', 'puzzle', 'mfcharm', 'twister'].map((name) => `merge-config-${name}-v2`))
+const OLD_V2_ASSETS = new Set(['coin', 'dr', 'puzzle', 'mfcharm'].map((name) => `merge-config-${name}-v2`))
 
 const OLD_CHARM_R2_SEED = { syntax: 'free_undo:1+[dynamic(dr-mf-charm:4)]+free_entry:1', prizeAmount: 4 }
 

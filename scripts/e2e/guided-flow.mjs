@@ -56,7 +56,7 @@ console.log('--- 1. The first look: the main path, the steps, what a step is for
   ok(`the header holds the three tools of the main path, Share stage, Save and one "More" menu (${modes})`, modes === 'build:no play:no syntax:no' && (await page.getByTestId('more-menu').isVisible()) && (await page.getByTestId('advanced-tools-label').count()) === 0 && (await page.locator('header').getByRole('button').count()) <= 11)
   await openMore(page)
   const inMenu = await page.getByTestId('more-menu-panel').getByRole('button').evaluateAll((els) => els.map((e) => e.innerText.trim()).join(' | '))
-  ok(`...the project actions and the five advanced tools are in that menu (${inMenu})`, inMenu === 'Share planning | Export backup | Import backup | What a backup holds | Clear data | Editor | Recompletion | Rewards (V2) | Twister | CC management' && (await page.getByTestId('advanced-tools-label').isVisible()))
+  ok(`...the project actions and the five advanced tools are in that menu (${inMenu})`, inMenu === 'Saved events | Share planning | Export backup | Import backup | What a backup holds | Clear data | Editor | Recompletion | Rewards (V2) | Twister | CC management' && (await page.getByTestId('advanced-tools-label').isVisible()))
   await page.keyboard.press('Escape')
   await page.waitForTimeout(150)
   const bar = await page.locator('[data-segment-tab]').count()

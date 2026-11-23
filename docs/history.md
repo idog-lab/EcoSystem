@@ -7538,3 +7538,22 @@ now v3 - merge-config-coin-v3, -dr-v3, -puzzle-v3, -mfcharm-v3, -twister-v3
 (the reference example still says v2; the economist's answer wins). A project
 saved with the v2 names opens with v3 (`ensureRewardChainConfig`,
 `OLD_V2_ASSETS`); any other asset typed is kept.
+
+**The Twister stays v2.** Economist: "the twister should have v2 and not v3".
+The Twister's asset is merge-config-twister-v2; coin, dr, puzzle and mfcharm
+stay v3. A project saved with merge-config-twister-v3 (possible for the few
+minutes the earlier deploy was live) opens with v2.
+
+## Saved events
+
+Economist: "i want to be able to save full events in the app. is it possible?
+like to save the events in the specific time frame". Asked where they should
+live and how they are found; chose "This browser" and "By dates, newest
+first". "Saved events" in the "More" menu is a list of whole events, each
+holding exactly what a backup file holds, kept compressed in this browser
+(`lib/state/savedEvents.js`), named from the event's dates and sorted newest
+first. Save as new, Update the open one, Open (asks first over unsaved
+changes), Rename, Download as a backup file, Delete. The header names the
+event open. The browser's room is a few MB in all: when it is full, saving
+says so and overwrites nothing. Held by `scripts/e2e/saved-events.mjs`
+(12 checks).

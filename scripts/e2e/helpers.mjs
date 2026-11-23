@@ -125,7 +125,7 @@ export async function openMerge(page) {
 // What sits in the header's "More" menu: the project actions and the five
 // advanced tools. A click on one of them opens the menu first when it is not
 // in sight (an advanced tool that is open shows as a tab of its own).
-const IN_MORE_MENU = new Set(['Share planning', 'Export backup', 'Import backup', 'Clear data', 'What a backup holds', 'Editor', 'Recompletion', 'Rewards (V2)', 'Twister', 'CC management'])
+const IN_MORE_MENU = new Set(['Saved events', 'Share planning', 'Export backup', 'Import backup', 'Clear data', 'What a backup holds', 'Editor', 'Recompletion', 'Rewards (V2)', 'Twister', 'CC management'])
 export async function openMore(page) {
   if (!(await page.getByTestId('more-menu-panel').isVisible())) await page.getByTestId('more-menu').click()
   await page.getByTestId('more-menu-panel').waitFor({ state: 'visible', timeout: 10000 })

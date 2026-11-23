@@ -394,17 +394,17 @@ console.log('--- 4g. The Twister rows of the Small Rewards sheet carry their amo
   const typed = JSON.parse(JSON.stringify(board))
   typed.rewardChainConfig[TWISTER_TYPE][3].syntax = 'my-twister:30'
   check('a syntax typed by hand is kept as typed', rowsOf(typed)[3][1] === 'my-twister:30')
-  // The Twister's asset (economist: "we are missing the assets of the twister" - merge-config-twister-v3).
+  // The Twister's asset (economist: "we are missing the assets of the twister" - merge-config-twister-v2).
   const { ensureRewardChainConfig } = await import('../../src/features/merge/lib/rewards/rewardChain.js')
-  check(`each Twister rank is written with its asset (${rows.map((r) => r[2]).join(' ')})`, rows.every((r) => r[2] === 'merge-config-twister-v3'))
+  check(`each Twister rank is written with its asset (${rows.map((r) => r[2]).join(' ')})`, rows.every((r) => r[2] === 'merge-config-twister-v2'))
   const savedBlank = { ...board.rewardChainConfig, [TWISTER_TYPE]: board.rewardChainConfig[TWISTER_TYPE].map((r, i) => ({ ...r, asset: i === 3 ? 'my-asset' : '' })) }
   const opened = ensureRewardChainConfig(savedBlank)[TWISTER_TYPE].map((r) => r.asset)
-  check(`a project saved before it gets the asset when opened, and an asset typed is kept (${opened.join(' ')})`, opened.join() === 'merge-config-twister-v3,merge-config-twister-v3,merge-config-twister-v3,my-asset')
+  check(`a project saved before it gets the asset when opened, and an asset typed is kept (${opened.join(' ')})`, opened.join() === 'merge-config-twister-v2,merge-config-twister-v2,merge-config-twister-v2,my-asset')
   // Economist: "all should ve v3". A project saved with the v2 names opens with v3; another asset typed is kept.
-  const v2Saved = Object.fromEntries(Object.entries(board.rewardChainConfig).map(([type, ladder]) => [type, ladder.map((r, i) => ({ ...r, asset: type === 'puzzles' && i === 3 ? 'my-puzzle' : r.asset.replace(/-v3$/, '-v2') }))]))
+  const v2Saved = Object.fromEntries(Object.entries(board.rewardChainConfig).map(([type, ladder]) => [type, ladder.map((r, i) => ({ ...r, asset: type === 'puzzles' && i === 3 ? 'my-puzzle' : r.asset.replace(/-v3$/, '-v2').replace('twister-v2', 'twister-v3') }))]))
   const v3 = ensureRewardChainConfig(v2Saved)
   const assetsOf = (config) => ['coins', 'energy', 'puzzles', 'charms', TWISTER_TYPE].map((t) => [...new Set(config[t].map((r) => r.asset))].join('/')).join(' ')
-  check(`every asset is v3; a project saved with the v2 names opens with v3, another asset typed is kept (${assetsOf(v2Saved)} -> ${assetsOf(v3)})`, assetsOf(board.rewardChainConfig) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3 merge-config-mfcharm-v3 merge-config-twister-v3' && assetsOf(v3) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3/my-puzzle merge-config-mfcharm-v3 merge-config-twister-v3')
+  check(`every asset is v3; a project saved with the v2 names opens with v3, another asset typed is kept (${assetsOf(v2Saved)} -> ${assetsOf(v3)})`, assetsOf(board.rewardChainConfig) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3 merge-config-mfcharm-v3 merge-config-twister-v2' && assetsOf(v3) === 'merge-config-coin-v3 merge-config-dr-v3 merge-config-puzzle-v3/my-puzzle merge-config-mfcharm-v3 merge-config-twister-v2')
   // The V2 Reward Chain sheet writes the Twister the same way (its syntax cells were blank).
   const { buildV2RewardChainSheet } = await import('../../src/features/merge/lib/export/eventSheets.js')
   const chainOf = (b) => buildV2RewardChainSheet([b]).rows.map((r) => r.cells).filter((c) => c[1] === 'Twister DR')
