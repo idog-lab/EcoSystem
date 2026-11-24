@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs'
 import { buildGeneratorTiers, DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from '../core/generatorTier'
 import { computeProbs, DEFAULT_TARGET_EV } from '../core/luckyDrop'
 import { MIN_RANK, MAX_RANK, RC_MAX_RANK } from '../core/ranks'
-import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_TYPE_LABELS, REWARD_MAX_RANK, smallRewardKey, decodeReward, twisterSyntaxFor, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
+import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_TYPE_LABELS, REWARD_MAX_RANK, smallRewardKey, decodeReward, twisterSyntaxFor, syntaxForValue, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { targetSpinsForSegment } from '../rewards/twisterEconomy'
 import { containersOfBoards, containersOfEvent, modelContainers } from '../rewards/containers'
 import { endlessOfDesign, ENDLESS_DROP_RANK_SHIFT, ENDLESS_DROP_VALUE_MULTIPLIER, ENDLESS_COIN_ENERGY_SHARE } from '../rewards/endlessMode'
@@ -532,7 +532,8 @@ export function buildSmallRewardsSheet(boards, recompletionBoards = []) {
   for (const type of [...order, ...REWARD_TYPES.filter((t) => !order.includes(t))]) {
     for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) {
       const entry = config[type][rank - 1]
-      rows.push({ cells: [smallRewardKey(type, rank), entry.syntax, entry.asset] })
+      // (The text carries the value the game pays - see rewardChain.js: syntaxForValue.)
+      rows.push({ cells: [smallRewardKey(type, rank), syntaxForValue(type, entry).syntax, entry.asset] })
     }
   }
   // The Twister item is not in that example. When this list's containers
@@ -547,7 +548,7 @@ export function buildSmallRewardsSheet(boards, recompletionBoards = []) {
   if (dropsTwister && Array.isArray(config.twister)) {
     for (let rank = 1; rank <= REWARD_MAX_RANK; rank++) {
       const entry = config.twister[rank - 1] ?? {}
-      rows.push({ cells: [smallRewardKey('twister', rank), twisterSyntaxFor(entry), entry.asset ?? ''] })
+      rows.push({ cells: [smallRewardKey('twister', rank), twisterSyntaxFor({ ...entry, syntax: syntaxForValue(TWISTER_TYPE, entry).syntax }), entry.asset ?? ''] })
     }
   }
   return { columns: SMALL_REWARDS_COLUMNS, rows }

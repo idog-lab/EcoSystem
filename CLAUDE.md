@@ -34,10 +34,35 @@ When this file and the history disagree, this file wins.
 - Artwork is prototype concept art made by the economist, not studio artwork.
 - `src/features/chef` and `src/features/diamondMine` are separate features
   that share only `src/components/` and `src/lib/`. Leave them alone unless
-  asked. **Chef has its own description, `docs/chef-overview.md`** - its
-  model, its five-step flow, its checks and its known limits: read it before
-  a Chef task. Its model is the economist's the way the Merge economy is: a
-  suspected flaw is measured, said on screen and written down, not fixed.
+  asked. **Chef has its own description, `docs/chef-overview.md`** - the
+  confirmed rules of the event, the rule engine, its six-step flow, its
+  checks and what is not settled: read it before a Chef task. Chef was
+  rebuilt ("Chef rebuild, build 01": an accurate event model and simulator,
+  on a brief the economist approved; a reference chef is a separate copy
+  completed by the economist against a list of what it still needs, and the
+  synthetic example is made up and labelled so). **Build 02 exists: step 4,
+  "Proposal"** (`lib/chefGenerator.js`, `ProposalStep.jsx`) - the economist
+  says what may change, the tool searches recipe quantities, basket weights
+  and threshold schedules on the real engine, checks the best one and the
+  current event on other players, and shows them side by side; nothing is
+  changed until Apply, one undo brings it back. Its follow-up: the recipe
+  budget is chosen before recipes may change (a range kept by every version,
+  or a labelled free search); it may create ordinary schedules (allowed
+  ingredients, up to the number typed, on days allowed) and the semi-
+  blocker's Dish Master schedule; it never opens a basket to the blocker;
+  only what holds for every allowed event is called impossible - a risk is a
+  warning and the search goes on. Every run and every proposal check plays
+  both views of the players side by side (player activity, basket luck
+  only - agreed in planning); the one chosen decides met, the other is a
+  reading. A proposal is the best of a
+  bounded search - never called the optimum - and its values are suggestions,
+  not confirmed ones; every default of its controls is this app's own; what
+  can be proved impossible from the inputs is said instead of searched. Build
+  03 - automatic catch-up presets - does not exist yet and no screen may say
+  it does. Its rules are the economist's the way the Merge economy is: a
+  suspected flaw is measured, said on screen and written down, not fixed,
+  and what is not confirmed about the real game is a visible setting, never
+  a silent constant.
 
 ## Repository map
 
@@ -65,7 +90,7 @@ src/
     components/export/   Syntax tab
     assets/game/     the artwork in use (copied and trimmed from art-source/)
     data/            the demo stage
-  features/diamondMine/, features/chef/   other features (Chef: a five-step flow, see docs/chef-overview.md)
+  features/diamondMine/, features/chef/   other features (Chef: a six-step flow, see docs/chef-overview.md)
 scripts/
   verify/          engine checks (npm run verify)
   e2e/             browser checks against the dev server (npm run e2e; one: npx vite-node <file>)
@@ -331,6 +356,18 @@ rank 1-4 chain; rank 4 collects at once. Encoded `>= 1000` on the grid
   tab once kept it, so the next build replaced typed Twister values - "a rank 4
   pays 165".) One item pays one resource (an item syntax joining
   several with "+" is flagged).
+- **The item text follows the value the game pays** (economist, choosing
+  "text follows the value" over "only warn"): the simulator, the build and
+  both play screens pay a rank's `prizeAmount`; the Small Rewards sheet
+  writes its `syntax`. A text with exactly one `dynamic(name:N)` amount (or
+  the plain coin-allowance pattern) carries the value - when typed in the
+  Rewards tab, when the build re-values (`applyLadderValues`, whatever number
+  it held), when a project is opened (`ensureRewardChainConfig`, `typed`
+  too) and in the export (`syntaxForValue`). A text with several amounts or
+  none is left as written and named on the Syntax tab (`rewardTextIssues`).
+  (Found from a report: a charm paid 15 in the Play Tester while the
+  workbook said 65 - the text was out of step before a build, and the build
+  only rewrote a number equal to the old value.)
 - **Leftovers are collected** (`DEFAULT_LEFTOVER_POLICY` 'collect'; economist:
   "after getting to rank 12, merges all the small rewards and collect them. to
   understand how much really the user got"). What is still unmerged when a
@@ -847,7 +884,11 @@ list is sorted by start date, newest first, events with no dates last. Save
 as new, Update the open one, Open (asks first when there are unsaved
 changes; it is then the project, as if just saved), Rename, Download as a
 backup file, Delete (asks). Saving an event also does what Save does. The
-header names the event open. The browser gives the site a few MB in all:
+header names the event open in a **switcher** (`EventSwitcher.jsx`;
+economist: "save the event and be able to switch between them", and chose a
+switcher in the header): the saved events newest first, one click opens one
+(asking first over unsaved changes), "Update" and "Save as a new event"
+right there; rename, delete and download stay in Saved events. The browser gives the site a few MB in all:
 when it is full, saving says so and nothing is overwritten. Held by
 `scripts/e2e/saved-events.mjs`.
 
@@ -874,10 +915,21 @@ when it is full, saving says so and nothing is overwritten. Held by
 - Push / stall pacing (design intent only, nothing built).
 - Whether a play link should stop at the DR a segment is meant to spend
   (taps are free there, so a tapping player can far out-earn the design).
-- Chef (`docs/chef-overview.md`, section 9): its "one more basket" figure is
-  noisy (the two plays do not differ by that basket alone), and an activity
-  shape other than Flat changes how many baskets are opened. Both are said on
-  its screens; changing the model is the economist's call.
+- Chef's proposal (build 02): the budget range of a real event (the
+  economist's), how far a weight may grow, the points the search aims above
+  a target, what a new ordinary schedule costs and looks like - this app's
+  own defaults, shown as such; it has not been run on a completed real
+  event. On the made-up example, nobody cooks a semi-blocker dish before or
+  during Dish Master, before or after a proposal.
+- Chef (`docs/chef-overview.md`, section 9): eight things about the real
+  game are not confirmed and are settings for now - when a progression
+  threshold is checked, whether overflow lost to the pantry counts toward
+  it, whether the pantry carried into Recompletion may cook at once, how a
+  scaled prize becomes whole items, how a joker is spent, when and in which
+  order a player cooks, who gets a special source, what a basket minimum
+  above 0 does. (The two older limits are gone: "one more basket" is a clean
+  comparison since every basket has random streams of its own, and an
+  activity shape keeps the total.)
 
 ## Verification
 
@@ -893,8 +945,16 @@ paired players, the Recompletion hand-over and the per-segment values in the
 exports; verify-stage-link holds the short link - a link of the day it was
 made, the dictionary's fingerprint, a robot playing a stage and its link to
 the same last item, every older writing, a changed link never opening as
-another stage; verify-chef holds the Chef model as it is, its two known
-limits included).
+another stage; verify-chef holds the Chef rule engine, one check a
+confirmed rule: the three limits on an ingredient, a basket keeping its
+size, FU, schedules, sources and jokers, presets, Main to Recompletion,
+prizes, paired plays, supply, older saves; verify-chef-proposal holds what a
+Chef proposal may and may not change - locks, bounds, the pantry at every
+segment's size, schedules, a weight of 0 staying 0 - that a poor event with
+reachable targets is brought to them and checked on other players, that the
+worst segment is what is compared, a proved conflict against a search that
+ran out, blanks, stopping, out-of-date proposals, apply and undo; every
+check types a seed, so a run is the same every time).
 `scripts/analysis/twister-validation.mjs [players]` - three events, eight
 segments, both phases, players the build never saw (an investigation, not a
 check; about 20 minutes). `twister-cadence.mjs` is the first investigation.

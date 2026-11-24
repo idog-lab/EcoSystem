@@ -21,6 +21,7 @@ import {
   BUILD_VALUED_TYPES,
   formatRewardAmount,
   withTypedLadders,
+  syntaxForValue,
 } from '../../lib/rewards/rewardChain'
 import { validateDropGroupsConfig, validateDropGroup, groupResourceCount, MAX_GROUP_ITEMS, DEFAULT_MIN_DROP_RANK } from '../../lib/rewards/dropGroups'
 import { parseRewardDefinitionRows } from '../../lib/rewards/rewardDefinitionsPaste'
@@ -97,6 +98,11 @@ export default function RewardsPage({
     // economist has written a syntax of their own for that rank.
     if (type === COIN_TYPE && 'prizeAmount' in patch && coinSyntaxFollowsWorth(next[type][rankIndex].syntax)) {
       patch = { ...patch, syntax: coinAllowanceSyntax(patch.prizeAmount) }
+    }
+    // Any other reward: a text with one amount follows the value typed (rewardChain.js: syntaxForValue).
+    if (type !== COIN_TYPE && 'prizeAmount' in patch && !('syntax' in patch)) {
+      const followed = syntaxForValue(type, { ...next[type][rankIndex], ...patch })
+      if (followed.follows) patch = { ...patch, syntax: followed.syntax }
     }
     next[type][rankIndex] = { ...next[type][rankIndex], ...patch }
     // Typing a coin value makes the coin ranks the economist's own: the build

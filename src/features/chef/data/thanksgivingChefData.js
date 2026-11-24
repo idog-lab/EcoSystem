@@ -32,7 +32,7 @@
 // leftover template value never updated for this (Thanksgiving-themed,
 // 14-day) chef, not a real start date. Transcribed as-is; update it in the
 // Calendar tab once the real date is known.
-import { RARITY, createIngredient, createDish, createBasket, createPhase, createCalendar, createSegment } from '../lib/chefModel'
+import { RARITY, createIngredient, createDish, createBasket, createPhase, createCalendar, createSegment } from '../lib/chefLegacyModel'
 
 export const CALENDAR = createCalendar({
   startDate: '2026-10-18', // see file header note - likely a stale template value, not this chef's real date

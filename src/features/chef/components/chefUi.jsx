@@ -41,7 +41,7 @@ export function Num({ value, onCommit, min = 0, max = Infinity, allowEmpty = fal
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-      className={`rounded-lg border border-slate-200 bg-white/80 px-1.5 py-1 text-center text-sm font-medium tabular-nums text-slate-800 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-200/60 ${className}`}
+      className={`rounded-lg border border-slate-200 bg-white/80 px-1.5 py-1 text-center text-sm font-medium tabular-nums text-slate-800 [appearance:textfield] focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-200/60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${className}`}
       {...props}
     />
   )
@@ -137,3 +137,44 @@ export function StepFindings({ findings }) {
     </div>
   )
 }
+
+// A small labelled field of a form row.
+export function Field({ label, title, children, className = '' }) {
+  return (
+    <label className={`flex flex-col gap-1 text-sm ${className}`} title={title}>
+      <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+// A yes/no setting.
+export function Check({ checked, onChange, children, ...props }) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-sm text-slate-700">
+      <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-300" {...props} />
+      {children}
+    </label>
+  )
+}
+
+// One of a list, as a row of small buttons (the segment in view, a player).
+export function Pills({ options, value, onChange, ...props }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5" {...props}>
+      {options.map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={value === id}
+          data-option={id}
+          onClick={() => onChange(id)}
+          className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold ${value === id ? 'bg-purple-600 text-white' : 'border border-slate-200 bg-white/70 text-slate-500 hover:text-slate-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </span>
+  )
+}
+

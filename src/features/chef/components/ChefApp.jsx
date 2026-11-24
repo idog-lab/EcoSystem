@@ -1,76 +1,60 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, ChefHat, ChevronDown, Copy, Download, Plus, Save, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChefHat, ChevronDown, ClipboardCheck, Copy, Download, FlaskConical, History, Plus, Save, Trash2, Upload } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import EventStep from './EventStep'
 import DishesStep from './DishesStep'
 import BasketsStep from './BasketsStep'
+import ProposalStep from './ProposalStep'
 import SimulateStep from './SimulateStep'
 import ValueStep from './ValueStep'
+import ReadinessPanel from './ReadinessPanel'
 import { StepFindings } from './chefUi'
+import { syntheticExampleState, SYNTHETIC_NAME, SYNTHETIC_NOTE } from '../data/syntheticExample'
 import * as halloweenChefData from '../data/halloweenChefData'
 import * as thanksgivingChefData from '../data/thanksgivingChefData'
+import { BLACK_FRIDAY_NAME, blackFridayChefState } from '../data/blackFridayChefData'
 import { loadChefLibrary, saveChefLibrary, createConfigEntry, parseImportedLibrary } from '../lib/chefPersistence'
-import { CHEST_TYPES, createGrant, createIngredient, createDish, createBasket, createSegment, createCalendar, createPhase, removeIngredientEverywhere } from '../lib/chefModel'
+import { blankChefState } from '../lib/chefModel'
+import { chefFromSource } from '../lib/chefMigration'
+import { fingerprint } from '../lib/chefEngine'
 import { validateChefConfig } from '../lib/chefValidation'
 
 // THE CHEF FLOW. The same logic as the Merge "Build event" flow (economist:
 // "apply the logic of how we build the merge also to the chef. the flow and
-// etc."): five steps in the order the work is done, each saying what it is
+// etc."): six steps in the order the work is done, each saying what it is
 // for; a step shows what has to be typed or judged and folds the rest; what
 // is wrong is shown in the step that puts it right, never folded; results
 // lead, with their detail one click away; the rarely used actions sit in one
 // "More" menu; "Next" opens the next step at its top.
 //
-//   1 event      when it runs, its phases, the segments and their baskets a day
-//   2 dishes     the ingredients, each dish's recipe and prize
-//   3 baskets    what a basket gives in each phase; sales and events
-//   4 simulate   the event played by many players: who cooks what, and when
-//   5 value      what a basket is worth to a player
+//   1 event      when it runs, its targets, the segments and their basket supply
+//   2 dishes     the ingredients and their pantry caps, the recipes, the prizes
+//   3 baskets    what a basket gives; progression thresholds, special sources
+//                and jokers, catch-up presets
+//   4 proposal   (build 02) what may change, a generated proposal beside the
+//                current event, and applying it or not
+//   5 simulate   the event played by many players, against its targets
+//   6 value      one more basket, played; and the older basket estimate
+//
+// THE REBUILD (build 01). The steps are the same five; what they hold is the
+// rebuilt event model (chefModel.js) played by one rule engine
+// (chefEngine.js). A step gets the whole chef (`state`) and one way to change
+// it (`update`), and makes its own edits.
 //
 // Before this the feature was nine flat tabs (Ingredients, Dishes, Baskets,
 // Calendar, Segments, Blocker sources, Validation, Simulation, Basket
 // value). Nothing was taken away: every one of them is in a step - the
 // checks of "Validation" are shown in the step each belongs to and listed
-// whole in step 4, "Blocker sources" is a fold of step 3.
+// whole in step 5, "Blocker sources" is a fold of step 3.
 const STEPS = [
-  { id: 'event', label: 'Event and players', purpose: 'when the event runs, the phases it is cut into, and how many baskets a day each segment opens' },
-  { id: 'dishes', label: 'Ingredients and dishes', purpose: 'what players collect, and what they cook with it' },
-  { id: 'baskets', label: 'Baskets', purpose: 'what a basket gives in each phase, and what is handed out besides' },
-  { id: 'simulate', label: 'Simulate', purpose: 'the event played by many players: who cooks what, and when' },
-  { id: 'value', label: 'Basket value', purpose: 'what a basket is worth to a player' },
+  { id: 'event', label: 'Event and players', purpose: 'when the event runs, what it aims at, and what each segment opens' },
+  { id: 'dishes', label: 'Ingredients and dishes', purpose: 'what players collect, what they cook with it, and what a dish pays' },
+  { id: 'baskets', label: 'Baskets', purpose: 'what a basket gives, what holds an ingredient back, and what is handed out besides' },
+  { id: 'proposal', label: 'Proposal', purpose: 'recipes, basket weights and thresholds that bring every segment closer to the targets - to review, then apply or not' },
+  { id: 'simulate', label: 'Simulate', purpose: 'the event played by many players, against its targets' },
+  { id: 'value', label: 'Basket value', purpose: 'what one more basket changes for a player' },
 ]
 const STEP_LABELS = Object.fromEntries(STEPS.map((s, i) => [s.id, `Step ${i + 1}`]))
-
-// `totalChefPrize` travels WITH each chef's own state rather than being read
-// from one module-level import (it was a bare Halloween constant once, never
-// part of the saved state, which only showed when a second chef was added).
-function seedChefState(mod) {
-  return {
-    ingredients: mod.INGREDIENTS,
-    dishes: mod.DISHES,
-    recompletionDishes: mod.RECOMPLETION_DISHES,
-    recompletionCaps: mod.RECOMPLETION_INGREDIENT_CAPS,
-    baskets: mod.BASKETS,
-    calendar: mod.CALENDAR,
-    segments: mod.SEGMENTS,
-    totalChefPrize: mod.TOTAL_CHEF_PRIZE,
-    grants: [],
-  }
-}
-
-function blankChefState() {
-  return {
-    ingredients: [],
-    dishes: [],
-    recompletionDishes: [],
-    recompletionCaps: {},
-    baskets: [],
-    calendar: createCalendar({ startDate: null, totalDays: 7, phases: [{ id: 'phase1', label: 'Phase 1', days: 7 }] }),
-    segments: [],
-    totalChefPrize: { low: 0, medium: 0, high: 0 },
-    grants: [],
-  }
-}
 
 // Every real chef this app has been given, to start a new one from
 // (economist: "i inserted chef thanksgiving into the repo... let's create
@@ -79,6 +63,8 @@ function blankChefState() {
 const TEMPLATES = [
   { id: 'halloween', name: 'Halloween chef', mod: halloweenChefData },
   { id: 'thanksgiving', name: 'Thanksgiving chef', mod: thanksgivingChefData },
+  // (Read straight into the rebuilt model from the economist's workbook: `make` instead of an older data module.)
+  { id: 'black-friday', name: BLACK_FRIDAY_NAME, make: blackFridayChefState },
 ]
 
 // A LIBRARY of chefs, not one (economist: "multiple saved event configs...
@@ -87,7 +73,7 @@ const TEMPLATES = [
 function initialLibrary() {
   const persisted = loadChefLibrary()
   if (persisted?.configs?.length) return persisted
-  const entry = createConfigEntry('Halloween chef', seedChefState(halloweenChefData))
+  const entry = createConfigEntry('Halloween chef', chefFromSource(halloweenChefData))
   return { configs: [entry], activeConfigId: entry.id }
 }
 // What "saved" compares: every chef's name and content (not which one is open, not when it was saved).
@@ -122,11 +108,8 @@ export default function ChefApp({ onHome }) {
 
   const activeConfig = library.configs.find((c) => c.id === library.activeConfigId) ?? library.configs[0]
   const state = activeConfig.state
-  const { ingredients, dishes, recompletionDishes, recompletionCaps, baskets, calendar, segments, grants } = state
-  // A save from before totalChefPrize became part of a chef's own state has
-  // none: the Halloween values stand in rather than crash what reads it.
-  const totalChefPrize = state.totalChefPrize ?? halloweenChefData.TOTAL_CHEF_PRIZE
-  const configKey = useMemo(() => JSON.stringify(state), [state])
+  // What a run was played on: a short fingerprint of the chef.
+  const configKey = useMemo(() => fingerprint(state), [state])
   const unsaved = useMemo(() => contentOf(library) !== baseline, [library, baseline])
 
   // A step opens at its top (economist, of the Merge flow: "it should take me
@@ -164,17 +147,6 @@ export default function ChefApp({ onHome }) {
       configs: lib.configs.map((c) => (c.id === lib.activeConfigId ? { ...c, state: typeof updater === 'function' ? updater(c.state) : updater } : c)),
     }))
   }
-  function setField(field) {
-    return (updater) => updateActiveState((s) => ({ ...s, [field]: typeof updater === 'function' ? updater(s[field]) : updater }))
-  }
-  const setIngredients = setField('ingredients')
-  const setDishes = setField('dishes')
-  const setRecompletionDishes = setField('recompletionDishes')
-  const setBaskets = setField('baskets')
-  const setCalendar = setField('calendar')
-  const setSegments = setField('segments')
-  const setGrants = setField('grants')
-  const setRecompletionCaps = setField('recompletionCaps')
 
   function handleSave() {
     const next = { ...library, configs: library.configs.map((c) => (c.id === library.activeConfigId ? { ...c, updatedAt: new Date().toISOString() } : c)) }
@@ -187,10 +159,32 @@ export default function ChefApp({ onHome }) {
   // --- The library of chefs ---
   function handleNewConfig(templateId) {
     const template = TEMPLATES.find((t) => t.id === templateId)
-    const name = template ? template.name : `New chef ${library.configs.length + 1}`
-    const entry = createConfigEntry(name, template ? seedChefState(template.mod) : blankChefState())
+    const synthetic = templateId === 'synthetic'
+    const name = synthetic ? SYNTHETIC_NAME : template ? template.name : `New chef ${library.configs.length + 1}`
+    const entry = createConfigEntry(name, synthetic ? syntheticExampleState() : template ? (template.make ? template.make() : chefFromSource(template.mod)) : blankChefState())
     setLibrary((lib) => ({ ...lib, configs: [...lib.configs, entry], activeConfigId: entry.id }))
     setStep('event')
+  }
+  // A REFERENCE CHEF: a separate copy of the chef in view, to be completed into
+  // the intended event. The chef it is made from is not touched (nor is the
+  // older chef kept beside it), nothing is filled in, and nothing in the copy
+  // starts as confirmed: the list of what it still needs opens with it.
+  function handleStartReference() {
+    const copy = JSON.parse(JSON.stringify(activeConfig.state))
+    const entry = createConfigEntry(`Reference: ${activeConfig.name}`, { ...copy, reference: { basedOn: activeConfig.name, startedAt: new Date().toISOString() }, confirmed: {}, migration: copy.migration ? { ...copy.migration, dismissed: true } : null })
+    setLibrary((lib) => ({ ...lib, configs: [...lib.configs, entry], activeConfigId: entry.id }))
+    goTo('event', 'chef-readiness')
+  }
+  // To a step, and to the section of it where an input is typed.
+  function goTo(id, foldId = null) {
+    setStep(id)
+    if (!foldId) return
+    setTimeout(() => {
+      const el = document.querySelector(`[data-collapsible="${foldId}"]`)
+      if (!el) return
+      el.open = true
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }, 80)
   }
   function handleDuplicateConfig() {
     const entry = createConfigEntry(`${activeConfig.name} copy`, JSON.parse(JSON.stringify(activeConfig.state)))
@@ -212,15 +206,19 @@ export default function ChefApp({ onHome }) {
       return { ...lib, configs, activeConfigId: configs[0].id }
     })
   }
-  function handleExportBackup() {
-    const blob = new Blob([JSON.stringify(library, null, 2)], { type: 'application/json' })
+  function download(content, fileName) {
+    const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `chef-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = fileName
     a.click()
     URL.revokeObjectURL(url)
   }
+  const handleExportBackup = () => download(library, `chef-backup-${new Date().toISOString().slice(0, 10)}.json`)
+  // The chef as it was before the rebuild, in the older tool's shape: the file opens here again (and is brought up to date again).
+  const handleExportLegacy = () => activeConfig.legacy && download(activeConfig.legacy.state, `chef-as-it-was-${activeConfig.name.replace(/[^\w]+/g, ' ').trim().replace(/\s+/g, '-') || 'chef'}.json`)
+  const dismissMigration = () => updateActiveState((st) => ({ ...st, migration: { ...st.migration, dismissed: true } }))
   function handleImportFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -241,86 +239,7 @@ export default function ChefApp({ onHome }) {
     e.target.value = ''
   }
 
-  // --- Ingredients ---
-  const updateIngredient = (id, patch) => setIngredients((prev) => prev.map((ing) => (ing.id === id ? { ...ing, ...patch } : ing)))
-  const addIngredient = () => setIngredients((prev) => [...prev, createIngredient({ name: `Ingredient ${prev.length + 1}` })])
-  function duplicateIngredient(id) {
-    const ing = ingredients.find((i) => i.id === id)
-    if (ing) setIngredients((prev) => [...prev, createIngredient({ ...ing, id: undefined, name: `${ing.name} copy` })])
-  }
-  // (Goes out of every recipe, basket and sale with it: removeIngredientEverywhere.)
-  function removeIngredient(id) {
-    updateActiveState((s) => {
-      const cascaded = removeIngredientEverywhere(id, { dishes: s.dishes, recompletionDishes: s.recompletionDishes, baskets: s.baskets, grants: s.grants ?? [] })
-      return { ...s, ingredients: s.ingredients.filter((i) => i.id !== id), ...cascaded }
-    })
-  }
-
-  // --- Dishes (the two lists) ---
-  const dishSetter = (list) => (list === 'main' ? setDishes : setRecompletionDishes)
-  const updateDish = (id, patch, list = 'main') => dishSetter(list)((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
-  const addDish = (list = 'main') => dishSetter(list)((prev) => [...prev, createDish({ name: `Dish ${prev.length + 1}` })])
-  function duplicateDish(id, list = 'main') {
-    const source = (list === 'main' ? dishes : recompletionDishes).find((d) => d.id === id)
-    if (source) dishSetter(list)((prev) => [...prev, createDish({ ...source, id: undefined, recipe: source.recipe.map((r) => ({ ...r })), name: `${source.name} copy` })])
-  }
-  const removeDish = (id, list = 'main') => dishSetter(list)((prev) => prev.filter((d) => d.id !== id))
-  const updateRecompletionCap = (ingredientId, value) => setRecompletionCaps((prev) => ({ ...prev, [ingredientId]: value }))
-  const updateTotalPrize = (tier, value) => updateActiveState((s) => ({ ...s, totalChefPrize: { ...(s.totalChefPrize ?? halloweenChefData.TOTAL_CHEF_PRIZE), [tier]: value } }))
-
-  // --- Segments ---
-  const updateSegment = (id, patch) => setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
-  const addSegment = () => setSegments((prev) => [...prev, createSegment({ name: `Segment ${prev.length + 1}` })])
-  function duplicateSegment(id) {
-    const seg = segments.find((s) => s.id === id)
-    if (seg) setSegments((prev) => [...prev, createSegment({ ...seg, id: undefined, avgBasketsPerDay: { ...seg.avgBasketsPerDay }, name: `${seg.name} copy` })])
-  }
-  const removeSegment = (id) => setSegments((prev) => prev.filter((s) => s.id !== id))
-
-  // --- Baskets ---
-  const updateBasket = (id, patch) => setBaskets((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)))
-  // A new basket goes to the phase in view, as the first type that phase has none of.
-  function addBasket(phaseId = calendar.phases[0]?.id ?? null) {
-    setBaskets((prev) => {
-      const taken = new Set(prev.filter((b) => b.phaseId === phaseId).map((b) => b.chestType))
-      const chestType = CHEST_TYPES.find((t) => !taken.has(t)) ?? 'basic'
-      return [...prev, createBasket({ chestType, phaseId, totalMin: 1, totalMax: 1, ingredientWeights: ingredients.map((i) => ({ ingredientId: i.id, min: 0, max: 1, weight: 0 })) })]
-    })
-  }
-  function duplicateBasket(id) {
-    const basket = baskets.find((b) => b.id === id)
-    if (basket) setBaskets((prev) => [...prev, createBasket({ ...JSON.parse(JSON.stringify(basket)), id: undefined })])
-  }
-  const removeBasket = (id) => setBaskets((prev) => prev.filter((b) => b.id !== id))
-
-  // --- Calendar ---
-  const updateCalendarPhase = (id, patch) => setCalendar((prev) => ({ ...prev, phases: prev.phases.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
-  const updateCalendarStartDate = (startDate) => setCalendar((prev) => ({ ...prev, startDate }))
-  const updateCalendarTotalDays = (totalDays) => setCalendar((prev) => ({ ...prev, totalDays }))
-  function addPhase() {
-    setCalendar((prev) => {
-      const ids = new Set(prev.phases.map((p) => p.id))
-      let n = prev.phases.length + 1
-      while (ids.has(`phase${n}`)) n += 1
-      return { ...prev, phases: [...prev.phases, createPhase({ id: `phase${n}`, label: `Phase ${n}`, days: 1 })] }
-    })
-  }
-  // (Its baskets go with it: a basket of no phase is never opened by anyone.)
-  function removePhase(id) {
-    updateActiveState((s) => ({ ...s, calendar: { ...s.calendar, phases: s.calendar.phases.filter((p) => p.id !== id) }, baskets: s.baskets.filter((b) => b.phaseId !== id) }))
-  }
-
-  // --- Sales and events ---
-  const addGrant = () => setGrants((prev) => [...(prev ?? []), createGrant({ day: 1, ingredientId: ingredients[0]?.id, amount: 0 })])
-  const updateGrant = (id, patch) => setGrants((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)))
-  const removeGrant = (id) => setGrants((prev) => prev.filter((g) => g.id !== id))
-
-  const safeGrants = grants ?? []
-  const findings = useMemo(
-    () => validateChefConfig({ ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants: safeGrants }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ingredients, dishes, recompletionDishes, baskets, calendar, segments, grants],
-  )
+  const findings = useMemo(() => validateChefConfig(state), [state])
   const findingsOf = (id) => findings.filter((f) => f.step === id)
   const stepIndex = STEPS.findIndex((s) => s.id === step)
   const current = STEPS[stepIndex]
@@ -375,8 +294,20 @@ export default function ChefApp({ onHome }) {
                     New chef: from the {t.name}
                   </MenuItem>
                 ))}
+                <MenuItem icon={FlaskConical} onClick={fromMenu(() => handleNewConfig('synthetic'))} title="The Halloween chef with made-up thresholds, dates, Recompletion dishes and prizes, to try the whole flow. Not an approved economy." data-testid="chef-new-synthetic">
+                  New chef: a synthetic example (made up)
+                </MenuItem>
                 <MenuItem icon={Copy} onClick={fromMenu(handleDuplicateConfig)}>
                   Duplicate this chef
+                </MenuItem>
+                <MenuItem
+                  icon={ClipboardCheck}
+                  onClick={fromMenu(handleStartReference)}
+                  disabled={!!state.synthetic || !!state.reference}
+                  title={state.synthetic ? 'A synthetic example is made up: a reference chef is started from a real one.' : state.reference ? 'This chef is already a reference chef.' : 'A separate copy of this chef to complete into the intended event. This chef stays as it is.'}
+                  data-testid="chef-start-reference"
+                >
+                  Start a reference chef from this one
                 </MenuItem>
                 <MenuItem icon={Trash2} onClick={fromMenu(handleDeleteConfig)} disabled={library.configs.length <= 1} title={library.configs.length <= 1 ? 'The only chef cannot be deleted.' : undefined}>
                   Delete this chef
@@ -388,6 +319,11 @@ export default function ChefApp({ onHome }) {
                 <MenuItem icon={Upload} onClick={fromMenu(() => fileInputRef.current?.click())} title="Replaces every chef here with the ones in the file.">
                   Import backup
                 </MenuItem>
+                {activeConfig.legacy && (
+                  <MenuItem icon={History} onClick={fromMenu(handleExportLegacy)} title="This chef was made with the older tool. The chef exactly as it was is kept, and this downloads it." data-testid="chef-legacy-download">
+                    Download this chef as it was
+                  </MenuItem>
+                )}
               </div>
             )}
           </div>
@@ -443,83 +379,59 @@ export default function ChefApp({ onHome }) {
           </span>{' '}
           · {current.purpose}.
         </p>
-        {step !== 'simulate' && step !== 'value' && <StepFindings findings={findingsOf(step)} />}
+        {state.migration?.notes?.length > 0 && !state.migration.dismissed && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="chef-migration">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="font-semibold">{state.migration.fromWorkbook ? `This chef was read from ${state.migration.fromWorkbook}. Nothing was made up; what the workbook does not hold starts empty:` : 'This chef comes from before the rebuild. Nothing it held was dropped, and nothing it did not hold was made up:'}</p>
+              <span className="flex shrink-0 items-center gap-3">
+                {activeConfig.legacy && (
+                  <button type="button" onClick={handleExportLegacy} className="whitespace-nowrap text-xs font-semibold underline decoration-dotted underline-offset-2">
+                    Download it as it was
+                  </button>
+                )}
+                <button type="button" onClick={dismissMigration} className="whitespace-nowrap rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200" data-testid="chef-migration-dismiss">
+                  Got it
+                </button>
+              </span>
+            </div>
+            <ul className="ml-4 mt-1.5 list-disc space-y-0.5 text-[13px]">
+              {state.migration.notes.map((note, i) => (
+                <li key={i}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {state.synthetic && (
+          <p className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-2.5 text-sm text-fuchsia-900" data-testid="chef-synthetic">
+            <span className="font-semibold">Made up.</span> {SYNTHETIC_NOTE}
+          </p>
+        )}
+        {state.reference && (
+          <p className="text-sm text-slate-600" data-testid="chef-reference">
+            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">Reference chef</span> A copy of "{state.reference.basedOn}", to complete into the intended event. The original is as it was.
+          </p>
+        )}
+        {(state.reference || step === 'simulate') && <ReadinessPanel state={state} update={updateActiveState} onGoTo={goTo} stepLabels={STEP_LABELS} />}
+        {step !== 'simulate' && step !== 'value' && step !== 'proposal' && <StepFindings findings={findingsOf(step)} />}
 
-        {step === 'event' && (
-          <EventStep
-            key={activeConfig.id}
-            calendar={calendar}
-            segments={segments}
-            onUpdateStartDate={updateCalendarStartDate}
-            onUpdateTotalDays={updateCalendarTotalDays}
-            onUpdatePhase={updateCalendarPhase}
-            onAddPhase={addPhase}
-            onRemovePhase={removePhase}
-            onUpdateSegment={updateSegment}
-            onAddSegment={addSegment}
-            onDuplicateSegment={duplicateSegment}
-            onRemoveSegment={removeSegment}
-          />
-        )}
-        {step === 'dishes' && (
-          <DishesStep
-            key={activeConfig.id}
-            ingredients={ingredients}
-            dishes={dishes}
-            recompletionDishes={recompletionDishes}
-            recompletionCaps={recompletionCaps ?? {}}
-            totalChefPrize={totalChefPrize}
-            onUpdateIngredient={updateIngredient}
-            onAddIngredient={addIngredient}
-            onDuplicateIngredient={duplicateIngredient}
-            onRemoveIngredient={removeIngredient}
-            onUpdateDish={updateDish}
-            onAddDish={addDish}
-            onDuplicateDish={duplicateDish}
-            onRemoveDish={removeDish}
-            onUpdateRecompletionCap={updateRecompletionCap}
-            onUpdateTotalPrize={updateTotalPrize}
-          />
-        )}
-        {step === 'baskets' && (
-          <BasketsStep
-            key={activeConfig.id}
-            ingredients={ingredients}
-            baskets={baskets}
-            calendar={calendar}
-            grants={safeGrants}
-            findings={findingsOf('baskets')}
-            onUpdateBasket={updateBasket}
-            onAddBasket={addBasket}
-            onDuplicateBasket={duplicateBasket}
-            onRemoveBasket={removeBasket}
-            onAddGrant={addGrant}
-            onUpdateGrant={updateGrant}
-            onRemoveGrant={removeGrant}
-          />
-        )}
+        {step === 'event' && <EventStep key={activeConfig.id} state={state} update={updateActiveState} />}
+        {step === 'dishes' && <DishesStep key={activeConfig.id} state={state} update={updateActiveState} />}
+        {step === 'baskets' && <BasketsStep key={activeConfig.id} state={state} update={updateActiveState} findings={findingsOf('baskets')} />}
+        {step === 'proposal' && <ProposalStep key={activeConfig.id} state={state} update={updateActiveState} onGoTo={goTo} />}
         {step === 'simulate' && (
           <SimulateStep
             key={activeConfig.id}
-            segments={segments}
-            dishes={dishes}
-            recompletionDishes={recompletionDishes}
-            baskets={baskets}
-            calendar={calendar}
-            grants={safeGrants}
-            ingredients={ingredients}
-            totalChefPrize={totalChefPrize}
+            state={state}
+            update={updateActiveState}
             findings={findings}
             stepLabels={STEP_LABELS}
             configKey={configKey}
             sim={sims[activeConfig.id] ?? null}
             onSim={(run) => setSims((prev) => ({ ...prev, [activeConfig.id]: run }))}
-            onGoTo={setStep}
+            onGoTo={goTo}
           />
         )}
-        {step === 'value' && (
-          <ValueStep key={activeConfig.id} dishes={dishes} recompletionDishes={recompletionDishes} baskets={baskets} calendar={calendar} totalChefPrize={totalChefPrize} ingredients={ingredients} segments={segments} grants={safeGrants} />
-        )}
+        {step === 'value' && <ValueStep key={activeConfig.id} state={state} />}
 
         <div className="flex items-center justify-between gap-3 pt-2" data-testid="chef-step-nav">
           {previous ? (

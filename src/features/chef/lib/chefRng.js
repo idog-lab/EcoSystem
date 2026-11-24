@@ -1,8 +1,15 @@
-// A small seedable PRNG (mulberry32) - by explicit economist request
-// (channeling a GPT brainstorm review), for reproducible Monte Carlo runs.
-// `Math.random()` can never be replayed, which makes it impossible to
-// cleanly A/B two configs ("did this change really help, or is that just
-// noise") - a fixed seed makes two runs bit-for-bit comparable.
+// Repeatable randomness for the Chef engine.
+//
+// KEYED STREAMS. Every random thing a player meets has an identity of its own
+// - this player's activity, this player's place among the recipients of a
+// sale, the size of the 2nd Rare basket of day 7, the draws inside that basket
+// - and takes its numbers from a stream made from that identity alone
+// (`keyedRng`). So a change to the event (one more basket, a catch-up preset,
+// other odds) never moves the numbers any OTHER basket rolls with: two plays
+// of the same players differ by what was changed and by nothing else. Before
+// this the engine had four streams shared by everything in a run, and one more
+// basket shifted every basket opened after it (an extra basket that gave
+// nothing moved the average prize by 0.63).
 function mulberry32(seed) {
   let a = seed >>> 0
   return function rng() {
@@ -14,48 +21,55 @@ function mulberry32(seed) {
   }
 }
 
-function hashSeed(seed, salt) {
-  let h = (seed ^ salt) >>> 0
+function mix(h, n) {
+  h = (h ^ (n | 0)) >>> 0
   h = Math.imul(h ^ (h >>> 16), 2246822507)
   h = Math.imul(h ^ (h >>> 13), 3266489909)
   h ^= h >>> 16
   return h >>> 0
 }
 
-export function createRng(seed) {
-  return mulberry32(seed >>> 0)
+// A text (an id, a tag) as a number.
+export function hashText(text) {
+  let h = 2166136261
+  const s = String(text)
+  for (let i = 0; i < s.length; i += 1) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
 }
 
-// Four INDEPENDENT streams, one per "axis" of randomness in the simulator -
-// by explicit design note (a real risk GPT's review caught): if every roll
-// shared one stream, changing a basket's odds would change how many random
-// numbers that config consumes, which would shift every LATER roll
-// (activity, grants, whatever comes next) even though nothing about THEM
-// changed - silently breaking the "same seed = fair paired comparison"
-// guarantee for anything downstream. Separating by axis means a change to
-// basket odds can only ever desync the `basketSize`/`ingredientPick`
-// streams, leaving `activity` and `grants` bit-identical across the two
-// configs being compared.
-export function createRngStreams(seed) {
-  return {
-    activity: createRng(hashSeed(seed, 1)),
-    grants: createRng(hashSeed(seed, 2)),
-    basketSize: createRng(hashSeed(seed, 3)),
-    ingredientPick: createRng(hashSeed(seed, 4)),
-  }
+// A stream for one identity: the seed and the parts of the identity (numbers,
+// or texts - a text is hashed). The same parts always give the same stream.
+export function keyedRng(seed, ...parts) {
+  let h = mix(0x9e3779b9, seed)
+  for (const part of parts) h = mix(h, typeof part === 'number' ? part : hashText(part))
+  return mulberry32(h)
+}
+
+export function createRng(seed) {
+  return mulberry32(seed >>> 0)
 }
 
 export function randomSeed() {
   return Math.floor(Math.random() * 2 ** 31)
 }
 
-// A rough 95% margin for a sampled proportion `p` over `n` independent
-// trials (normal approximation to the binomial - good enough at the
-// run-counts this simulator uses, not meant for tiny n). By explicit
-// economist request (GPT's review): P10/P50/P90 describe the spread of
-// player OUTCOMES, not the uncertainty of the estimate itself - a rate
-// measured from a few hundred runs should always be shown with how much
-// it could plausibly be off by.
+// HOW SURE A SHARE IS. A share measured on a few hundred simulated players is
+// an estimate: with other players it would come out a little different. This
+// is the range the true share is in, 19 times in 20 (the Wilson interval -
+// unlike the plain "plus or minus", it stays honest at 0% and 100% and with
+// few players). It is NOT the spread of the players' outcomes: "most players
+// cook 9 to 12" describes players; this describes how well a share is known.
+export function shareInterval(count, n) {
+  if (!(n > 0)) return { share: null, low: null, high: null, n: 0 }
+  const z = 1.96
+  const p = count / n
+  const denom = 1 + (z * z) / n
+  const centre = (p + (z * z) / (2 * n)) / denom
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom
+  return { share: p, low: Math.max(0, centre - half), high: Math.min(1, centre + half), n }
+}
+
+// The older "plus or minus" (kept for the callers that still show one number).
 export function binomialMarginOfError(p, n) {
   if (n <= 0) return null
   return 1.96 * Math.sqrt((p * (1 - p)) / n)

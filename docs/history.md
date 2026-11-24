@@ -7557,3 +7557,323 @@ changes), Rename, Download as a backup file, Delete. The header names the
 event open. The browser's room is a few MB in all: when it is full, saving
 says so and overwrites nothing. Held by `scripts/e2e/saved-events.mjs`
 (12 checks).
+
+## Chef rebuild, build 01: an accurate event model and simulator
+
+The economist sent a brief (written with GPT, the direction approved by them):
+"CHEF REBUILD - BUILD 01: ACCURATE EVENT MODEL AND SIMULATOR". Replacing the
+older model was authorised; older chefs had to stay recoverable; no commit or
+deploy. Builds 02 (suggestions) and 03 (automatic catch-up presets) come later.
+
+**What was replaced.** The older Chef played each dish list as an event of its
+own from day 1, with one "demand cap" nothing read, a single prize number a
+dish, three prize sizes, grants, and four random streams shared by a whole
+run. The rebuilt one (schema 2, `chefModel.js`; one rule engine,
+`chefEngine.js`) has: three separate limits on an ingredient (pantry cap,
+progression threshold with a schedule, most a basket); baskets that leave out
+an ingredient held back and keep their size; FU as a state (one dish left,
+only blockers missing, the threshold reached), with in FU / ever in FU /
+finished told apart and a target day; checkpoints; special sources and jokers
+with an explicit permission to pass a threshold; manual catch-up presets that
+take a basket's place; Recompletion entered the moment Main is done, with the
+pantry carried and the count restarted; prizes by component with the
+segment's factor (prize factor x burnout, free rounds and undos capped at x2,
+wilds and extra stock unchanged, the grand prize to the nearest 5); segments
+typed in full, supply as an average or day by day; keyed random streams, so a
+change moves nothing but what it changes.
+
+**Found on the way.**
+- The older simulator's days-of-play chain was wrong: an inactive player came
+  back with the chance of STAYING away, so players opened about 11% more
+  baskets than was typed (measured: 89.0 Basic against 79.8 expected, 1,500
+  players). Fixed: with 6,000 players the supply now lands within 0.1%.
+- An activity shape used to change the total (-5.7%, -8.6%, +8.6%); it now
+  only moves baskets between days.
+- "One more basket" used to shift the luck of every later basket; it is now a
+  clean paired comparison (a change that changes nothing gives identical
+  players; one more basket on day 2 leaves all the other baskets of the event
+  rolling exactly what they rolled).
+- Copying the sheet's "Cap" into the pantry caps makes a Halloween
+  Recompletion dish impossible (it needs 22 Pumpkin, the cap is 20): the
+  sheet's "Cap" is probably not a pantry cap, or the Recompletion list is
+  from another design. It is kept beside the ingredient and not played.
+- The base Halloween Main recipes ask for 378 ingredients against a reference
+  of about 250.
+
+**Not invented.** A chef from the workbooks or from an older save starts with
+no thresholds, Dish Master days, FU day, jokers, presets, pantry caps or
+burnout; a note on screen says so. Dish prize components were read from the
+workbooks' prize sheet (identical in both); a save whose prize numbers differ
+keeps its numbers, counted as coins. The workbooks' own medium / high prize
+columns were not reused (they scale wilds). Eight things about the real game
+are not confirmed and are visible settings (chef-overview.md, section 9).
+
+**Removed.** "What it would take" (a search on the averages model) and the
+averages model itself. The older basket estimate is kept, labelled as one.
+
+**Checked.** verify-chef.mjs: 133 checks, one or more per confirmed rule.
+chef-flow.mjs: 92 checks in a real browser at 1500 x 800 and 1280. Lint and
+build clean. Heights of a first visit at 1500 x 800: step 1 902, step 2
+1,233, step 3 1,057, step 4 800 (1,341 after a run), step 5 864. The Merge
+suites were not run: nothing of Merge or of the shared components changed.
+
+## Chef build 01, reviewed: the cases checked one by one, and a reference chef
+
+A second brief asked to verify build 01 against named cases before build 02,
+to fix confirmed bugs, and to prepare a reference-event workflow. The concerns
+were verification requests, not claims; each was measured first.
+
+**Already right (no code changed).** Fractional supply (0.4 Epic a day: 8.404
+a player over 21 days against 8.4 expected, every player 8 or 9, never none;
+with player activity 8.54 +- 0.07 on one set of 3,000 players and no bias
+over 12 sets of 5,000 - on average 0.2 standard errors off); FU at and past
+the threshold (at 7 received against a threshold of 6: in FU, holding 4,
+short 2; 116 of 300 players whose basket went past 6 were all in FU); a
+player missing an ordinary ingredient, below the threshold, or finished is
+not; 39 sugar under a cap of 40 rolling 3 keeps 1 and loses 2 with nothing
+in their place; the lost-overflow setting; three baskets on the day Main is
+finished (the other two are Recompletion's, none added or dropped); presets
+(a player who qualifies beside one who does not, the same baskets, the same
+sizes, identical ordinary draws; later baskets may differ because the pantry
+and the threshold count do).
+
+**Wrong in the wording, not the behaviour.** "Basket luck only" was described
+as rounding supply "to the nearest whole basket". It never rounded the rate:
+the expected count runs up day by day and a basket is opened each time the
+running total passes a whole number, from a starting point of the player's
+own. The comment, the briefing and two screen texts now say that, with the
+0.4 example.
+
+**Added.** Section 13 of verify-chef.mjs (the cases, expected against
+observed) and section 14 (readiness); `chefReadiness.js` and the "What this
+event still needs" list; "Start a reference chef from this one"; the
+synthetic example; a run is no longer marked out of date by ticking an item
+(`fingerprint` reads only what is played).
+
+**Not done, on purpose.** No reference value was chosen: the three
+Recompletion recipes, thresholds, dates, prizes, segment factors and special
+sources of the real event are the economist's. No real event was simulated
+against its targets.
+
+**Checked.** verify-chef.mjs 167 checks; chef-flow.mjs 110 checks in a real
+browser at 1500 x 800 and 1280; lint and build clean. Merge suites not run
+(nothing of Merge or the shared components changed).
+
+## Chef build 02: a generated proposal, reviewed and applied or not
+
+The third brief: "Generate and review an economy proposal" - define targets
+and what may change, generate, review the current event beside the proposal,
+apply or discard. A working feature, not a plan; the search on the real
+engine; no claim of an optimum.
+
+**Built.** `lib/chefGenerator.js` (the plan, what stops a generation, proved
+conflicts, the search, the check on other players, the proposal, apply and
+undo); step 4 "Proposal" (`ProposalStep.jsx`) between Baskets and Simulate -
+the flow has six steps now; blank recipe quantities (step 2: empty a field;
+"generate this", never a free dish). The engine gained measurements only:
+`probes` (on a typed day, where each player stands and what the dishes left
+lack; who is still under a threshold), `dishMaster` (all semi-blocker dishes
+by its last day), a waiting limit, Recompletion's FU within so many days
+among the players who enter. No rule of the engine changed.
+
+**How the search came to be what it is** (single runs on the made-up
+example). A first version changed one thing a step and stalled at once: a
+player needs every ingredient, so one alone showed nothing. Answering up to
+three reasons a step, with bolder steps where more players are stuck, took
+the worst segment from 112 points short to 21. Reading who is still under
+the blocker's threshold (not only who waits one dish short) found the real
+bottleneck of the weak segments. Weights then grew without end (50 to 2,320),
+so a weight may grow at most 8 times (this tool's own, typed in Bounds). The
+search aims 3 points above a target so the check on other players has room.
+
+**The made-up example needed effort factors.** The Halloween source has
+none, and with one size of recipe for nine segments no base recipe suits
+both ends. The synthetic example now has made-up factors from 0.5 to 3.5 and
+wider made-up pantry caps, labelled as made up like the rest of it.
+
+**What it gives on the made-up example** (single runs, 60 versions, about 22
+seconds, 400 players a segment in the check). As typed: in FU on day 14 from
+0-3% to 65-92%; seven of nine segments meet 80%, P50 is too close to call
+(80%), P25 misses (65%) - its players open about four rare baskets by day 14
+and only rare and epic baskets hold the blocker. With the two basic baskets
+opened to the blocker by the economist (a click in Locks): 82-91%, every
+segment met, P25 "met, close". Both times the Main recipes fall from 378 to
+about 90 against a reference of 250: the FU target asks every segment to
+hold every ordinary ingredient of twelve dishes two thirds into the event.
+
+**Checked.** verify-chef-proposal.mjs 82 checks (about 40 s);
+verify-chef.mjs 167; chef-flow.mjs 160 checks in a real browser at
+1500 x 800 and 1280, among them: the applied event, simulated in step 5 on
+the players of the check, gives the proposal's figures in all nine segments;
+lint and build clean. Merge suites not run (nothing of Merge or the shared
+components changed; the browser run's warm-up list got the new step).
+
+**Not done, on purpose.** Build 03 (automatic presets), a basket valuation on
+the engine, any export. No real event was completed or run.
+
+## Merge: a charm paid 15 in play while the workbook said 65
+
+Economist: "the 4th rank of the charms gave me 15 charms, and the output shows
+its 65 charms" (Play Tester, normal boards; the downloaded workbook).
+
+**Cause.** The game, the simulator and the build pay a rank's value
+(`prizeAmount`); the Small Rewards sheet writes the rank's item text
+(`syntax`). Two paths let them drift apart silently: typing a puzzle, merge
+energy or charm value in the Rewards tab changed the value and not the text's
+number (only coins followed); and a build that re-valued a rank rewrote the
+number in its text only when that number equalled the old value - a text
+already out of step stayed out of step, and the workbook printed it. In a
+clean build the two always agreed (checked: a two-segment build, the sheet,
+the Play Tester and the stage link all give the same numbers).
+
+**Asked, and chosen: "Text follows the value."** A text with one amount now
+carries the value in every path - typing, building, opening an older project
+(`ensureRewardChainConfig`, also the typed copy), and the export
+(`syntaxForValue`). A text with several amounts or none is never rewritten:
+the Syntax tab names it (`rewardTextIssues`).
+
+**Checked.** verify-event-build 342 (four new checks), verify-containers 162,
+verify-v2-rewards, verify-twister 146; in the browser, a project saved with
+the mismatch opens with the text in step, a value typed in the Rewards tab
+carries its text, and the Small Rewards sheet shows it. Not deployed.
+
+## Chef build 02, follow-up: pacing, the budget as a choice, honest proofs
+
+A fourth brief: four gaps in build 02 - the generator never started pacing an
+ordinary ingredient; the recipe budget could collapse (378 to about 90
+against 250) under a soft preference; the semi-blocker's Dish Master shape
+was not generated; and some "proved impossible" checks were not proofs.
+
+**Pacing.** New ordinary schedules for allowed ingredients (existing and new
+counted together, a locked schedule apart from an excluded ingredient), on
+the days allowed - none typed while opening days are locked means none made,
+never a date invented. Added, swapped, re-dayed and removed by the search;
+each new one played without it before the check. First runs paced Butter -
+the very ingredient players lacked - so a guided step now paces only what
+players are not short of. Measured on a small event where Apple crowds the
+baskets (weights and recipes locked): pacing Apple alone took the furthest
+segment from 48 to 19 points short on the search players, and FU on other
+players from 39%/52% to 69%/74% (single runs). On the made-up example no new
+ordinary schedule survived: none helped the worst segment enough.
+
+**The budget.** A choice with no default; a range is kept by every version
+played (the log records each version's total and a check reads it); free
+exploration is labelled. The current event stays the comparison; a separate
+starting point is named. A "recipes alone" reading on the same players says
+how much came from asking for less.
+
+**The semi-blocker.** A schedule made by the rule when allowed, within typed
+bounds; what one shared limit lets each segment cook early is shown per
+segment; early cooking is a target only when typed.
+
+**Proofs.** Retained (with stated assumptions): blocker lifted on the FU day;
+blocker bound (corrected: presets' contents and jokers counted, blocker
+quantities that may change counted at 1, a proposal never opens a blocker
+row); pantry too small (corrected: not for blocker shortfalls, not for
+Recompletion dishes); locked recipes over all supply (corrected: a joker is
+three ingredients). Downgraded to a warning: a source giving the blocker past
+its threshold - measured, 3 blockers to 50% of players still left 60%+ of
+Strong in FU.
+
+**Outcomes kept apart:** inputs, invalid, conflict, misses/no-better,
+cancelled, incomplete. Older proposals (search 1.0) cannot be applied.
+
+**The made-up example inside 225-275** (test range, not approved; single run,
+400 players a segment): in FU on day 14 from 0-3% to 47-68%, every segment
+still short of 80%; recipes alone would give 1-54%; 6+ dishes by day 10 from
+48-56% to 76-87%; longest wait (most players) up from 7-8 to 9-10 days;
+nobody cooks a semi-blocker dish before or by the end of Dish Master, before
+or after; payout complete (made-up prizes), up in every segment. Explored
+freely: 65-91% in FU, recipes 378 to about 100.
+
+**Checked.** verify-chef-proposal 132 (65 s), verify-chef 167, chef-flow 170
+in a real browser at 1500 x 800 and 1280; lint and build.
+
+## Merge: switching between saved events from the header
+
+Economist: "we are still missing a feature i wanted us to have. is to save the
+event and to be able to switch between them". Saved events already existed
+(More → Saved events, live), but switching took the menu and a panel. Asked,
+and chose: a switcher in the header. It names the event open (or "Not saved
+as an event"), lists the saved events newest first with their dates - one
+click opens one, asking first when there are unsaved changes - and offers
+"Update" and "Save as a new event" under the event's dates. Rename, delete and
+download stay in Saved events, one click away from the switcher. Checked:
+saved-events.mjs 20 checks (9 new); lint and build. Not deployed.
+
+## Chef: a design experiment inside a budget range
+
+A pasted review asked for evidence instead of more features: one concrete
+experiment, current → recipes alone → proposal, every segment. Run on the
+synthetic (made-up) example - no real event is complete - inside a test range
+of 225-275 Main ingredients, three search numbers of 150 versions each:
+`docs/chef-experiment-2026-11-23.md`. Findings: every version stayed in the
+range; FU 0-3% → 43-69% across searches, every segment still short of 80%.
+Not the amount of supply (the middle player receives more than FU needs) and
+not the mix (a weight fit to the recipe mix was tried, changed about one
+point, and was removed); the assumed player-activity spread (0.4x-1.6x) leaves
+the slowest fifth below what FU needs by day 14 - with basket luck only the
+same range reaches 78-100%. Pumpkin has weight 0 in every basket of the period
+covering Dish Master, so no Dish Master progression is possible as typed: a new
+warning says so before generating (one check added; verify-chef-proposal 133,
+chef-flow 170).
+
+## Chef: the planning conversation handed over; both views of the players side by side
+
+24 November 2026. The economist's planning chat with GPT (where the Chef rules
+were first agreed) timed out; they pasted the whole of it here to carry on
+together. Read against the app, almost every answer in it is what builds 01-02
+rest on. Agreed there and not built: both views of the players shown side by
+side (GPT's recommendation, accepted: "we will go with ur recommendation"); the
+model suggesting a special supply event in the calendar when players miss an
+ingredient; new basket odds with each threshold opening; ordinary threshold
+amounts per segment ("not for the start"); a basket's value by calendar day;
+build 03. Asked whether what is lost to a pantry cap counts toward a threshold
+(never answered there), the economist: "the caps will always be a lot more than
+the threshold so practically it doesn't matter" - the setting stays.
+
+Chosen next, and built: **both views side by side.** Every simulation run plays
+the chosen view ("Targets judged with", default player activity) and the other,
+on the same players' number; the other is shown in blue columns (in FU on the
+FU day, every checkpoint) and in a segment's detail. A proposal's check plays
+the current event and the proposal the other way on the same check players
+(`otherView`, a reading only: the search, verdicts and outcome are unchanged).
+Made-up example inside 225-275, single run: 47-68% in FU with activity,
+84-100% with basket luck only. Checks: verify-chef-proposal 135 (two new),
+chef-flow with new checks for both screens.
+
+## Chef: the live segments
+
+Same day. The economist: "the segments we got are not the segments we are
+holding in the app", with the game's nine segment keys - Chef_control
+(outside A/B test 1109) and eight bands of daily Brut Wins (0.7 x the last 3
+days' daily average + 0.3 x the last 14 days'): 0-10, 10-20, 20-40, 40-60,
+60-100, 100-150, 150-240, 240+ - and "we need an option to add new segments
+also" ("Add a segment" was already in step 1; said so). Asked: a button that
+replaces the segments (chosen over adding beside them or new chefs starting
+with them), and Chef_control included. Built: "Use the live segments" in step 1
+(asks, lists what still names the old segments, one undo); names, ranges and
+definitions only - effort, prize factor, burnout 1 and baskets 0, to type.
+The historical chefs keep their segments. verify-chef 172 (five new),
+chef-flow: replace and undo in the browser.
+
+## Chef: the Black Friday chef, Dish Master dishes picked, a dish the same for all
+
+Same day. The economist put `chef_BlackFriday_2411.xlsx` in the repo ("go get
+the data from there"). Read: event (24 Nov, 21 days, periods of 10 and 11), 8
+ingredients, 12 Main dishes (297 at the base), production basket strings, the
+segment bands' effort and baskets a day, prizes. Sheets disagreed and the
+economist chose: Gold flakes is in 5 dishes while Dish Master has 3 ("I'll name
+the 3"); dish 1 is the same in every segment tab ("Yes, dish 1 never scales" -
+a new rule, `sameForAllSegments`, an "all" box in step 2); pantry caps
+40/40/40/40/40/30/30/15; Gold flakes in period 1 is 50 in the strings and 0 in
+the assumptions ("the basket production is not 100% finished yet" - the strings
+are loaded as a draft); prizes: the Prize_sheet list is loaded, the 70/70 of
+Chef_assumptions said beside it. Then, of the questions on what the workbook
+lacks: "i want to be able to do those in the model ... to pick the dishes for
+the dish master ... make sure all the questions u asked me here i am able to do
+myself in the app". Everything else was already there; added: the Dish Master
+dishes picked in step 1 (`dishMaster.dishIds`; Dish Master progress read on
+them; checks and the readiness list say when they are not three or lack the
+semi-blocker), and "New chef: from the Black Friday chef". verify-chef 180,
+chef-flow 185 (a walk through every open question in the app).

@@ -18,7 +18,7 @@
 // `Prize_sheet` (the Low-tier dish prize values + the universal
 // reward-to-value conversion table + the Low/Medium/High segment prize
 // multiplier), `User Habit` (the real per-segment avg-baskets/day rates).
-import { RARITY, createIngredient, createDish, createBasket, createPhase, createCalendar, createSegment } from '../lib/chefModel'
+import { RARITY, createIngredient, createDish, createBasket, createPhase, createCalendar, createSegment } from '../lib/chefLegacyModel'
 
 // `startDate` is the real "Chef start" value from `Chef_assumptions`
 // (an Excel serial date, 46313, converted to a calendar date).

@@ -59,7 +59,7 @@ async function warmUp() {
       await page.goto(BASE, { waitUntil: 'networkidle', timeout: 120000 }).catch(() => {})
       await page.getByRole('button', { name: /Chef/ }).first().click({ timeout: 10000 }).catch(() => {})
       await settle()
-      for (const stepId of ['event', 'dishes', 'baskets', 'simulate', 'value']) {
+      for (const stepId of ['event', 'dishes', 'baskets', 'proposal', 'simulate', 'value']) {
         await page.locator(`[data-chef-step="${stepId}"]`).click({ timeout: 5000 }).catch(() => {})
         await settle()
       }

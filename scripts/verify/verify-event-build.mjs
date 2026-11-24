@@ -13,7 +13,8 @@ import { planLegacyRecovery, recoveredBoards } from '../../src/features/merge/li
 import { subsidyForDemand, demandForSubsidy, fillLastBoard, spreadSubsidy, budgetGap, chaseValue, CHAIN_VALUE_DR } from '../../src/features/merge/lib/core/subsidyBudget.js'
 import { roundRewardAmount, formatRewardAmount, coinLadderIsAuto, withGeneratedCoinValues, withBlankCoinValues, withManualCoinLadder, mergeSharedRewardChain, rewardChainAsBuildInput, suggestLadderFixes, applyLadderValues, validateRewardLadder, createRewardChainConfig } from '../../src/features/merge/lib/rewards/rewardChain.js'
 import { effectiveRewardTargets } from '../../src/features/merge/lib/rewards/rewardEconomy.js'
-import { withBuildRewardValues } from '../../src/features/merge/lib/rewards/rewardChain.js'
+import { withBuildRewardValues, ensureRewardChainConfig, rewardTextIssues } from '../../src/features/merge/lib/rewards/rewardChain.js'
+import { buildSmallRewardsSheet } from '../../src/features/merge/lib/export/eventSheets.js'
 import { designParts } from '../../src/features/merge/lib/build/eventBuild.js'
 import { rcInputsOnMainDraft, draftIsUsable, coinPlanTargetFor } from '../../src/features/merge/lib/build/eventBuild.js'
 import { openingRun } from '../../src/features/merge/lib/core/placement.js'
@@ -492,6 +493,16 @@ console.log('--- 19. Fixing rank values that do not reward merging ---')
   const odd = { ...cfg, puzzles: cfg.puzzles.map((r, i) => (i === 2 ? { ...r, syntax: '[dynamic(a:15)]+[dynamic(b:15)]' } : r)) }
   check('a syntax that cannot be rewritten safely is left alone and named', JSON.stringify(applyLadderValues(odd, 'puzzles', puzzles[0].values).syntaxNotUpdated) === '[3]')
   check('the input config is not modified', cfg.puzzles[3].prizeAmount === 40)
+  // THE ITEM TEXT FOLLOWS THE VALUE THE GAME PAYS (economist's choice). Found from a report: a charm paid 15 in the
+  // Play Tester while the workbook said 65 - its text was out of step before the build, and the build left it so.
+  const drifted = { ...cfg, charms: cfg.charms.map((r, i) => (i === 3 ? { ...r, prizeAmount: 40, syntax: '[dynamic(dr-mf-charm:65)]' } : r)) }
+  const rebuilt = withBuildRewardValues(drifted, 'charms', [2, 7, 15, 35]).rewardChainConfig
+  check('a build that re-values a rank whose text was out of step writes the new value into the text', rebuilt.charms[3].prizeAmount === 35 && rebuilt.charms[3].syntax === '[dynamic(dr-mf-charm:35)]')
+  const sheet = buildSmallRewardsSheet([{ rewardChainConfig: drifted, dropGroups: [] }])
+  check('the Small Rewards sheet writes the value the game pays, never a stale number', sheet.rows.find((r) => r.cells[0] === 'charm-r4').cells[1] === '[dynamic(dr-mf-charm:40)]')
+  check('an older project out of step is brought in step when opened (the value wins; what was typed too)', ensureRewardChainConfig(drifted).charms[3].syntax === '[dynamic(dr-mf-charm:40)]' && ensureRewardChainConfig({ ...cfg, charms: cfg.charms.map((r, i) => (i === 3 ? { ...r, prizeAmount: 35, syntax: '[dynamic(dr-mf-charm:35)]', typed: { prizeAmount: 40, syntax: '[dynamic(dr-mf-charm:65)]' } } : r)) }).charms[3].typed.syntax === '[dynamic(dr-mf-charm:40)]' && (() => { const fresh = createRewardChainConfig(); return ensureRewardChainConfig(fresh) === fresh })())
+  const twoAmounts = { ...cfg, puzzles: cfg.puzzles.map((r, i) => (i === 2 ? { ...r, syntax: '[dynamic(a:15)]+[dynamic(b:15)]' } : r)) }
+  check('a text with several amounts is never rewritten, and is named', JSON.stringify(rewardTextIssues(twoAmounts).map((x) => [x.type, x.rank])) === '[["puzzles",3]]' && rewardTextIssues(cfg).length === 0)
 }
 
 console.log('--- 20. Coin rank values set by the build, per segment ---')

@@ -226,6 +226,27 @@ export function ensureRewardChainConfig(config) {
     if (next === config) next = { ...config }
     next[TWISTER_TYPE] = next[TWISTER_TYPE].map((r) => (r?.asset === 'merge-config-twister-v3' ? { ...r, asset: TWISTER_ASSET } : r))
   }
+  // A text with one amount that says another number than the value paid is brought in step - the value is what the
+  // simulator, the build and the play screens pay (see syntaxForValue). What was typed (`typed`) is kept consistent too.
+  for (const type of ALL_REWARD_TYPES) {
+    const ladder = next[type] ?? []
+    const fixRank = (r) => {
+      if (!r) return r
+      let out = r
+      const own = syntaxForValue(type, r)
+      if (own.follows && own.syntax !== (r.syntax ?? '')) out = { ...out, syntax: own.syntax }
+      if (r.typed) {
+        const typed = syntaxForValue(type, r.typed)
+        if (typed.follows && typed.syntax !== (r.typed.syntax ?? '')) out = { ...out, typed: { ...r.typed, syntax: typed.syntax } }
+      }
+      return out
+    }
+    const fixed = ladder.map(fixRank)
+    if (fixed.some((r, i) => r !== ladder[i])) {
+      if (next === config) next = { ...config }
+      next[type] = fixed
+    }
+  }
   for (const type of ALL_REWARD_TYPES) {
     if (!(next[type] ?? []).some((r) => OLD_V2_ASSETS.has(r?.asset))) continue
     if (next === config) next = { ...config }
@@ -459,6 +480,52 @@ export function twisterSyntaxFor(entry) {
   const typed = String(entry?.syntax ?? '').trim()
   return typed !== '' ? typed : twisterItemSyntax(entry?.prizeAmount ?? 0)
 }
+// THE ITEM TEXT FOLLOWS THE VALUE THE GAME PAYS (economist, choosing between
+// "text follows the value" and "only warn"). The simulator, the build and both
+// play screens pay a rank's VALUE (prizeAmount); the workbook writes its item
+// TEXT. The two used to drift apart without a word: a value typed in the
+// Rewards tab left the text's old number, and a build that re-valued a rank
+// rewrote the number only when it equalled the old value - so a charm paid 15
+// in the Play Tester while the downloaded workbook said 65. Now, wherever a
+// text holds exactly one amount ("[dynamic(name:N)]", other terms around it
+// kept) or is the plain coin-allowance pattern, its number IS the value: when
+// typed, when built, when an older project is opened, and in the export. A
+// text that holds several amounts or none cannot be rewritten safely: it is
+// left as written and named (rewardTextIssues) on the Syntax tab and in step 5.
+const DYNAMIC_TERM = /dynamic\(\s*[a-z0-9-]+\s*:\s*([0-9]*\.?[0-9]+)\s*\)/gi
+const amountsIn = (syntax) => [...String(syntax ?? '').matchAll(DYNAMIC_TERM)].map((m) => Number(m[1]))
+// The text a rank's value should be written with: { syntax, follows } - follows: false when it cannot be rewritten.
+export function syntaxForValue(type, entry) {
+  const syntax = String(entry?.syntax ?? '')
+  const value = entry?.prizeAmount ?? 0
+  if (type === COIN_TYPE) {
+    if (syntax.trim() === '') return { syntax, follows: !(value > 0) }
+    if (coinSyntaxFollowsWorth(syntax)) return { syntax: value > 0 ? coinAllowanceSyntax(value) : syntax, follows: true }
+    return { syntax, follows: parseCoinAllowanceSyntax(syntax) === value }
+  }
+  if (syntax.trim() === '') return { syntax, follows: type === TWISTER_TYPE || !(value > 0) }
+  const amounts = amountsIn(syntax)
+  if (amounts.length === 1) return { syntax: syntaxWithAmount(syntax, value), follows: true }
+  return { syntax, follows: false }
+}
+// Ranks whose text cannot be made to carry the value the game pays: [{ type, rank, value, syntax, reason }].
+export function rewardTextIssues(rewardChainConfig, types = ALL_REWARD_TYPES) {
+  const out = []
+  for (const type of types) {
+    ;(rewardChainConfig?.[type] ?? []).slice(0, REWARD_MAX_RANK).forEach((entry, i) => {
+      const value = entry?.prizeAmount ?? 0
+      if (!(value > 0)) return
+      const { follows } = syntaxForValue(type, entry)
+      if (follows) return
+      const syntax = String(entry?.syntax ?? '')
+      const amounts = amountsIn(syntax)
+      const reason = syntax.trim() === '' ? 'no item text' : amounts.length === 0 ? 'its text holds no amount to rewrite' : `its text holds ${amounts.length} amounts`
+      out.push({ type, rank: i + 1, value, syntax, reason })
+    })
+  }
+  return out
+}
+
 // A syntax holding exactly one amount ("[dynamic(name:N)]") with that amount
 // replaced; anything else is returned as it was.
 export function syntaxWithAmount(syntax, value) {
@@ -834,8 +901,10 @@ export function suggestLadderFixes(ladder, { whole = true } = {}) {
 // Writes new rank values into a ladder. The payout number inside each rank's
 // item syntax is updated too when that can be done safely: the syntax holds
 // exactly one `dynamic(<name>:<number>)` term (or is the plain coin-allowance
-// pattern) and its number is the old value. Anything else is left as written
-// and listed in `syntaxNotUpdated` (rank numbers) for the economist to edit.
+// pattern). Anything else is left as written and listed in `syntaxNotUpdated`
+// (rank numbers) for the economist to edit. (It used to also require the
+// number to be the old value - a text already out of step then stayed out of
+// step after every build.)
 export function applyLadderValues(rewardChainConfig, type, values) {
   const syntaxNotUpdated = []
   const ladder = (rewardChainConfig?.[type] ?? createRewardTypeConfig()).map((entry, i) => {
@@ -849,12 +918,9 @@ export function applyLadderValues(rewardChainConfig, type, values) {
       if (coinSyntaxFollowsWorth(syntax)) next.syntax = coinAllowanceSyntax(value)
       else syntaxNotUpdated.push(i + 1)
     } else if (syntax.trim() !== '') {
-      const terms = [...syntax.matchAll(/dynamic\(\s*[a-z0-9-]+\s*:\s*([0-9]*\.?[0-9]+)\s*\)/gi)]
-      if (terms.length === 1 && Number(terms[0][1]) === old) {
-        next.syntax = syntax.replace(/(dynamic\(\s*[a-z0-9-]+\s*:\s*)([0-9]*\.?[0-9]+)(\s*\))/i, (_, a, __, c) => `${a}${value}${c}`)
-      } else {
-        syntaxNotUpdated.push(i + 1)
-      }
+      // (A text with one amount carries the new value, whatever number it held before - see syntaxForValue.)
+      if (amountsIn(syntax).length === 1) next.syntax = syntaxWithAmount(syntax, value)
+      else syntaxNotUpdated.push(i + 1)
     }
     return next
   })

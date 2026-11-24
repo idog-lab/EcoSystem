@@ -22,6 +22,7 @@ import { useBoardListState } from './features/merge/lib/state/useBoardListState'
 import { loadState, saveState, clearState } from './features/merge/lib/state/persistence'
 import { listSavedEvents, saveEvent, loadEvent, renameEvent, deleteEvent, openEventId, setOpenEventId } from './features/merge/lib/state/savedEvents'
 import SavedEventsPanel from './features/merge/components/SavedEventsPanel'
+import EventSwitcher from './features/merge/components/EventSwitcher'
 import { DEFAULT_TARGET_EV } from './features/merge/lib/core/luckyDrop'
 import { DEFAULT_TIER2_UNLOCK_RANK, DEFAULT_TIER4_UNLOCK_RANK } from './features/merge/lib/core/generatorTier'
 import { encodeStage, decodeStage, MAX_SAFE_STAGE_CHARS } from './features/merge/lib/share/stageShare'
@@ -1416,6 +1417,12 @@ function EditorApp({ onHome }) {
     downloadPayload(payload, `${event.name.replace(/[^\w]+/g, ' ').trim().replace(/\s+/g, '-') || 'merge-mania-event'}.json`)
   }
   const openSavedEvent_ = savedEvents.find((e) => e.id === openSavedId) ?? null
+  // A message of the header's event switcher fades after a few seconds (the Saved events panel keeps its own).
+  useEffect(() => {
+    if (!savedEventsMessage || savedEventsShown) return undefined
+    const timer = setTimeout(() => setSavedEventsMessage(null), 5000)
+    return () => clearTimeout(timer)
+  }, [savedEventsMessage, savedEventsShown])
 
   // Encodes the current (main) board list into the URL and copies a
   // shareable player link - recompletion boards aren't part of a shared
@@ -1726,11 +1733,17 @@ function EditorApp({ onHome }) {
             <h1 className="font-display text-lg font-bold text-slate-900 leading-tight tracking-tight whitespace-nowrap">Merge Mania Board Simulator</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {openSavedEvent_ && (
-              <button type="button" onClick={() => { setSavedEventsMessage(null); setSavedEventsShown(true) }} className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-purple-700 whitespace-nowrap hover:bg-purple-50" title="The saved event open now - click for the list" data-testid="open-event-name">
-                <CalendarDays size={13} /> {openSavedEvent_.name}
-              </button>
-            )}
+            <EventSwitcher
+              events={savedEvents}
+              openId={openSavedId}
+              current={eventDates}
+              unsaved={unsaved}
+              message={savedEventsShown ? null : savedEventsMessage}
+              onOpen={openSavedEvent}
+              onSaveNew={(name) => storeEvent({ name })}
+              onUpdate={() => storeEvent({ id: openSavedId, name: openSavedEvent_?.name })}
+              onManage={() => { setSavedEvents(listSavedEvents()); setSavedEventsMessage(null); setSavedEventsShown(true) }}
+            />
             {unsaved ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 whitespace-nowrap" data-testid="unsaved-changes" title="The project is kept in this browser only when you press Save">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />

@@ -25,6 +25,7 @@ import {
   buildAllSegmentsSheetsAsValueRows,
 } from '../../lib/export/eventSheets'
 import { createGoogleSheet } from '../../lib/export/googleSheetsExport'
+import { rewardTextIssues, REWARD_TYPE_LABELS } from '../../lib/rewards/rewardChain'
 
 // Ordered to match the workbook's own tab order (eventSheets.js's
 // buildWorkbook), which in turn matches the economist's reference
@@ -151,6 +152,8 @@ export default function SyntaxPage({
   // disabled until the economist explicitly overrides.
   const canExportSegment = exportOverride || !designIssues.some((i) => i.segmentIndex === segmentIndex)
   const canExportAll = exportOverride || designIssues.length === 0
+  // Ranks whose item text cannot carry the value the game pays (several amounts, or none): written as typed, named here.
+  const textIssues = rewardTextIssues(boards?.[0]?.rewardChainConfig)
   const [view, setView] = useState('normal')
   // What a download holds: the segment shown, or every segment in one file.
   const [scope, setScope] = useState('segment')
@@ -344,6 +347,16 @@ export default function SyntaxPage({
               Open Build event
             </Button>
           )}
+        </div>
+      )}
+      {textIssues.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="syntax-text-issues">
+          <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+          <span className="min-w-[16rem] flex-1">
+            The game pays a rank's value; the Small Rewards sheet writes its item text, and every text with one amount carries that value. These cannot be rewritten
+            safely, so they are written as typed - check them before sending (Rewards tab):{' '}
+            {textIssues.map((i) => `${REWARD_TYPE_LABELS[i.type] ?? i.type} rank ${i.rank} pays ${i.value}, ${i.reason}${i.syntax ? ` ("${i.syntax}")` : ''}`).join('; ')}.
+          </span>
         </div>
       )}
       <div className="mb-3">
