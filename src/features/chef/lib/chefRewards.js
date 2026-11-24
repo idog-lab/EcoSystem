@@ -15,10 +15,10 @@
 // 5 becomes 10), 90 to 200 down to the 10, above 200 to the 50 - raw and
 // rounded both kept. A dish prize's worth is not rounded.
 //
-// WHOLE ITEMS. Scaling gives 4.8 undos. How that becomes a whole number in
-// production has not been decided, so `itemRounding` is a setting ('none'
-// keeps the raw target) and nothing here is a production quantity. Coins are
-// never changed to make up for a rounded item.
+// WHOLE ITEMS. Scaling gives 4.8 undos: it becomes 4 - always rounded DOWN
+// (economist, 24 Nov 2026, asked: "Always down"). It was a setting while not
+// decided ('none' kept the raw target); a save's `itemRounding` is no longer
+// read. Coins are never rounded to whole items (allowance, 2 decimals in text).
 //
 // UNKNOWN STAYS UNKNOWN. A prize with no components, a component with no
 // amount, or a value missing from the table makes the worth `null` and the
@@ -30,6 +30,9 @@ import { REWARD_KEYS } from './chefModel'
 import { roundReward } from '../../../lib/economy/rounding'
 
 export const effectiveFactor = (segment) => (Number(segment?.prizeFactor) || 1) * (Number(segment?.burnout) || 1)
+
+// How a scaled amount becomes whole items: always down (see above).
+export const WHOLE_ITEMS = 'down'
 
 const CAPPED = new Set(['freeRound', 'undo'])
 const UNCHANGED = new Set(['wild', 'extraStock'])
@@ -83,7 +86,7 @@ const hasComponents = (reward) => !!reward && REWARD_KEYS.some((key) => reward[k
 //   legacy true: only the older single number exists; counted as coins.
 export function dishPrize(dish, segment, rewards) {
   const factor = effectiveFactor(segment)
-  const opts = { cappedFactor: rewards?.cappedFactor ?? 2, itemRounding: rewards?.itemRounding ?? 'none' }
+  const opts = { cappedFactor: rewards?.cappedFactor ?? 2, itemRounding: WHOLE_ITEMS }
   if (hasComponents(dish.reward)) {
     const scaled = scaleReward(dish.reward, factor, opts)
     const worth = rewardWorth(scaled.items, rewards?.values)
@@ -100,12 +103,26 @@ export function dishPrize(dish, segment, rewards) {
 // economy's rule for a tier prize, src/lib/economy/rounding.js; economist,
 // asked: "Yes, RoundReward"). It was the nearest 5 at every size, the
 // `grandPrizeRoundTo` an older save may still carry, no longer read.
+// THE PLAYER GETS THE ROUNDED WORTH (economist, asked - 90 coins at x1.2 is 108,
+// RoundReward 100: "The rounded worth (100)"): the coins take up the difference,
+// so the items are worth exactly what RoundReward says. With no coins in the
+// prize, or when the difference would take the coins below 0, the items are
+// left as scaled and `unmatched` says so.
 export function grandPrize(reward, segment, rewards) {
   if (!hasComponents(reward)) return { worth: null, rawWorth: null, baseWorth: null, raw: null, items: null, known: false }
-  const scaled = scaleReward(reward, effectiveFactor(segment), { cappedFactor: rewards?.cappedFactor ?? 2, itemRounding: rewards?.itemRounding ?? 'none' })
+  const scaled = scaleReward(reward, effectiveFactor(segment), { cappedFactor: rewards?.cappedFactor ?? 2, itemRounding: WHOLE_ITEMS })
   const rawWorth = rewardWorth(scaled.items, rewards?.values)
   const worth = rawWorth == null ? null : roundReward(rawWorth)
-  return { worth, rawWorth, baseWorth: rewardWorth(reward, rewards?.values), raw: scaled.raw, items: scaled.items, known: worth != null }
+  let items = scaled.items
+  let unmatched = false
+  const coinValue = Number(rewards?.values?.coins)
+  if (worth != null && worth !== rawWorth) {
+    const coins = scaled.items.coins
+    const next = coins == null || !(coinValue > 0) ? null : coins + (worth - rawWorth) / coinValue
+    if (next != null && next >= 0) items = { ...scaled.items, coins: Math.round(next * 1e6) / 1e6 }
+    else unmatched = true
+  }
+  return { worth, rawWorth, baseWorth: rewardWorth(reward, rewards?.values), raw: scaled.raw, scaledItems: scaled.items, items, unmatched, known: worth != null }
 }
 
 // Everything a segment can be paid, worked out once: the engine reads it.

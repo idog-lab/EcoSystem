@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import Card from '../../../components/ui/Card'
 import Collapsible from '../../../components/ui/Collapsible'
-import { ITEM_ROUNDINGS, ITEM_ROUNDING_LABELS, RARITY, RARITY_LABELS, RARITY_ORDER, REWARD_KEYS, REWARD_LABELS, REWARD_SHORT, createDish, createIngredient, createReward, isBlocker, recipeBudgetReference, recipeForSegment, recipeUnits, removeIngredientEverywhere } from '../lib/chefModel'
+import { RARITY, RARITY_LABELS, RARITY_ORDER, REWARD_KEYS, REWARD_LABELS, REWARD_SHORT, createDish, createIngredient, createReward, isBlocker, recipeBudgetReference, recipeForSegment, recipeUnits, removeIngredientEverywhere } from '../lib/chefModel'
 import { dishPrize, effectiveFactor, grandPrize, rewardWorth } from '../lib/chefRewards'
-import { AddButton, Num, Pills, RowActions, Toggle, NAME_INPUT, SELECT, TD, TH } from './chefUi'
+import { AddButton, Num, Pills, RowActions, Toggle, NAME_INPUT, TD, TH } from './chefUi'
 import { num } from '../lib/chefFormat'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import PrizeTextPanel from './PrizeTextPanel'
@@ -509,16 +509,9 @@ export default function DishesStep({ state, update }) {
                   ))}
                 </div>
                 <EconomyValuesNote values={rewards.values} onUse={(values) => setRewards({ values: { ...rewards.values, ...values } })} />
-                <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600" title="Scaling gives 4.8 undos. How that becomes a whole number in the game has not been decided, so this is a setting, and the amounts shown are targets - not quantities for production. Coins are never changed to make up for a rounded item.">
-                  Whole items (not decided yet)
-                  <select value={rewards.itemRounding} data-testid="chef-item-rounding" onChange={(e) => setRewards({ itemRounding: e.target.value })} className={SELECT}>
-                    {ITEM_ROUNDINGS.map((id) => (
-                      <option key={id} value={id}>
-                        {ITEM_ROUNDING_LABELS[id]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <p className="text-sm text-slate-600" data-testid="chef-item-rounding" data-note>
+                  Whole items: a scaled amount is rounded down (4.8 undos give 4 - your rule). Coins are not rounded to whole items. A grand prize is its rounded worth: its coins take up the difference.
+                </p>
               </div>
             </div>
           </div>

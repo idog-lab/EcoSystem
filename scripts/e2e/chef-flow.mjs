@@ -162,7 +162,7 @@ console.log('--- 4. Ingredients and dishes: the pantry cap, recipes for a segmen
   ok('a prize is what it is made of - 3 coins and a wild are worth 5.5', (await eyeball.locator('[data-reward="coins"]').inputValue()) === '3' && (await eyeball.locator('[data-reward="wild"]').inputValue()) === '1' && (await text(eyeball.locator('[data-cell="worth"]'))) === '5.5')
   ok('a segment\'s grand prize is scaled, then rounded by RoundReward (90 to 200: down to the 10), the raw figure beside it (x1.2: 100, raw 108)', /100 \(raw 108\)/.test(await text(page.locator('[data-segment-prize="p90-dau"] [data-cell="grand"]'))))
   ok('a prize that is not set is unknown, not zero', /unknown/.test(await text(page.locator('[data-grand="rc"]'))))
-  ok('how a scaled prize becomes whole items is a setting, marked as not decided', /not decided yet/.test(await text(fold('chef-prizes'))) && (await page.getByTestId('chef-item-rounding').inputValue()) === 'none')
+  ok('how a scaled prize becomes whole items is said as the economist decided it: always down; a grand prize is its rounded worth', /rounded down \(4\.8 undos give 4 - your rule\)/.test(await text(page.getByTestId('chef-item-rounding'))) && /grand prize is its rounded worth/.test(await text(page.getByTestId('chef-item-rounding'))))
   await page.getByTestId('chef-dish-list').locator('[data-option="recompletion"]').click()
   await page.waitForTimeout(200)
   ok('Recompletion keeps its 12 dishes, and the step says the rule is three', (await page.locator('[data-testid="chef-recipes"] tbody tr[data-dish]').count()) === 12 && /Recompletion has 12 dishes; the rule is three new dishes/.test(await findingsText()))
@@ -279,7 +279,7 @@ console.log('--- 6. Simulate: one button, the FU target first, the rest folded -
   ok(`the catch-up presets compared on the same players ("${cmp.slice(0, 120)}...")`, /Players who got a preset basket \d+%/.test(cmp) && /In FU on the target day \d+% → \d+%/.test(cmp) && /Already finished on the target day \(too early\)/.test(cmp) && /Paid, a player/.test(cmp) && /Kept: ordinary → with/i.test(cmp))
   // What is not settled.
   await openFold('chef-open-rules')
-  ok('what is not settled about the real game is listed, each with what the simulation does for now', (await page.locator('[data-testid="chef-open-rules"] tbody tr').count()) === 9 && /nothing is taken from the pantry/.test(await text(page.getByTestId('chef-open-rules'))))
+  ok('what is not settled about the real game is listed, each with what the simulation does for now', (await page.locator('[data-testid="chef-open-rules"] tbody tr').count()) === 8 && !/whole items/.test(await text(page.getByTestId('chef-open-rules'))) && /nothing is taken from the pantry/.test(await text(page.getByTestId('chef-open-rules'))))
   await openFold('chef-sim-whatif')
   await page.getByTestId('chef-whatif-run').click()
   await page.getByTestId('chef-whatif-chart').waitFor({ timeout: 120000 })

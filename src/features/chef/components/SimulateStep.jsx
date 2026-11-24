@@ -4,7 +4,7 @@ import Card from '../../../components/ui/Card'
 import Collapsible from '../../../components/ui/Collapsible'
 import { ENGINE_VERSION, comparePresets, simulateSegmentAsync, supplySweep, tracePlayer } from '../lib/chefEngine'
 import { randomSeed, shareInterval } from '../lib/chefRng'
-import { CHEST_LABELS, CHEST_TYPES, COOK_ORDERS, COOK_ORDER_LABELS, COOK_TIMINGS, COOK_TIMING_LABELS, ITEM_ROUNDING_LABELS, JOKER_POLICY_LABELS, RECIPIENT_LABELS, ROUND_LABELS, THRESHOLD_COUNT_LABELS, THRESHOLD_POLICY_LABELS, VARIATIONS, VARIATION_LABELS } from '../lib/chefModel'
+import { CHEST_LABELS, CHEST_TYPES, COOK_ORDERS, COOK_ORDER_LABELS, COOK_TIMINGS, COOK_TIMING_LABELS, JOKER_POLICY_LABELS, RECIPIENT_LABELS, ROUND_LABELS, THRESHOLD_COUNT_LABELS, THRESHOLD_POLICY_LABELS, VARIATIONS, VARIATION_LABELS } from '../lib/chefModel'
 import { SEVERITY_LABELS, SEVERITY_ORDER } from '../lib/chefValidation'
 import { dayLabel, shortDay, num, pct } from '../lib/chefFormat'
 import { Finding, Num, Pills, Toggle, SELECT, TD, TH } from './chefUi'
@@ -636,7 +636,6 @@ function OpenRules({ state, update, onGoTo, stepLabels }) {
         )}
         {row('What a player spends a joker on', JOKER_POLICY_LABELS[s.jokerPolicy], link('baskets'))}
         {row('Who gets a special source', RECIPIENT_LABELS[s.recipients], link('baskets'))}
-        {row('How a scaled prize becomes whole items', `${ITEM_ROUNDING_LABELS[state.rewards.itemRounding]}. Amounts are targets, not quantities for production.`, link('dishes'))}
         {row('What a basket minimum above 0 does', 'Kept and flagged, not played.', link('baskets'))}
       </tbody>
     </table>

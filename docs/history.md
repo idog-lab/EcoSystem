@@ -8012,3 +8012,15 @@ part that is not a whole item while "Whole items" is not decided (a scaled
 segment's 4.8 undos). A grand prize says when RoundReward rounds its worth away
 from what its items add up to (108 coins, worth 100) - which the game pays is
 not settled. verify-chef-prize-text 9, chef-worth 10, chef-flow 185.
+
+## Chef: whole items always down; a grand prize is its rounded worth
+
+24 Nov 2026. Writing prizes as reward text turned up two open points, asked:
+how a scaled amount becomes whole items ("Always down" - 4.8 undos give 4; it
+was a setting, "not decided", and leaves the list of unsettled rules: seven
+remain) and which a player gets when RoundReward rounds a grand prize ("The
+rounded worth (100)" - the coins take up the difference; when they would go
+below 0 the items stay as scaled and it is said). Every prize of a scaled
+segment is now written as reward text. Payouts change a little where amounts
+were fractions (1.37 undos count as 1). verify-chef 186, verify-chef-prize-text
+9, chef-worth 10, chef-flow 185; catch-up 42, events 32, worth 8, proposal 135.

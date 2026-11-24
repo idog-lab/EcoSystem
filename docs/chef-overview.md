@@ -167,9 +167,15 @@ stock not at all. A grand prize's worth is then rounded by the economy's RoundRe
 (under 90 to the 5, a 5 becoming 10; 90 to 200 down to the 10; above 200 to
 the 50 - economist: "Yes, RoundReward"; it was the nearest 5; raw kept
 beside it); a dish prize is not. An unknown prize is unknown, not zero,
-and makes the payout "incomplete". How a scaled amount becomes whole items is
-not decided: a setting, raw targets by default, and nothing is a production
-quantity. Coins are never changed to make up for a rounded item.
+and makes the payout "incomplete". **A scaled amount is rounded down to whole
+items** (economist, 24 November 2026, asked: "Always down" - 4.8 undos give 4;
+it was a setting while not decided, and a save's `itemRounding` is no longer
+read). Coins are not rounded to whole items. **A grand prize is its rounded
+worth** (asked: "The rounded worth (100)"): 90 coins at x1.2 are 108, RoundReward
+makes it 100, and the player gets 100 - the coins take up the difference, also
+when wilds or undos are in it (108 coins + 1 wild = 110.5 -> 107.5 coins + 1
+wild = 110). When the coins would have to go below 0 the items stay as scaled
+and it is said (\`unmatched\`).
 
 **The live segments** (economist, 24 November 2026: "the segments we got are
 not the segments we are holding in the app", with the game's segment keys).
@@ -679,12 +685,14 @@ step 5 ("What is not settled about the real game"). Do not resolve silently.**
    threshold so practically it doesn't matter". The setting stays as it is.
 3. Whether the pantry carried into Recompletion may cook a dish, reach FU or
    finish it at once. It may; the run counts how often. Nothing is removed.
-4. How a scaled prize becomes whole items (default: not rounded).
-5. How a joker is spent (default: the blocker while needed, then what is most
+4. How a joker is spent (default: the blocker while needed, then what is most
    missing) - a test policy, not observed play.
-6. When a player cooks, and which dish first when two can be cooked.
-7. Who gets a special source: the same players first, or drawn per source.
-8. What a basket minimum above 0 does (stored, flagged, not played).
+5. When a player cooks, and which dish first when two can be cooked.
+6. Who gets a special source: the same players first, or drawn per source.
+7. What a basket minimum above 0 does (stored, flagged, not played).
+
+(How a scaled prize becomes whole items was one of these: settled on 24
+November 2026 - always down.)
 
 **Limits.**
 
