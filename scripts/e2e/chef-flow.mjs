@@ -191,7 +191,7 @@ console.log('--- 5. Baskets: thresholds, special sources and jokers, catch-up pr
   await page.waitForTimeout(200)
   const pumpkinSteps = await page.locator('[data-threshold="main-pumpkin"] [data-step]').count()
   ok(`the semi-blocker's mild rise during the Dish Master is written on request, with no limit after it (${pumpkinSteps} steps)`, pumpkinSteps === 4 && (await page.locator('[data-threshold="main-pumpkin"] [data-step="3"] [data-field="from-day"]').inputValue()) === '11' && (await page.locator('[data-threshold="main-pumpkin"] [data-step="3"] [data-field="limit"]').inputValue()) === '')
-  ok('what is not confirmed about thresholds is a setting, labelled as such', /Not confirmed yet/i.test(await text(page.getByTestId('chef-threshold-rules'))) && (await page.getByTestId('chef-threshold-policy').inputValue()) === 'before-basket' && (await page.getByTestId('chef-threshold-counts').inputValue()) === 'accepted')
+  ok('the threshold rule is said as confirmed (stops exactly at the limit); what is not confirmed is a setting, labelled as such', /stops exactly at it, inside a basket too/.test(await text(page.getByTestId('chef-threshold-policy'))) && /Not confirmed yet/i.test(await text(page.getByTestId('chef-threshold-rules'))) && (await page.getByTestId('chef-threshold-counts').inputValue()) === 'accepted')
   // Sources.
   await openFold('chef-grants')
   await page.getByTestId('chef-add-joker').click()
@@ -204,7 +204,7 @@ console.log('--- 5. Baskets: thresholds, special sources and jokers, catch-up pr
   await set(rows.nth(1).getByLabel('Amount'), 4)
   await set(rows.nth(1).getByLabel('Day'), 9)
   ok('passing a threshold is a permission, off unless ticked', !(await rows.nth(1).locator('[data-field="bypass"]').isChecked()) && /stops at the limit unless it is allowed to pass it/.test(await text(page.getByTestId('chef-sources'))))
-  ok('how a joker is spent and who gets a source are shown as assumptions', /Assumptions, not observations/i.test(await text(page.getByTestId('chef-source-rules'))) && (await page.getByTestId('chef-joker-policy').inputValue()) === 'blocker-then-deficit')
+  ok('how a joker is spent and who gets a source are said as confirmed with the economist', /Confirmed with you/i.test(await text(page.getByTestId('chef-source-rules'))) && /the blocker while it is needed, then what is most missing/.test(await text(page.getByTestId('chef-joker-policy'))) && /the same players first/.test(await text(page.getByTestId('chef-recipients'))))
   // Presets.
   await openFold('chef-presets')
   await page.getByTestId('chef-add-preset').click()
@@ -279,7 +279,7 @@ console.log('--- 6. Simulate: one button, the FU target first, the rest folded -
   ok(`the catch-up presets compared on the same players ("${cmp.slice(0, 120)}...")`, /Players who got a preset basket \d+%/.test(cmp) && /In FU on the target day \d+% → \d+%/.test(cmp) && /Already finished on the target day \(too early\)/.test(cmp) && /Paid, a player/.test(cmp) && /Kept: ordinary → with/i.test(cmp))
   // What is not settled.
   await openFold('chef-open-rules')
-  ok('what is not settled about the real game is listed, each with what the simulation does for now', (await page.locator('[data-testid="chef-open-rules"] tbody tr').count()) === 8 && !/whole items/.test(await text(page.getByTestId('chef-open-rules'))) && /nothing is taken from the pantry/.test(await text(page.getByTestId('chef-open-rules'))))
+  ok('what is not settled about the real game is listed, each with what the simulation does for now', (await page.locator('[data-testid="chef-open-rules"] tbody tr').count()) === 3 && !/whole items/.test(await text(page.locator('[data-testid="chef-open-rules"] tbody'))) && /Settled with you, and played as rules: a threshold stops a player exactly at the limit/.test(await text(page.getByTestId('chef-settled-rules'))) && /nothing is taken from the pantry/.test(await text(page.getByTestId('chef-open-rules'))))
   await openFold('chef-sim-whatif')
   await page.getByTestId('chef-whatif-run').click()
   await page.getByTestId('chef-whatif-chart').waitFor({ timeout: 120000 })
@@ -291,12 +291,18 @@ console.log('--- 7. A run is kept, and marked out of date once the event has cha
   await step('event')
   await step('simulate')
   ok('the run is still there after a look at another step', (await page.locator('[data-testid="chef-sim-summary"] tbody tr').count()) === 9 && (await page.getByTestId('chef-sim-out-of-date').count()) === 0)
-  await openFold('chef-open-rules')
-  await page.getByTestId('chef-cook-order').selectOption('prize-first')
+  // (A rule still not settled - what counts toward a threshold - is changed in step 3 and put back.)
+  await step('baskets')
+  await openFold('chef-thresholds')
+  await page.getByTestId('chef-threshold-counts').selectOption('attempted')
   await page.waitForTimeout(250)
+  await step('simulate')
   ok('changing a rule marks it out of date - never dropped, never shown as current', /Out of date: the event was changed after this run/.test(await text(page.getByTestId('chef-sim-out-of-date'))) && (await page.locator('[data-testid="chef-sim-summary"] tbody tr').count()) === 9)
-  await page.getByTestId('chef-cook-order').selectOption('list-order')
+  await step('baskets')
+  await openFold('chef-thresholds')
+  await page.getByTestId('chef-threshold-counts').selectOption('accepted')
   await page.waitForTimeout(250)
+  await step('simulate')
   ok('...and putting the rule back makes it current again: it is the same event', (await page.getByTestId('chef-sim-out-of-date').count()) === 0)
 }
 

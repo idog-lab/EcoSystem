@@ -160,8 +160,8 @@ export function readiness(state) {
     fold: 'chef-grants',
   })
   add('open-rules', 'Other', 'The rules of the real game that are not confirmed', {
-    confirm: 'Seven rules are settings for now (when a threshold is checked, whether lost overflow counts, how a joker is spent, ...). Confirm the choices, or change them.',
-    values: [settings.thresholdPolicy, settings.thresholdCounts, settings.cookTiming, settings.cookOrder, settings.jokerPolicy, settings.jokerAmount, settings.jokerBlockerAmount, settings.recipients],
+    confirm: 'Three rules are settings for now: whether overflow lost to the pantry counts toward a threshold, whether the pantry carried into Recompletion may cook at once, what a basket minimum above 0 does. Confirm the choices, or change them.',
+    values: [settings.thresholdCounts],
     step: 'simulate',
     fold: 'chef-open-rules',
   })

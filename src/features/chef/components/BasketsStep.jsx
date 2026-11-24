@@ -4,17 +4,11 @@ import Collapsible from '../../../components/ui/Collapsible'
 import {
   CHEST_LABELS,
   CHEST_TYPES,
-  JOKER_POLICIES,
-  JOKER_POLICY_LABELS,
   RARITY,
   RARITY_LABELS,
-  RECIPIENT_LABELS,
-  RECIPIENT_MODES,
   ROUND_LABELS,
   THRESHOLD_COUNTS,
   THRESHOLD_COUNT_LABELS,
-  THRESHOLD_POLICIES,
-  THRESHOLD_POLICY_LABELS,
   createBasket,
   createPreset,
   createSource,
@@ -296,17 +290,10 @@ function Thresholds({ state, update }) {
       )}
 
       <div className="flex flex-col gap-2 border-t border-slate-100 pt-3" data-testid="chef-threshold-rules">
+        <p className="text-sm text-slate-600" data-testid="chef-threshold-policy">
+          <span className="font-semibold text-slate-700">The limit:</span> a player stops exactly at it, inside a basket too - the rest of that basket is made of other ingredients (your rule).
+        </p>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Not confirmed yet - a choice for now, shown with every run</p>
-        <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600" title="When the game looks at the limit. The source sheet checks with 'at most'; the intended rule reads as 'stop at the limit'. Checked before each basket, a basket can go a little past the limit: the simulation counts how often.">
-          When the limit is checked
-          <select value={settings.thresholdPolicy} data-testid="chef-threshold-policy" onChange={(e) => setSetting({ thresholdPolicy: e.target.value })} className={SELECT}>
-            {THRESHOLD_POLICIES.map((id) => (
-              <option key={id} value={id}>
-                {THRESHOLD_POLICY_LABELS[id]}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600" title="Whether ingredients lost because the pantry was full still count as received. Both figures are tracked; this picks the one the limit is compared with.">
           What counts as received
           <select value={settings.thresholdCounts} data-testid="chef-threshold-counts" onChange={(e) => setSetting({ thresholdCounts: e.target.value })} className={SELECT}>
@@ -412,27 +399,13 @@ function Sources({ state, update }) {
         </AddButton>
       </div>
       <div className="flex flex-col gap-2 border-t border-slate-100 pt-3" data-testid="chef-source-rules">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions, not observations</p>
-        <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-          Who gets a source
-          <select value={settings.recipients} data-testid="chef-recipients" onChange={(e) => setSetting({ recipients: e.target.value })} className={SELECT}>
-            {RECIPIENT_MODES.map((id) => (
-              <option key={id} value={id}>
-                {RECIPIENT_LABELS[id]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600" title="How a simulated player spends a joker. A test policy, not how real players are known to choose.">
-          A joker is spent on
-          <select value={settings.jokerPolicy} data-testid="chef-joker-policy" onChange={(e) => setSetting({ jokerPolicy: e.target.value })} className={SELECT}>
-            {JOKER_POLICIES.map((id) => (
-              <option key={id} value={id}>
-                {JOKER_POLICY_LABELS[id]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Confirmed with you</p>
+        <p className="text-sm text-slate-600" data-testid="chef-recipients">
+          <span className="font-semibold text-slate-700">Who gets a source:</span> the same players first - a 20% source reaches part of a 50% one.
+        </p>
+        <p className="text-sm text-slate-600" data-testid="chef-joker-policy">
+          <span className="font-semibold text-slate-700">A joker is spent on</span> the blocker while it is needed, then what is most missing.
+        </p>
         <span className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
           It gives
           <Num aria-label="Joker: of an ordinary ingredient" value={settings.jokerAmount} onCommit={(n) => setSetting({ jokerAmount: Math.round(n) })} className="w-14" />

@@ -959,13 +959,14 @@ when it is full, saving says so and nothing is overwritten. Held by
   own defaults, shown as such; it has not been run on a completed real
   event. On the made-up example, nobody cooks a semi-blocker dish before or
   during Dish Master, before or after a proposal.
-- Chef (`docs/chef-overview.md`, section 9): seven things about the real
-  game are not confirmed and are settings for now - when a progression
-  threshold is checked, whether overflow lost to the pantry counts toward
-  it, whether the pantry carried into Recompletion may cook at once, how a
-  joker is spent, when and in which
-  order a player cooks, who gets a special source, what a basket minimum
-  above 0 does. (The two older limits are gone: "one more basket" is a clean
+- Chef (`docs/chef-overview.md`, section 9): three things about the real
+  game are not confirmed and are settings for now - whether overflow lost to
+  the pantry counts toward a threshold, whether the pantry carried into
+  Recompletion may cook at once, what a basket minimum above 0 does. Settled
+  as rules on 24 Nov 2026: a threshold stops exactly at the limit (inside a
+  basket too), a player cooks at once in list order, a joker goes to the
+  blocker first, a special source reaches the same players first, scaled
+  prizes round down. (The two older limits are gone: "one more basket" is a clean
   comparison since every basket has random streams of its own, and an
   activity shape keeps the total.)
 

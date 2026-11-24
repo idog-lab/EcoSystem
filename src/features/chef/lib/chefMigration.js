@@ -6,7 +6,7 @@
 // presets, burnout - starts EMPTY, and `notes` says so in plain words (they
 // are shown on screen until dismissed). The chef as it was is kept beside the
 // new one (chefPersistence.js: `legacy`) and can be downloaded.
-import { SCHEMA_VERSION, createCalendar, createReward, createRewards, createSettings, createSource, createSupply, createTargets, createThreshold, createPreset, DEFAULT_REWARD_VALUES, REWARD_KEYS } from './chefModel'
+import { CONFIRMED_SETTINGS, SCHEMA_VERSION, createCalendar, createReward, createRewards, createSettings, createSource, createSupply, createTargets, createThreshold, createPreset, DEFAULT_REWARD_VALUES, REWARD_KEYS } from './chefModel'
 
 // The earlier tool's own guess for a segment's "prize size".
 export const LEGACY_PRIZE_FACTOR = { low: 1, medium: 1.2, high: 1.5 }
@@ -123,7 +123,8 @@ function normalizeV2(raw) {
     presets: (raw.presets ?? []).map((p) => createPreset(p)),
     targets: createTargets(raw.targets ?? {}),
     rewards: createRewards(raw.rewards ?? {}),
-    settings: createSettings(raw.settings ?? {}),
+    // (The rules confirmed by the economist replace what an older save chose for them.)
+    settings: createSettings({ ...(raw.settings ?? {}), ...CONFIRMED_SETTINGS }),
     migration: raw.migration ?? null,
   }
 }

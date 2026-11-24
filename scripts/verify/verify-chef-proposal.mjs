@@ -118,13 +118,14 @@ const P = await gen(S0)
   check('generating changes nothing in the event', JSON.stringify(S0) === before && P.baseFingerprint === fingerprint(S0))
   check(`the search really moved quantities, weights and schedules (${P.changes.recipes.length} quantities, ${P.changes.weights.filter((w) => w.typed).length} weights, ${P.changes.thresholds.length} schedules)`, P.changes.recipes.length > 0 && P.changes.weights.some((w) => w.typed) && P.changes.count > 3)
   check(`each change is listed with what it was: demand ${P.changes.totals.before.demand} -> ${P.changes.totals.after.demand}, blocker shortage ${P.changes.totals.before.shortage.x} -> ${P.changes.totals.after.shortage.x}`, P.changes.recipes.every((c) => c.from !== c.to && Number.isInteger(c.to)) && P.changes.totals.before.demand === 113 && P.changes.totals.after.demand === sum(P.patch.dishes.flatMap((d) => d.recipe.map((r) => r.count))))
-  check('a starting chance is given beside every weight, also where only the others moved', P.changes.weights.every((w) => w.chanceFrom >= 0 && w.chanceTo <= 1) && P.changes.weights.some((w) => !w.typed))
+  check('a starting chance is given beside every weight listed - the ones moved and the ones whose chance moved with them', P.changes.weights.length > 0 && P.changes.weights.every((w) => w.chanceFrom >= 0 && w.chanceFrom <= 1 && w.chanceTo >= 0 && w.chanceTo <= 1))
   check(`every explanation is a measurement, before and after (${P.explanations.length})`, P.explanations.length > 0 && P.explanations.every((e) => /On day 7, \d+% of \w+ .*with the proposal \d+%|Of \w+: cooked one of its \d+ dishes before Dish Master \d+% → \d+%/.test(e.text)))
   // What was measured is what the engine says of the applied event.
   const applied = applyProposal(S0, P, createPlan(S0, FREE))
   check('the applied event reproduces the figures of the check, segment by segment', S0.segments.every((seg) => r4(direct(applied, seg, P).fuTarget.inFu) === fuOf(prop, seg.id).share) && fingerprint(applied) === P.proposedFingerprint && proposalIsInUse(applied, applied.generator.proposal))
-  // FU is the engine's own reading, also where a basket goes past the threshold (a basket may give 3 Jelly here).
-  const wide = small({ baskets: S0.baskets.map((b) => ({ ...b, ingredientWeights: b.ingredientWeights.map((w) => (w.ingredientId === 'x' && b.chestType !== 'basic' ? { ...w, max: 3, weight: 200 } : w)) })) })
+  // FU is the engine's own reading, also where a basket goes past the threshold (a basket may give 3 Jelly here) -
+  // played with the older policy under which a basket can go over (the confirmed rule stops exactly at the limit).
+  const wide = small({ settings: createSettings({ thresholdPolicy: 'before-basket' }), baskets: S0.baskets.map((b) => ({ ...b, ingredientWeights: b.ingredientWeights.map((w) => (w.ingredientId === 'x' && b.chestType !== 'basic' ? { ...w, max: 3, weight: 200 } : w)) })) })
   const W = await gen(wide, { search: { candidates: 12 } })
   const over = direct(wide, wide.segments[1], W)
   const kept = over.records === undefined && simulateSegment(wide, wide.segments[1], { players: 400, seed: W.settings.validationSeed, variation: W.settings.variation, keepRecords: true }).records
@@ -166,7 +167,8 @@ console.log('--- 4. Locks, switches, and what is never touched ---')
   const moved = days.patch.thresholds.flatMap((t, i) => t.steps.filter((step, k) => step.fromDay !== late.thresholds[i].steps[k].fromDay))
   check(`...and then stay inside the days typed, in order, with the amounts as they were (Pumpkin opens on day ${days.patch.thresholds[1].steps[1].fromDay}, was 6; allowed 2 to 6)`, days.patch.thresholds.every((t) => scheduleOk(t)) && moved.length === 1 && moved[0].fromDay >= 2 && moved[0].fromDay < 6 && same(days.patch.thresholds.map((t) => t.steps.map((step) => step.limit)), late.thresholds.map((t) => t.steps.map((step) => step.limit))))
   // A basket may give 3 Jelly and the threshold leaves 2 short: players go past it and finish before the FU day.
-  const early = small({ thresholds: [limit('x', [[1, 4]]), S0.thresholds[1]], baskets: S0.baskets.map((b) => ({ ...b, ingredientWeights: b.ingredientWeights.map((w) => (w.ingredientId === 'x' && b.chestType !== 'basic' ? { ...w, max: 3, weight: 300 } : w)) })) })
+  // (Played with the older policy under which a basket can go over, as the scenario needs.)
+  const early = small({ settings: createSettings({ thresholdPolicy: 'before-basket' }), thresholds: [limit('x', [[1, 4]]), S0.thresholds[1]], baskets: S0.baskets.map((b) => ({ ...b, ingredientWeights: b.ingredientWeights.map((w) => (w.ingredientId === 'x' && b.chestType !== 'basic' ? { ...w, max: 3, weight: 300 } : w)) })) })
   const perSegment = await gen(early, { change: { thresholdAmounts: false, blockers: true } })
   const without = await gen(early, { change: { thresholdAmounts: false } })
   console.log(`      blocker quantities by segment: ${perSegment.changes.blockers.map((c) => `${c.segmentId} ${c.dishId} ${c.from ?? 'base'} -> ${c.to}`).join(', ') || 'none'}`)

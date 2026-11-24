@@ -676,23 +676,23 @@ screen has to keep `chef-flow.mjs` passing or change it on purpose.
 **Not confirmed about the real game - each is a visible setting, listed in
 step 5 ("What is not settled about the real game"). Do not resolve silently.**
 
-1. When a threshold is checked: before each basket (default; a basket can go
-   past the limit, and the overshoot is counted), before each basket with the
-   sheet's "<=" (one basket more at the limit), or exactly at the limit.
-2. Whether overflow lost to the pantry counts toward a threshold (default:
+1. Whether overflow lost to the pantry counts toward a threshold (default:
    only what reached the pantry; both counts are tracked). Asked on 24
    November 2026; the economist: "the caps will always be a lot more than the
    threshold so practically it doesn't matter". The setting stays as it is.
-3. Whether the pantry carried into Recompletion may cook a dish, reach FU or
+2. Whether the pantry carried into Recompletion may cook a dish, reach FU or
    finish it at once. It may; the run counts how often. Nothing is removed.
-4. How a joker is spent (default: the blocker while needed, then what is most
-   missing) - a test policy, not observed play.
-5. When a player cooks, and which dish first when two can be cooked.
-6. Who gets a special source: the same players first, or drawn per source.
-7. What a basket minimum above 0 does (stored, flagged, not played).
+3. What a basket minimum above 0 does (stored, flagged, not played).
 
-(How a scaled prize becomes whole items was one of these: settled on 24
-November 2026 - always down.)
+**Settled with the economist on 24 November 2026, and played as rules** (every
+chef, one saved before included - `CONFIRMED_SETTINGS`, chefMigration): a
+threshold stops a player **exactly at the limit, inside a basket too** ("Stops
+exactly at the limit" - it was "checked before each basket", where a basket
+could go over); a player cooks **at once, in the order of the list**; a joker
+goes to **the blocker while it is needed, then what is most missing**; a special
+source reaches **the same players first**; a scaled prize is rounded **down** to
+whole items. The other options stay in the engine only so the checks can play
+them.
 
 **Limits.**
 

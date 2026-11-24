@@ -4,10 +4,10 @@ import Card from '../../../components/ui/Card'
 import Collapsible from '../../../components/ui/Collapsible'
 import { ENGINE_VERSION, comparePresets, simulateSegmentAsync, supplySweep, tracePlayer } from '../lib/chefEngine'
 import { randomSeed, shareInterval } from '../lib/chefRng'
-import { CHEST_LABELS, CHEST_TYPES, COOK_ORDERS, COOK_ORDER_LABELS, COOK_TIMINGS, COOK_TIMING_LABELS, JOKER_POLICY_LABELS, RECIPIENT_LABELS, ROUND_LABELS, THRESHOLD_COUNT_LABELS, THRESHOLD_POLICY_LABELS, VARIATIONS, VARIATION_LABELS } from '../lib/chefModel'
+import { CHEST_LABELS, CHEST_TYPES, ROUND_LABELS, THRESHOLD_COUNT_LABELS, VARIATIONS, VARIATION_LABELS } from '../lib/chefModel'
 import { SEVERITY_LABELS, SEVERITY_ORDER } from '../lib/chefValidation'
 import { dayLabel, shortDay, num, pct } from '../lib/chefFormat'
-import { Finding, Num, Pills, Toggle, SELECT, TD, TH } from './chefUi'
+import { Finding, Num, Pills, Toggle, TD, TH } from './chefUi'
 
 const DEFAULT_PLAYERS = 300
 
@@ -581,9 +581,8 @@ function WhatIfBaskets({ state, segment, run }) {
 }
 
 // What is not settled about the real game, and what the simulation does meanwhile.
-function OpenRules({ state, update, onGoTo, stepLabels }) {
+function OpenRules({ state, onGoTo, stepLabels }) {
   const s = state.settings
-  const set = (patch) => update((st) => ({ ...st, settings: { ...st.settings, ...patch } }))
   const row = (what, now, where) => (
     <tr className="border-b border-slate-100 align-top text-sm">
       <td className={`${TD} font-medium text-slate-700`}>{what}</td>
@@ -606,38 +605,18 @@ function OpenRules({ state, update, onGoTo, stepLabels }) {
         </tr>
       </thead>
       <tbody>
-        {row('When a progression threshold is checked', THRESHOLD_POLICY_LABELS[s.thresholdPolicy], link('baskets'))}
-        {row('Whether overflow lost to the pantry counts toward a threshold', `Counted: ${THRESHOLD_COUNT_LABELS[s.thresholdCounts].toLowerCase()}. Both figures are tracked.`, link('baskets'))}
+        {row('Whether overflow lost to the pantry counts toward a threshold', `Counted: ${THRESHOLD_COUNT_LABELS[s.thresholdCounts].toLowerCase()}. Both figures are tracked. (You said: "the caps will always be a lot more than the threshold so practically it doesn't matter".)`, link('baskets'))}
         {row('Whether the pantry carried into Recompletion may cook a dish, or reach FU, at once', 'It may: nothing is taken from the pantry and no dish is held back. The run counts how often it happens.', null)}
-        {row(
-          'When a player cooks',
-          <select value={s.cookTiming} data-testid="chef-cook-timing" aria-label="When a player cooks" onChange={(e) => set({ cookTiming: e.target.value })} className={SELECT}>
-            {COOK_TIMINGS.map((id) => (
-              <option key={id} value={id}>
-                {COOK_TIMING_LABELS[id]}
-              </option>
-            ))}
-          </select>,
-          null,
-        )}
-        {row(
-          'Which dish first, when two can be cooked',
-          <span className="flex flex-wrap items-center gap-2">
-            <select value={s.cookOrder} data-testid="chef-cook-order" aria-label="Which dish first" onChange={(e) => set({ cookOrder: e.target.value })} className={SELECT}>
-              {COOK_ORDERS.map((id) => (
-                <option key={id} value={id}>
-                  {COOK_ORDER_LABELS[id]}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-slate-500">A tie-breaker only: a player always cooks what they can and never saves ingredients for a later dish.</span>
-          </span>,
-          null,
-        )}
-        {row('What a player spends a joker on', JOKER_POLICY_LABELS[s.jokerPolicy], link('baskets'))}
-        {row('Who gets a special source', RECIPIENT_LABELS[s.recipients], link('baskets'))}
         {row('What a basket minimum above 0 does', 'Kept and flagged, not played.', link('baskets'))}
       </tbody>
+      <tfoot>
+        <tr>
+          <td colSpan={3} className="px-2 pt-2 text-xs text-slate-500" data-testid="chef-settled-rules">
+            Settled with you, and played as rules: a threshold stops a player exactly at the limit, inside a basket too; a player cooks at once, in the order of the list (never saving ingredients for a later
+            dish); a joker goes to the blocker while it is needed, then to what is most missing; a special source reaches the same players first; a scaled prize is rounded down to whole items.
+          </td>
+        </tr>
+      </tfoot>
     </table>
   )
 }
@@ -674,7 +653,7 @@ function AllChecks({ findings, stepLabels, onGoTo }) {
 // One button; the summary leads - one row a segment, the FU target first -
 // and everything else is folded. A run is kept by ChefApp with what it was
 // played on, and is marked out of date once the chef has changed.
-export default function SimulateStep({ state, update, findings, stepLabels, configKey, sim, onSim, onGoTo }) {
+export default function SimulateStep({ state, findings, stepLabels, configKey, sim, onSim, onGoTo }) {
   const { segments, calendar } = state
   const [leftOut, setLeftOut] = useState(() => new Set())
   const [players, setPlayers] = useState(DEFAULT_PLAYERS)
@@ -1000,8 +979,8 @@ export default function SimulateStep({ state, update, findings, stepLabels, conf
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
-        <Collapsible id="chef-open-rules" className="xl:open:col-span-2" title="What is not settled about the real game" summary="Nine rules the simulation has to choose for now - each is a setting, and none is a confirmed rule">
-          <OpenRules state={state} update={update} onGoTo={onGoTo} stepLabels={stepLabels} />
+        <Collapsible id="chef-open-rules" className="xl:open:col-span-2" title="What is not settled about the real game" summary="Three rules the simulation has to choose for now - each a setting; the rest are settled with you">
+          <OpenRules state={state} onGoTo={onGoTo} stepLabels={stepLabels} />
         </Collapsible>
         <Collapsible
           id="chef-checks"

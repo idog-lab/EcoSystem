@@ -365,10 +365,19 @@ export function createRewards({ values = null, grandPrize = null, itemRounding =
   return { values: { ...DEFAULT_REWARD_VALUES, ...(values ?? {}) }, grandPrize: { main: null, rc: null, ...(grandPrize ?? {}) }, itemRounding, cappedFactor }
 }
 
-// --- The rules that are not settled yet, as settings --------------------------
+// --- The rules of the real game: confirmed, and not settled yet ---------------
 //
-// Each of these is a choice the game's real behaviour has not confirmed. They
-// are typed, shown beside what they change, and listed in the Simulate step.
+// CONFIRMED by the economist (24 Nov 2026, asked about the real game): a
+// threshold stops a player exactly at the limit, inside a basket too ("Stops
+// exactly at the limit"); a joker goes to the blocker while it is needed, then
+// to what is most missing; a special source reaches the same players first; a
+// player cooks at once, in the order of the list. These are rules now: every
+// chef plays them, one saved before included (chefMigration). The options are
+// kept only so the checks can play the others.
+// NOT SETTLED (still settings, listed in the Simulate step): whether overflow
+// lost to the pantry counts toward a threshold, whether the pantry carried into
+// Recompletion may cook at once, what a basket minimum above 0 does.
+export const CONFIRMED_SETTINGS = { thresholdPolicy: 'stop-at-threshold', jokerPolicy: 'blocker-then-deficit', recipients: 'nested', cookTiming: 'delivery', cookOrder: 'list-order' }
 export const THRESHOLD_POLICIES = ['before-basket', 'before-basket-inclusive', 'stop-at-threshold']
 export const THRESHOLD_POLICY_LABELS = {
   'before-basket': 'Checked before each basket: stops once the limit is reached (a basket can go over)',
@@ -390,7 +399,7 @@ export const VARIATION_LABELS = { baskets: 'Basket luck only', activity: 'Player
 
 export function createSettings(overrides = {}) {
   return {
-    thresholdPolicy: 'before-basket',
+    thresholdPolicy: CONFIRMED_SETTINGS.thresholdPolicy,
     thresholdCounts: 'accepted',
     cookTiming: 'delivery',
     cookOrder: 'list-order',

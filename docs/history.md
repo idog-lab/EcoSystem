@@ -8024,3 +8024,17 @@ below 0 the items stay as scaled and it is said). Every prize of a scaled
 segment is now written as reward text. Payouts change a little where amounts
 were fractions (1.37 undos count as 1). verify-chef 186, verify-chef-prize-text
 9, chef-worth 10, chef-flow 185; catch-up 42, events 32, worth 8, proposal 135.
+
+## Chef: four rules of the real game settled
+
+24 Nov 2026, asked about the real game: a threshold "Stops exactly at the
+limit" (inside a basket too - it was played as "checked before each basket",
+where a basket could go over: results move), a joker goes to the blocker first
+then what is most missing, a special source reaches the same players first, a
+player cooks at once in list order (the last three as already played). They
+are rules now (`CONFIRMED_SETTINGS`): step 3 says them instead of offering a
+choice, step 5's "not settled" list keeps three, and a chef saved before takes
+them when opened. Checks written for the older threshold behaviour now pin it
+and say so; a new one holds that no player ends above the limit. verify-chef
+188, proposal 135, catch-up 42, events 32, worth 8, prize text 9; chef-flow
+185, chef-catchup 17, chef-events 11, chef-worth 10.
