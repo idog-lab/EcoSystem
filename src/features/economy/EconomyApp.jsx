@@ -6,6 +6,7 @@ import WorthTab from './WorthTab'
 import KeysTab from './KeysTab'
 import CheckTab from './CheckTab'
 import BuildTab from './BuildTab'
+import BalanceTab from './BalanceTab'
 import SegmentsTab from './SegmentsTab'
 import RulesTab from './RulesTab'
 import { BUTTON } from './economyUi'
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'keys', label: 'Keys' },
   { id: 'check', label: 'Check a reward' },
   { id: 'build', label: 'Build a prize' },
+  { id: 'balance', label: 'Balance tiers' },
   { id: 'segments', label: 'Segments' },
   { id: 'rules', label: 'Rounding' },
 ]
@@ -127,6 +129,7 @@ export default function EconomyApp({ onHome }) {
         {tab === 'keys' && <KeysTab economy={economy} onChange={change} />}
         {tab === 'check' && <CheckTab economy={economy} />}
         {tab === 'build' && <BuildTab economy={economy} />}
+        {tab === 'balance' && <BalanceTab economy={economy} />}
         {tab === 'segments' && <SegmentsTab />}
         {tab === 'rules' && <RulesTab />}
       </main>

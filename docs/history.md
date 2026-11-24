@@ -8060,3 +8060,13 @@ the DR in one segment) and verify-twister-cadence's demand calibration (one
 segment's search not settled at -10.1%, which the build said). Both depend on
 the build's draw - a note for QA, written into CLAUDE.md beside the one known
 before; nothing in the economy was changed (it is frozen).
+
+## Economy: balancing a feature's tiers
+
+24 Nov 2026, going on: the rules' section 6 lists "Balancing checks the app
+should run" - gap = worth - tier target, per tier and cumulative, flagged
+beyond +-X%; the grand prize's separate share; the DR amount to close a gap =
+round((target - worthWithoutDR) / DR_value). Built as `balance.js` and the
+"Balance tiers" tab: tiers typed or pasted from a sheet, each valued by the
+checker, X typed (the rules do not give it; 10 to start). verify-economy 201,
+economy-page 53.

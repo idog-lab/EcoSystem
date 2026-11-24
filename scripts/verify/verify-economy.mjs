@@ -14,6 +14,7 @@ import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/l
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
+import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
 import { DEFAULT_REWARD_VALUES } from '../../src/features/chef/lib/chefModel.js'
 import { LIVE_SEGMENT_SET } from '../../src/features/chef/lib/chefModel.js'
 
@@ -220,6 +221,31 @@ eq('the Chef baskets offered to build with are the game-play ones (no _pricing_)
 {
   const older = normalizeEconomy({ version: 3, keys: { packs: [createKey({ key: 'My_Pack', value: 2 }), createKey({ key: 'Joker_Pack' })], presets: [createKey({ key: 'pick_1', value: 5 })] } })
   check('an economy saved before gets the game keys added, keeps its own, and a typed worth stays', older.keys.packs.length === 609 && older.keys.packs.find((k) => k.key === 'My_Pack').value === 2 && older.keys.packs.find((k) => k.key === 'Joker_Pack').value === 0 && older.keys.presets.find((k) => k.key === 'pick_1').value === 5 && older.keys.presets.length === 106)
+}
+
+section('8c. Balancing a feature\'s tiers (section 6)')
+{
+  const eco = createEconomy({ currencies: [createCurrency({ name: 'dr-x', valueGameplay: 0.1 })] })
+  const B = balanceTiers(
+    [
+      { tier: 'T1', target: 5, text: 'allowance(coins:3)+free_wild:1' },
+      { tier: 'T2', target: 10, text: 'allowance(coins:2)+[dynamic(dr-x:20)]' },
+      { tier: 'Grand', target: 25, text: 'allowance(coins:20)+free_wild:2' },
+    ],
+    { economy: eco, flagPct: 5, currency: 'dr-x' },
+  )
+  const [t1, t2, g] = B.rows
+  eq('a tier\'s worth is its text read by the economy: 3 coins + a wild = 5.5', t1.worth, 5.5)
+  check(`gap = worth - target, and its %: +0.5, +10% - flagged beyond the typed 5% (${t1.gap}, ${t1.gapPct}%)`, t1.gap === 0.5 && t1.gapPct === 10 && t1.flagged)
+  check(`a tier short of its target: 4 against 10, -60% (${t2.gap}, ${t2.gapPct}%)`, t2.worth === 4 && t2.gap === -6 && t2.gapPct === -60 && t2.flagged)
+  check(`cumulative: 9.5 against 15 after two tiers (${t2.cumGapPct}%)`, t2.cumWorth === 9.5 && t2.cumTarget === 15 && Math.abs(t2.cumGapPct - -36.6667) < 0.001)
+  check(`the currency to close a gap: round((target - worth without it) / its worth) = (10 - 2) / 0.1 = ${t2.suggest?.amount}, written ${t2.suggest?.text}`, t2.suggest?.amount === 80 && t2.suggest.text === 'dynamic(dr-x:80)' && t2.suggest.without === 2)
+  check('a tier already above its target needs none', t1.suggest?.amount === 0 && t1.suggest.text === null)
+  check(`the grand prize's share: ${g.worth} of ${B.totals.worth} worth, ${g.target} of ${B.totals.target} target`, g.worth === 25 && B.totals.worth === 34.5 && Math.abs(B.totals.grandShareOfWorth - 25 / 34.5) < 1e-9 && B.totals.grandShareOfTarget === 25 / 40)
+  const U = balanceTiers([{ target: 5, text: 'allowance(coins:3)' }, { target: 5, text: 'preset:pick_3' }, { target: 5, text: 'allowance(coins:5)' }], { economy: eco })
+  check('a tier with a part that has no worth: worth and gap unknown, never smaller - and the running total unknown from there', U.rows[1].worth === null && U.rows[1].gap === null && U.rows[1].unknown.length === 1 && U.rows[2].cumWorth === null && U.totals.worth === null && U.rows[0].cumWorth === 3)
+  const P = parseTierRows('T1\t5\tallowance(coins:3)\n10\tfree_wild:4\nnot a row')
+  check('tiers pasted from a sheet: tier, target, text - or target, text - one a line; what cannot be read is said', P.rows.length === 2 && P.rows[0].tier === 'T1' && P.rows[0].target === 5 && P.rows[1].target === 10 && P.rows[1].text === 'free_wild:4' && P.bad.length === 1)
 }
 
 section('9. Chef reads the same table')

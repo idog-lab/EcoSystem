@@ -152,13 +152,26 @@ built into a shared calculation.
 
 MROUND = nearest multiple, a half away from zero (Excel).
 
+## 6. Balancing a feature's tiers (`balance.js`, the "Balance tiers" tab)
+
+The rules' checks: a tier's worth is its reward text read by the economy; gap =
+worth - tier target, as a % of the target, per tier and cumulative, flagged
+beyond +-X% (X is not given in the rules: typed, 10 to start - this app's own);
+the grand prize (the last tier) as its share of the worth and of the target;
+the currency amount to close a gap = round((target - the tier's worth without
+that currency) / its worth), written as `dynamic(<name>:<amount>)` ("none
+needed" when the tier is above its target). A part with no worth makes a tier
+unknown - never a smaller number - and the running total unknown from there.
+Tiers are typed or pasted from a sheet (tier, target, text - or target, text -
+one a line, tab-separated) and kept in this browser as a working sheet.
+
 ## The Economy page
 
 Home screen → Economy. Tabs: **Worth** (the value table, Chef basket tiers,
 currencies with game-play, pricing and dated values), **Keys** (presets, packs
 with their allowance, chests, triggers, allowance buckets - typed or pasted),
 **Check a reward** (paste one or many texts: readable or not, what is off the
-lists, the worth on a chosen date), **Build a prize** (from parts, in the
+lists, the worth on a chosen date), **Balance tiers** (section 6), **Build a prize** (from parts, in the
 standard order, checked and valued), **Segments** (band ends → names, keys and
 conditions, copy as a table), **Rounding** (each rule with where it is used
 and a number to try). Every change is kept in this browser at once; Download /
