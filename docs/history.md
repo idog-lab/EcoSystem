@@ -8048,3 +8048,15 @@ this browser, apart from the chefs (so a run is not a change to save), for the
 out of date once the chef differs, or once the simulation is a newer version,
 and the screen says when it was played and whether it is kept (when the
 browser has no room: for the visit only). chef-runs 5, chef-flow 185.
+
+## A full run of every check (24 Nov 2026)
+
+After the day's Economy and Chef work, every suite was run. Browser: all 27
+suites passed (Merge, Chef, the Economy page). Engine: every Chef suite, the
+economy, the board bank and the stage link passed; two Merge checks failed
+once in the full run and passed twice alone, with no change to their code:
+verify-real-play's robot matching the simulator (0.98 of the rewards, 0.94 of
+the DR in one segment) and verify-twister-cadence's demand calibration (one
+segment's search not settled at -10.1%, which the build said). Both depend on
+the build's draw - a note for QA, written into CLAUDE.md beside the one known
+before; nothing in the economy was changed (it is frozen).

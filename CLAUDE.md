@@ -1024,7 +1024,15 @@ The suites reach the advanced tools and the project actions through the
 with `showSegments` / `selectSegment`, and pick a sheet with `syntaxView`.
 One check is known to depend on the build's draw: build-event's "the residual
 ... is only rounding (within 4 DR)" was seen failing in a full run and passing
-twice alone - a note for QA, not a regression. (verify-event-build once
+twice alone - a note for QA, not a regression. Two more, seen on 24 Nov 2026
+in a full run and passing twice alone: verify-real-play's "a careful robot ...
+collects what the simulator says" (one segment's robot at 0.98 of the
+simulator's rewards and 0.94 of its DR, against 1.00 alone), and
+verify-twister-cadence's "the build moves the subsidy until the average player
+pays the demand" (Segment 1's search did not settle, 268 of 298 DR, -10.1% -
+the build said "not settled"; alone it was 288, -3.4%). Neither code had
+changed. Because \`npm run verify\` stops at the first failing suite, a
+draw-dependent failure hides the suites after it: run those alone. (verify-event-build once
 stopped a full run with a crash, not a failure: a check read the mark of a
 re-valued rank on a segment the build had given exactly the typed values,
 which has none. The check now reads the typed values there.)
