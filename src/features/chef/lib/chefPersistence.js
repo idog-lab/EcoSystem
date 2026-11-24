@@ -57,6 +57,37 @@ export function saveChefLibrary(library) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...library, schemaVersion: SCHEMA_VERSION }))
 }
 
+// THE LAST RUN OF A CHEF, kept in this browser (a known limit was "Simulation
+// results are not saved with a chef": a reload lost them). Apart from the
+// chefs, so a run is not a change to save; at most RUNS_KEPT chefs' runs, the
+// newest first (a run of nine segments is about 200 KB). A run carries the
+// fingerprint of the chef it was played on: once the chef differs it shows as
+// out of date, never as current. { runs, kept: false } when the browser has no
+// room - then it is kept for the visit only, and the screen says so.
+const RUNS_KEY = 'merge-mania-chef-runs'
+export const RUNS_KEPT = 4
+export function loadChefRuns() {
+  try {
+    const raw = localStorage.getItem(RUNS_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+export function saveChefRuns(runs) {
+  const newest = Object.entries(runs ?? {})
+    .filter(([, run]) => run && typeof run === 'object')
+    .sort((a, b) => String(b[1].at ?? '').localeCompare(String(a[1].at ?? '')))
+    .slice(0, RUNS_KEPT)
+  try {
+    localStorage.setItem(RUNS_KEY, JSON.stringify(Object.fromEntries(newest)))
+    return { kept: true, dropped: Object.keys(runs ?? {}).length - newest.length }
+  } catch {
+    return { kept: false, dropped: 0 }
+  }
+}
+
 // A backup file, checked before it is trusted: the library it holds, or null.
 // Nothing is ever applied in part.
 export function parseImportedLibrary(jsonText) {

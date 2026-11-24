@@ -244,7 +244,7 @@ console.log('--- 6. Simulate: one button, the FU target first, the rest folded -
   ok(`a share comes with its range and whether the target is met (10% of Revenue in FU: ${await text(top.locator('[data-cell="in-fu"]'))})`, /^\d+% \(\d+-\d+\) ?(met|not met)$/.test(await text(top.locator('[data-cell="in-fu"]'))) && /^\d+% \(\d+-\d+\)$/.test(await text(top.locator('[data-cell="checkpoint"]'))))
   ok('an incomplete payout is marked, not shown as exact', /\*$/.test(await text(top.locator('[data-cell="paid"]'))))
   const identity = await text(page.getByTestId('chef-sim-identity'))
-  ok(`a run says what it was played on and with ("${identity}")`, /^Played on chef \w+ · chef-engine [\d.]+ · 150 players a segment · players number 7 · player activity and basket luck$/.test(identity))
+  ok(`a run says what it was played on and with ("${identity}")`, /^Played on chef \w+ · chef-engine [\d.]+ · 150 players a segment · players number 7 · player activity and basket luck · played .+\d$/.test(identity))
   ok('the legend tells the range of a share from the spread of the players, and says nothing is proposed', /the range after a share says by how much\. "Most players" is something else/.test(await text(page.getByTestId('chef-sim-legend'))) && /this step proposes nothing/.test(await text(page.getByTestId('chef-sim-legend'))))
   // BOTH VIEWS OF THE PLAYERS, side by side (agreed in planning: the targets depend on the activity assumptions).
   const otherFu = await page.locator('[data-cell="other-in-fu"]').allInnerTexts()

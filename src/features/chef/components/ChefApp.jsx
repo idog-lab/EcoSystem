@@ -13,7 +13,7 @@ import { syntheticExampleState, SYNTHETIC_NAME, SYNTHETIC_NOTE } from '../data/s
 import * as halloweenChefData from '../data/halloweenChefData'
 import * as thanksgivingChefData from '../data/thanksgivingChefData'
 import { BLACK_FRIDAY_NAME, blackFridayChefState } from '../data/blackFridayChefData'
-import { loadChefLibrary, saveChefLibrary, createConfigEntry, parseImportedLibrary } from '../lib/chefPersistence'
+import { loadChefLibrary, saveChefLibrary, createConfigEntry, parseImportedLibrary, loadChefRuns, saveChefRuns } from '../lib/chefPersistence'
 import { blankChefState } from '../lib/chefModel'
 import { chefFromSource } from '../lib/chefMigration'
 import { fingerprint } from '../lib/chefEngine'
@@ -101,8 +101,16 @@ export default function ChefApp({ onHome }) {
   const [importError, setImportError] = useState(null)
   const [moreOpen, setMoreOpen] = useState(false)
   // The last simulation of each chef, with a fingerprint of the chef it was
-  // played on (SimulateStep marks it out of date once the chef has changed).
-  const [sims, setSims] = useState({})
+  // played on (SimulateStep marks it out of date once the chef has changed),
+  // kept in this browser across visits (chefPersistence: loadChefRuns).
+  const [sims, setSimsState] = useState(loadChefRuns)
+  const [runsKept, setRunsKept] = useState(true)
+  const setSims = (fn) =>
+    setSimsState((prev) => {
+      const next = typeof fn === 'function' ? fn(prev) : fn
+      setRunsKept(saveChefRuns(next).kept)
+      return next
+    })
   const fileInputRef = useRef(null)
   const moreRef = useRef(null)
 
@@ -428,6 +436,7 @@ export default function ChefApp({ onHome }) {
             configKey={configKey}
             sim={sims[activeConfig.id] ?? null}
             onSim={(run) => setSims((prev) => ({ ...prev, [activeConfig.id]: run }))}
+            runKept={runsKept}
             onGoTo={goTo}
           />
         )}

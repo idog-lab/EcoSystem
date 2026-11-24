@@ -653,7 +653,7 @@ function AllChecks({ findings, stepLabels, onGoTo }) {
 // One button; the summary leads - one row a segment, the FU target first -
 // and everything else is folded. A run is kept by ChefApp with what it was
 // played on, and is marked out of date once the chef has changed.
-export default function SimulateStep({ state, findings, stepLabels, configKey, sim, onSim, onGoTo }) {
+export default function SimulateStep({ state, findings, stepLabels, configKey, sim, onSim, onGoTo, runKept = true }) {
   const { segments, calendar } = state
   const [leftOut, setLeftOut] = useState(() => new Set())
   const [players, setPlayers] = useState(DEFAULT_PLAYERS)
@@ -698,7 +698,9 @@ export default function SimulateStep({ state, findings, stepLabels, configKey, s
   }
 
   const results = sim?.results ?? null
-  const outOfDate = !!sim && sim.key !== configKey
+  // (A run kept from another visit can be of an earlier simulation too: out of date as well, and said why.)
+  const olderEngine = !!sim && sim.engine !== ENGINE_VERSION
+  const outOfDate = !!sim && (sim.key !== configKey || olderEngine)
   const detail = results?.find((r) => r.segment.id === detailId) ?? results?.[0] ?? null
   // The folds below a run play the chef as it is now, for the segment as it is now.
   const liveSegment = detail ? (segments.find((s) => s.id === detail.segment.id) ?? null) : null
@@ -791,7 +793,9 @@ export default function SimulateStep({ state, findings, stepLabels, configKey, s
         <>
           {outOfDate && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="chef-sim-out-of-date">
-              Out of date: the event was changed after this run. The figures below are for the event as it was - run the simulation again.
+              {olderEngine && sim.key === configKey
+                ? 'Out of date: this run was played by an earlier version of the simulation. The figures below are what it gave then - run the simulation again.'
+                : 'Out of date: the event was changed after this run. The figures below are for the event as it was - run the simulation again.'}
             </p>
           )}
           <Card title="The event, simulated" subtitle={fuDay != null ? `The FU target is read on ${dayLabel(calendar, fuDay)}. A share is followed by the range it would land in with other players.` : 'No day is set for the FU target (step 1), so the shares at the end of the event lead.'}>
@@ -936,7 +940,10 @@ export default function SimulateStep({ state, findings, stepLabels, configKey, s
             </p>
             <p className="mt-1 text-xs text-slate-400" data-testid="chef-sim-identity">
               Played on chef {sim.key} · {sim.engine} · {sim.players.toLocaleString()} players a segment · players number {sim.seed}
-              {sim.seedTyped ? '' : ' (new this run)'} · {VARIATION_LABELS[sim.variation].toLowerCase()}
+              {sim.seedTyped ? '' : ' (new this run)'} · {VARIATION_LABELS[sim.variation].toLowerCase()} · played {new Date(sim.at).toLocaleString()}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-400" data-testid="chef-sim-kept">
+              {runKept ? 'Kept in this browser: it is here when the chef is opened again (the last run of the 4 chefs played most recently).' : 'Not kept: this browser has no room left for it, so it is here for this visit only.'}
             </p>
           </Card>
 

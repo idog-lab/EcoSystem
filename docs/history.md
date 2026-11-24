@@ -8038,3 +8038,13 @@ them when opened. Checks written for the older threshold behaviour now pin it
 and say so; a new one holds that no player ends above the limit. verify-chef
 188, proposal 135, catch-up 42, events 32, worth 8, prize text 9; chef-flow
 185, chef-catchup 17, chef-events 11, chef-worth 10.
+
+## Chef: a run is kept across visits
+
+24 Nov 2026, going on with Chef: a known limit was "Simulation results are not
+saved with a chef" - a reload lost a run. The last run of a chef is now kept in
+this browser, apart from the chefs (so a run is not a change to save), for the
+4 chefs played most recently (a run of nine segments is about 200 KB). It shows
+out of date once the chef differs, or once the simulation is a newer version,
+and the screen says when it was played and whether it is kept (when the
+browser has no room: for the visit only). chef-runs 5, chef-flow 185.

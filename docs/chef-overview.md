@@ -613,8 +613,10 @@ little scrolling as possible at 1500 x 800. A step gets the whole chef
 | 5. Simulate | What this event still needs (folded; on every step of a reference chef). What needs a fix. One button. After a run, one row a segment: on the FU day (in FU with its range and met / not met, finished, ever in FU), checkpoints, dishes, finish Main, Recompletion, paid. What the run was played on. | A segment in detail. Day by day. With and without presets. One player's event. More or fewer baskets. What is not settled about the real game. All the checks. |
 | 6. Basket value | A basket's worth day by day: for a segment, every day and every basket type it opens, one more basket played on the engine (the same players, each compared with themself) - its worth that day is what it adds to what a player is paid, in allowance, with how far it would move with other players - beside the tier worth of the Economy page; out of date after an edit. One more basket on one day, played both ways. The older estimate, labelled as one. | What one ingredient counts for (older estimate). |
 
-A run is kept for the visit per chef with the chef's fingerprint; once the
-chef changes it stays on screen marked "Out of date". It is not saved.
+A run is kept per chef with the chef's fingerprint, in this browser across
+visits (`loadChefRuns` / `saveChefRuns`, the last run of the 4 chefs played
+most recently); once the chef changes - or the simulation version - it stays
+on screen marked "Out of date".
 
 ## 7. Words
 
@@ -645,7 +647,8 @@ scripts/e2e/chef-flow.mjs                 the flow in a real browser (185 checks
 scripts/verify/verify-chef-worth.mjs      a basket's worth day by day: every day and type, the same as
                                           "one more basket", the same players again, Basic < Rare < Epic (8 checks)
 scripts/e2e/chef-catchup.mjs              step 4's catch-up suggestions in a real browser (17 checks)
-scripts/e2e/chef-worth.mjs                step 6's basket worth in a real browser (7 checks)
+scripts/e2e/chef-worth.mjs                step 6's basket worth and step 2's prize text in a real browser (10 checks)
+scripts/e2e/chef-runs.mjs                 a run kept across a reload, out of date once the chef changes (5 checks)
 scripts/verify/verify-chef-events.mjs     special-event suggestions: what stops one, what an event may be,
                                           the economist's sources untouched, fewest given, apply, undo (32 checks)
 scripts/e2e/chef-events.mjs               step 4's special events in a real browser (11 checks)
@@ -740,7 +743,11 @@ them.
   players of one run can be a few % off the expected: the screen shows both.
 - Thanksgiving's start date is probably not its real one. One Halloween
   Recompletion dish has no name in the source sheet.
-- Art is emoji. Simulation results are not saved with a chef.
+- Art is emoji. The last simulation run of a chef is kept in this browser (the
+  4 chefs played most recently, apart from the chefs: a run is not a change to
+  save), marked out of date once the chef or the simulation differs; when the
+  browser has no room the screen says it is kept for the visit only. It is not
+  in a backup file.
 
 ## 10. How to take a task
 
