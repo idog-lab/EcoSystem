@@ -7953,3 +7953,19 @@ and "Twists asked" kept showing the twists it was built for as if they were
 asked now. Step 4 now says so in that cell: "built for these; 12 typed now -
 build again" (while a current build is being priced: "12 typed now -
 pricing..."). Presentation only; nothing about the build or the price changed.
+
+## Chef: a basket's worth, day by day, on the engine
+
+24 Nov 2026. Asked to go on with Chef. The economist had said the basket
+worths (Basic 0.25, Rare 1, Epic 4) stay "as for now ... when the chef model
+in the app will be better we will change its value daily", and step 6 still
+had only the older estimate (blind to thresholds, the pantry and
+Recompletion). Built `chefBasketWorth.js`: for a segment, every day and every
+basket type it opens, one more basket played on the engine with the same
+players, each compared with themself (the engine's "one more basket"; a day's
+figure equals it exactly). The worth is what the basket adds to what a player
+is paid, in allowance, with how far it would move with other players. Shown
+at the top of step 6 beside the tier worth of the Economy page - a reading
+only, no value is changed. Made-up example, single run: about 0.5 / 2.5 / 5
+over the event against 0.25 / 1 / 4. verify-chef-worth 8, chef-worth 7,
+chef-flow 185.

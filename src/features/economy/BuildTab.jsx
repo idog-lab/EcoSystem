@@ -141,15 +141,15 @@ export default function BuildTab({ economy }) {
                   )}
                 </>
               )}
-              <Field label="Chest">
-                <select value={chest} onChange={(e) => setChest(e.target.value)} className={INPUT} aria-label="Chest">
-                  <option value="">none</option>
+              {/* The chest's name is typed (economist: "let me put the name"); the known ones are offered. The whole
+                  reward goes inside it: chest:<name>(<reward>). */}
+              <Field label="Chest (wraps it all)">
+                <input value={chest} onChange={(e) => setChest(e.target.value.trim())} list="economy-chest-names" placeholder="none" aria-label="Chest" data-testid="economy-build-chest" className={`${INPUT} w-44 font-mono`} />
+                <datalist id="economy-chest-names">
                   {economy.keys.chests.map((k) => (
-                    <option key={k.key} value={k.key}>
-                      {k.key}
-                    </option>
+                    <option key={k.key} value={k.key} />
                   ))}
-                </select>
+                </datalist>
               </Field>
             </div>
           </div>

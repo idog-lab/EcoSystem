@@ -173,8 +173,10 @@ function validate(node, options, add) {
         n.options.forEach(walk)
         break
       case 'chest':
-        if (!n.name || !KEY.test(n.name)) once('error', 'A chest with no name.', 'chest-name')
-        else if (economy && !findKey(economy, 'chests', n.name)) once('warning', `The chest "${n.name}" is not on the Economy page's list.`, 'unknown-key')
+        // (A chest's name is typed by the economist - "let me put the name" - so one off the list is not named. A
+        // name with characters a key never has is.)
+        if (!n.name) once('error', 'A chest with no name.', 'chest-name')
+        else if (!KEY.test(n.name)) once('error', `The chest "${n.name}": a name is letters, digits, "-", "_" or ".".`, 'chest-name')
         walk(n.inner)
         break
       case 'allowance': {

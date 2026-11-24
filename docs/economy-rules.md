@@ -197,15 +197,23 @@ Who reads it:
   matter for now ("we are just learning about the values presets, allowances,
   and syntax rules").
 
+- **Prize values** (picks, pet, merge, puzzle): the economist enters them in
+  the model itself when making a feature - nothing to give ahead.
+- **Allowance buckets and triggers**: left as they are for now; a trigger can
+  be added by hand (Keys tab, "Add").
+- **Chests**: the economist types the chest's name (Build a prize: a box with
+  the known names offered; a name off the list is not named). The wrapping is
+  `chest:<name>(<the whole reward>)` - everything of the tier inside the
+  parentheses, `+` parts and `[a|b]` fallbacks included; no name, no wrapper;
+  a chest is worth what is in it. Held by verify-economy (3b) and economy-page.
+- **Puzzle fallback inputs (BaseAmount, PuzzleMult) and RoundReward under 2.5**:
+  "leave it" - the builder takes a worth and a multiplier; RoundReward gives 0.
+
 ## Open questions (not settled)
 
-1. **Preset syntax and values** - to come from the economist: mini-game presets
-   (from merge and picks), puzzle presets (the average daily puzzle value over
-   the event's days), and the worth of the other presets of the list.
-2. **Puzzle fallback inputs**: what BaseAmount and PuzzleMult are in
-   `P = max(5, MROUND(DR_Value x BaseAmount x PuzzleMult / PuzzleValue, 5))`.
-   The builder takes the worth and a multiplier.
-3. **RoundReward of a value under 2.5** gives 0 (the rule says nothing of 0).
+None asked and waiting. The worths of the currencies and of the presets other
+than the Chef baskets are "not set" until entered; a prize holding one reads
+"unknown", never a smaller number.
 
 ## Checks
 

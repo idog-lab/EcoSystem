@@ -100,6 +100,21 @@ check('...and a near miss is not', codes('preset:Chef__Mega_Phase_2_Free_round')
 eq('an empty text is nothing, with no finding', checkReward('', { economy }).issues.length, 0)
 check('Missing(DrawA,2) reads', checkReward('Missing(DrawA,2)', { economy }).ok)
 
+section('3b. A chest wraps the whole reward')
+{
+  const inner = 'allowance:milestone(coins:3)+free_wild:1+[sticker_pack:Joker_Pack|allowance(coins:0.5)]+[dynamic(dr-puzzle:5)|[dynamic(dr-hidden:1)]]'
+  const wrapped = chestSyntax(inner, 'my-new-chest')
+  eq('chest:<name>(<the whole reward>)', wrapped, `chest:my-new-chest(${inner})`)
+  const r = checkReward(wrapped, { economy })
+  check('a chest around +, [a|b] and nested fallbacks reads, and writes back exactly', r.ok && r.roundTrip && r.node.type === 'chest' && r.node.name === 'my-new-chest' && r.node.inner.type === 'all' && r.node.inner.parts.length === 4)
+  check('a chest name typed by the economist, not on the list, is not named', !codes(wrapped).includes('unknown-key'))
+  eq('a chest is worth what is in it', rewardWorth(chestSyntax('free_wild:2+allowance(coins:1)', 'x'), economy).worth, 6)
+  eq('no chest name: the reward as it is, no wrapper', chestSyntax(inner, ''), inner)
+  check('a chest never closed, or with nothing in it, is an error', !checkReward('chest:x(free_wild:1', { economy }).ok && codes('chest:x()').includes('empty-part'))
+  check('a chest name with a space or a bracket in it is an error', codes('chest:my chest(free_wild:1)').includes('space') && !checkReward('chest:a[b(free_wild:1)', { economy }).ok)
+  check('tierSyntax wraps everything of the tier, triggers included', tierSyntax({ triggers: ['Pity'], reward: { coins: 2 }, chest: 'gold-chest' }, economy) === 'chest:gold-chest(trigger:Pity+allowance(coins:2))')
+}
+
 section('4. The economist\'s four real rewards (section 2.4)')
 const REAL = REAL_EXAMPLES
 REAL.forEach((text, i) => {

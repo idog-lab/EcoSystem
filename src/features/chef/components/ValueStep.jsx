@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Card from '../../../components/ui/Card'
 import Collapsible from '../../../components/ui/Collapsible'
-import { oneMoreBasket } from '../lib/chefEngine'
+import { fingerprint, oneMoreBasket } from '../lib/chefEngine'
+import { basketWorthByDay } from '../lib/chefBasketWorth'
+import { useEconomy } from '../../../lib/economy/economyStore'
 import { ingredientUnitValues, estimateBasketValue } from '../lib/chefBasketValue'
 import { CHEST_LABELS, CHEST_TYPES, VARIATIONS, VARIATION_LABELS, basketsForPhase, phaseForDay } from '../lib/chefModel'
 import { dayLabel, shortDay, num, pct } from '../lib/chefFormat'
@@ -93,6 +95,167 @@ function OneMoreBasket({ state }) {
   )
 }
 
+// A BASKET'S WORTH, DAY BY DAY (chefBasketWorth.js): every day and every basket
+// type the segment opens, one more basket played on the engine, beside the
+// tier worth the economist gave (the Economy page). A reading: it changes no
+// value.
+const TIER_OF = { basic: 'Basic', rare: 'Rare', epic: 'Epic' }
+function BasketWorth({ state }) {
+  const { segments, calendar } = state
+  const economy = useEconomy()
+  const [segmentId, setSegmentId] = useState(segments[0]?.id ?? null)
+  const [players, setPlayers] = useState(300)
+  const [variation, setVariation] = useState('activity')
+  const [result, setResult] = useState(null)
+  const [progress, setProgress] = useState(null)
+  const cancel = useRef(false)
+  const segment = segments.find((s) => s.id === segmentId) ?? segments[0]
+  if (!segment) return <p className="text-sm text-slate-400">No segment to play yet (step 1).</p>
+  const stale = result && (result.fp !== fingerprint(state) || result.segmentId !== segment.id)
+
+  async function handleRun() {
+    cancel.current = false
+    setProgress({ done: 0, of: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const r = await basketWorthByDay(state, segment, { players, variation }, { onProgress: setProgress, isCancelled: () => cancel.current })
+    setProgress(null)
+    if (r) setResult({ ...r, fp: fingerprint(state), segmentName: segment.name })
+  }
+
+  const tierWorth = (type) => economy?.chefBaskets?.[TIER_OF[type]] ?? null
+  const max = result ? Math.max(0.0001, ...result.rows.map((r) => r.worth), ...result.types.map((t) => tierWorth(t) ?? 0)) : 1
+  return (
+    <div className="flex flex-col gap-3" data-testid="chef-worth">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-600">
+        For
+        <select value={segment.id} aria-label="Segment" data-testid="chef-worth-segment" onChange={(e) => setSegmentId(e.target.value)} className={SELECT}>
+          {segments.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2">
+          Players
+          <Num aria-label="Players" value={players} min={100} max={3000} onCommit={(n) => setPlayers(Math.round(n))} className="w-20" />
+        </label>
+        <Toggle value={variation} onChange={setVariation} options={VARIATIONS.map((id) => [id, VARIATION_LABELS[id]])} />
+        <button type="button" onClick={handleRun} disabled={!!progress || state.dishes.length === 0} data-testid="chef-worth-run" className="whitespace-nowrap rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {progress ? `Playing... ${Math.round((progress.done / Math.max(1, progress.of)) * 100)}%` : 'Play every day'}
+        </button>
+        {progress && (
+          <button type="button" onClick={() => (cancel.current = true)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+            Stop
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500" data-note>
+        Every day and every basket the segment opens: the same players with one more basket that day, each compared with themself. A basket&apos;s worth that day is what it adds to what a player is paid, in
+        allowance. Beside it, the tier worth on the Economy page. A reading - no value is changed by it.
+      </p>
+      {result && (
+        <div className="flex flex-col gap-3" data-testid="chef-worth-result">
+          {stale && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="chef-worth-stale">
+              Out of date: the chef or the segment changed after this was played. Play it again.
+            </p>
+          )}
+          {!result.base.complete && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="chef-worth-incomplete">
+              Some prizes are not known and count as nothing, so these worths are too low. {result.base.missing?.[0] ?? ''}
+            </p>
+          )}
+          <table className="w-full max-w-3xl border-collapse" data-dense data-testid="chef-worth-table">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className={TH}>{result.segmentName}</th>
+                <th className={`${TH} text-center`} title="The average over the days of the event">
+                  Over the event
+                </th>
+                <th className={`${TH} text-center`}>Day 1</th>
+                <th className={`${TH} text-center`}>Last day</th>
+                <th className={`${TH} text-center`}>Worth most on</th>
+                <th className={`${TH} text-center`} title="The tier worth on the Economy page (Basic 0.25, Rare 1, Epic 4 as the economist gave them)">
+                  Tier worth
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.types.map((t) => {
+                const b = result.byType[t]
+                return (
+                  <tr key={t} className="border-b border-slate-100 text-sm" data-worth-type={t}>
+                    <td className={`${TD} font-medium text-slate-700`}>
+                      <span className={`mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-gradient-to-t ${CHEST_COLOR[t]}`} />
+                      {CHEST_LABELS[t]} basket
+                    </td>
+                    <td className={`${TD} text-center font-semibold tabular-nums text-slate-800`} data-cell="mean">
+                      {num(b.mean, 3)}
+                    </td>
+                    <td className={`${TD} text-center tabular-nums text-slate-600`}>{num(b.first, 3)}</td>
+                    <td className={`${TD} text-center tabular-nums text-slate-600`}>{num(b.last, 3)}</td>
+                    <td className={`${TD} text-center text-slate-600`}>{b.peakDay ? shortDay(calendar, b.peakDay) : '-'}</td>
+                    <td className={`${TD} text-center tabular-nums text-slate-600`} data-cell="tier">
+                      {tierWorth(t) ?? 'not set'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <div className="flex h-36 items-end gap-[2px]" data-testid="chef-worth-chart">
+            {Array.from({ length: calendar.totalDays }, (_, i) => i + 1).map((day) => (
+              <div key={day} className="flex h-full flex-1 items-end gap-[1px]" title={dayLabel(calendar, day)}>
+                {result.types.map((t) => {
+                  const r = result.rows.find((x) => x.day === day && x.chestType === t)
+                  return <div key={t} data-bar={t} className={`flex-1 rounded-t-sm bg-gradient-to-t ${CHEST_COLOR[t]}`} style={{ height: `${r ? Math.max((Math.max(0, r.worth) / max) * 100, 1) : 0}%` }} title={r ? `${dayLabel(calendar, day)}, one more ${CHEST_LABELS[t]} basket: ${num(r.worth, 3)} (± ${num(r.spread, 3)} with other players); ${pct(r.changedShare, 1)} of the players end differently` : ''} />
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="-mt-2 flex justify-between text-[10px] text-slate-400">
+            <span>{shortDay(calendar, 1)}</span>
+            <span>{shortDay(calendar, calendar.totalDays)}</span>
+          </div>
+          <Collapsible id="chef-worth-days" tone="inner" title="Day by day" summary={`${result.rows.length} plays of ${result.players} players, each with how far it would move with other players`}>
+            <table className="w-full border-collapse" data-dense>
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className={TH}>Day</th>
+                  {result.types.map((t) => (
+                    <th key={t} className={`${TH} text-center`}>
+                      {CHEST_LABELS[t]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: calendar.totalDays }, (_, i) => i + 1).map((day) => (
+                  <tr key={day} className="border-b border-slate-100 text-sm" data-worth-day={day}>
+                    <td className={`${TD} text-slate-600`}>{dayLabel(calendar, day)}</td>
+                    {result.types.map((t) => {
+                      const r = result.rows.find((x) => x.day === day && x.chestType === t)
+                      return (
+                        <td key={t} className={`${TD} text-center tabular-nums text-slate-700`}>
+                          {r ? `${num(r.worth, 3)} ± ${num(r.spread, 3)}` : '-'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Collapsible>
+          <p className="text-xs text-slate-500">
+            {result.players} players, {VARIATION_LABELS[result.variation].toLowerCase()}, the same players for every day (number {result.seed}). One basket changes few players, so a worth is small and moves a little with other players
+            (the ± in the day-by-day table).
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // STEP 5 - BASKET VALUE.
 //   One more basket, played: on the rule engine, a clean comparison (above).
 //   The older estimate ("the sharing-out"): kept from before the rebuild and
@@ -122,6 +285,9 @@ export default function ValueStep({ state }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <Card title="A basket's worth, day by day" subtitle="Played on the engine for every day of the event, beside the tier worth you gave. In allowance worth, not in money.">
+        <BasketWorth state={state} />
+      </Card>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
         <Card title="5. One more basket: what it changes" subtitle="The same players, played twice on the event as it is - thresholds, pantry, presets and Recompletion included. In allowance worth, not in money.">
           <OneMoreBasket state={state} />
@@ -133,7 +299,7 @@ export default function ValueStep({ state }) {
         >
           <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="chef-value-legacy" data-note>
             An older estimate, out of step with the rebuilt event: it does not know progression thresholds, pantry caps, catch-up presets, special sources or Recompletion, and it counts an ingredient as worth
-            something on its own. It shows which ingredients carry the prizes; it is not a price. A basket valuation on the new engine is a later build.
+            something on its own. It shows which ingredients carry the prizes; it is not a price. A basket&apos;s worth on the engine is the card above.
           </p>
           <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">

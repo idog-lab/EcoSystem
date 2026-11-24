@@ -1,0 +1,36 @@
+// A Chef basket's worth, day by day, in the browser (step 6) - on the
+// synthetic example (made up). Run: npx vite-node scripts/e2e/chef-worth.mjs
+import { BASE, createChecker, launch } from './helpers.mjs'
+
+const { ok, finish } = createChecker()
+const { browser, page, errors } = await launch({ folded: true })
+await page.setViewportSize({ width: 1500, height: 800 })
+page.on('dialog', (d) => d.accept())
+const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim()
+
+await page.goto(BASE, { waitUntil: 'networkidle' })
+await page.getByRole('button', { name: /Chef/ }).first().click()
+await page.getByTestId('chef-header').waitFor()
+await page.getByTestId('chef-more').click()
+await page.getByTestId('chef-more-panel').getByRole('menuitem', { name: 'New chef: a synthetic example (made up)' }).click()
+await page.waitForTimeout(400)
+await page.locator('[data-chef-step="value"]').click()
+await page.waitForTimeout(300)
+
+ok('step 6 opens on a basket\'s worth day by day, saying it is a reading that changes no value', (await page.getByTestId('chef-worth').count()) === 1 && /no value is changed by it/.test(await text(page.getByTestId('chef-worth'))))
+const options = await page.getByTestId('chef-worth-segment').locator('option').allInnerTexts()
+await page.getByTestId('chef-worth-segment').selectOption({ label: options[1] })
+await page.getByTestId('chef-worth-run').click()
+await page.getByTestId('chef-worth-result').waitFor({ timeout: 300000 })
+const rows = await page.locator('[data-worth-type]').evaluateAll((trs) => trs.map((tr) => ({ type: tr.dataset.worthType, mean: tr.querySelector('[data-cell="mean"]').innerText.trim(), tier: tr.querySelector('[data-cell="tier"]').innerText.trim() })))
+console.log(`      ${rows.map((r) => `${r.type} ${r.mean} (tier ${r.tier})`).join('; ')}`)
+ok(`one row a basket type the segment opens, its worth over the event beside the tier worth of the Economy page (${rows.length})`, rows.length >= 2 && rows.every((r) => /^-?\d/.test(r.mean)) && rows.find((r) => r.type === 'basic')?.tier === '0.25' && rows.find((r) => r.type === 'rare')?.tier === '1')
+ok(`a bar a day and a type (${await page.locator('[data-testid="chef-worth-chart"] [data-bar]').count()})`, (await page.locator('[data-testid="chef-worth-chart"] [data-bar]').count()) === 21 * rows.length)
+ok('nothing is out of date right after playing', (await page.getByTestId('chef-worth-stale').count()) === 0)
+await page.getByTestId('chef-worth-segment').selectOption({ label: options[0] })
+await page.waitForTimeout(200)
+ok('another segment chosen: the figures on screen say they are out of date', (await page.getByTestId('chef-worth-stale').count()) === 1)
+ok('no side scroll', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+ok(`no page error (${errors.join(' | ').slice(0, 200)})`, errors.length === 0)
+await browser.close()
+process.exit(finish('CHEF BASKET WORTH') ? 1 : 0)

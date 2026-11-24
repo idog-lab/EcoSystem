@@ -581,7 +581,7 @@ little scrolling as possible at 1500 x 800. A step gets the whole chef
 | 3. Baskets | The three baskets of a phase: weight, chance at the start, most a basket. | Progression thresholds (schedules, the semi-blocker helper, the two unconfirmed policies). Special sources and jokers. Catch-up presets. Where each blocker comes from. |
 | 4. Proposal | A choice: recipes, weights and thresholds, or catch-up presets (build 03, above). For a proposal: what it may change (five switches), the targets in words and the segments it is judged on, the recipe budget (a range or free, chosen), what is missing / invalid / proved impossible (with its assumptions) / only a risk, Generate with progress and Stop. With a proposal: its outcome in plain words, the budget line (current, range, proposal, change), the starting point when it is not the current event, Apply / Discard / Undo, one row a segment (in FU now -> proposed with its range, the difference and met / missed / close; finished; ever in FU; recipes alone; checkpoints; longest wait; finish Main; Recompletion; paid), what got better / worse / is still not met, one segment day by day (dishes and FU, current beside proposed, Dish Master, checkpoint, threshold steps and FU target marked) and all segments in small. | Bounds and optional targets. Pacing (ordinary ingredients allowed a new schedule, the days, the semi-blocker's bounds and what its limit allows per segment). Locks (recipe cells, dishes, weights, opening a 0 - never the blocker's, schedules). How it searches. The semi-blocker and Dish Master. Every change with what it was (recipes at the base or a segment's size, weights with starting chances, schedules, what happens to each ingredient). Why these changes. The proposal without presets. What the search tried. |
 | 5. Simulate | What this event still needs (folded; on every step of a reference chef). What needs a fix. One button. After a run, one row a segment: on the FU day (in FU with its range and met / not met, finished, ever in FU), checkpoints, dishes, finish Main, Recompletion, paid. What the run was played on. | A segment in detail. Day by day. With and without presets. One player's event. More or fewer baskets. What is not settled about the real game. All the checks. |
-| 6. Basket value | One more basket, played both ways on the engine. The older estimate, labelled as one. | What one ingredient counts for (older estimate). |
+| 6. Basket value | A basket's worth day by day: for a segment, every day and every basket type it opens, one more basket played on the engine (the same players, each compared with themself) - its worth that day is what it adds to what a player is paid, in allowance, with how far it would move with other players - beside the tier worth of the Economy page; out of date after an edit. One more basket on one day, played both ways. The older estimate, labelled as one. | What one ingredient counts for (older estimate). |
 
 A run is kept for the visit per chef with the chef's fingerprint; once the
 chef changes it stays on screen marked "Out of date". It is not saved.
@@ -601,6 +601,7 @@ src/features/chef/
                SimulateStep, ValueStep, ReadinessPanel, chefUi
   lib/         chefModel, chefEngine, chefGenerator (build 02), chefCatchup (build 03), chefRewards, chefValidation,
                chefReadiness, chefMigration, chefPersistence, chefRng, chefFormat,
+               chefBasketWorth (a basket's worth day by day, on the engine),
                chefBasketValue (legacy), chefLegacyModel (the older factories, for data/ only)
   data/        the two real chefs, as read from the workbooks; the synthetic example
 scripts/verify/verify-chef.mjs            the rules, one check each (182 checks, about 25 seconds)
@@ -611,7 +612,10 @@ scripts/verify/verify-chef-catchup.mjs    catch-up suggestions: what stops one, 
                                           the economist's presets untouched, the order of "better",
                                           apply, undo, out of date (42 checks, a few seconds)
 scripts/e2e/chef-flow.mjs                 the flow in a real browser (185 checks, about 5 minutes)
+scripts/verify/verify-chef-worth.mjs      a basket's worth day by day: every day and type, the same as
+                                          "one more basket", the same players again, Basic < Rare < Epic (8 checks)
 scripts/e2e/chef-catchup.mjs              step 4's catch-up suggestions in a real browser (17 checks)
+scripts/e2e/chef-worth.mjs                step 6's basket worth in a real browser (7 checks)
 ```
 
 - `npx vite-node scripts/verify/verify-chef.mjs` and
@@ -674,8 +678,14 @@ step 5 ("What is not settled about the real game"). Do not resolve silently.**
   above which a guided step does not pace an ingredient, the shape of a new
   ordinary schedule (a rising share of the most demanding segment's need).
 - No export to the game's configuration; do not invent the syntax.
-- The older basket estimate is not on the new engine. A basket valuation on
-  it is a later task.
+- A basket's worth on the engine, day by day (step 6, `chefBasketWorth.js`)
+  is a READING beside the economist's tier worths (Basic 0.25, Rare 1, Epic
+  4 on the Economy page); nothing takes it as a value until the economist
+  says so ("when the chef model in the app will be better we will change its
+  value daily"). With unknown prizes it is too low, and it says so. On the
+  made-up example it came out at about 0.5 / 2.5 / 5 (single run) - the
+  example is made up and says nothing about a real event. The older
+  estimate (the sharing-out) stays below it, labelled as older.
 - The two real chefs have 12 Recompletion dishes with no prizes, no
   thresholds and no FU day: until those are typed, nobody is in FU and
   Recompletion's payout is unknown. **No real event has been completed and
