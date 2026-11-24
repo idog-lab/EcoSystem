@@ -462,7 +462,7 @@ function Presets({ state, update }) {
     <div className="flex flex-col gap-4" data-testid="chef-presets">
       <p className="text-sm text-slate-600" data-note>
         A player who qualifies opens the same basket and gets these contents instead - guaranteed, not drawn. It takes the place of a basket; it is not one more. Who qualifies is read when the basket is opened:
-        nothing about what happens later. A preset never gives past a progression threshold and never overfills the pantry. Typed by hand in this build: nothing here proposes or tunes a preset.
+        nothing about what happens later. A preset never gives past a progression threshold and never overfills the pantry. Typed by hand here; step 4 can also suggest catch-up presets, and one that came from a suggestion is marked so.
       </p>
       {presets.map((preset) => {
         const sizes = sizesOf(preset)
@@ -480,6 +480,11 @@ function Presets({ state, update }) {
               <Field label="Preset">
                 <input value={preset.name} aria-label="Preset name" onChange={(ev) => setPreset(preset.id, { name: ev.target.value })} className={`${TEXT_INPUT} font-semibold`} />
               </Field>
+              {preset.origin === 'build-03' && (
+                <span className="mb-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800" data-preset-suggested title="Added by a catch-up suggestion in step 4. A suggestion, not a confirmed design value; one undo in step 4 takes it out again.">
+                  Suggested (step 4)
+                </span>
+              )}
               <Field label="In the place of a">
                 <select value={preset.chestType} aria-label="Basket type" onChange={(ev) => setPreset(preset.id, { chestType: ev.target.value })} className={SELECT}>
                   {CHEST_TYPES.map((type) => (

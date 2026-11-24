@@ -5,12 +5,37 @@ import { ITEM_ROUNDINGS, ITEM_ROUNDING_LABELS, RARITY, RARITY_LABELS, RARITY_ORD
 import { dishPrize, effectiveFactor, grandPrize, rewardWorth } from '../lib/chefRewards'
 import { AddButton, Num, Pills, RowActions, Toggle, NAME_INPUT, SELECT, TD, TH } from './chefUi'
 import { num } from '../lib/chefFormat'
+import { useEconomy } from '../../../lib/economy/economyStore'
+import { chefValuesFromEconomy } from '../../../lib/economy/economyModel'
 
 const RARITY_COLOR = {
   [RARITY.COMMON]: 'bg-slate-100 text-slate-600',
   [RARITY.RARE]: 'bg-sky-100 text-sky-700',
   [RARITY.SEMI_BLOCKER]: 'bg-violet-100 text-violet-700',
   [RARITY.BLOCKER]: 'bg-rose-100 text-rose-700',
+}
+
+// The worth of one of each, against the Economy page's table (one for the
+// whole app). A chef keeps the values it was made with; when they differ the
+// economist is told, and one click takes the Economy page's.
+function EconomyValuesNote({ values, onUse }) {
+  const economy = useEconomy()
+  const table = chefValuesFromEconomy(economy)
+  const differ = REWARD_KEYS.filter((key) => Number(values?.[key]) !== Number(table[key]))
+  if (!differ.length)
+    return (
+      <p className="text-xs text-slate-500" data-testid="chef-economy-values" data-state="same">
+        The same as the Economy page&apos;s value table.
+      </p>
+    )
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-amber-800" data-testid="chef-economy-values" data-state="differ">
+      Not the Economy page&apos;s: {differ.map((key) => `${REWARD_LABELS[key]} ${num(values?.[key], 2)} here, ${num(table[key], 2)} there`).join('; ')}.
+      <button type="button" className="rounded-lg border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-800 hover:bg-amber-50" data-testid="chef-use-economy-values" onClick={() => onUse(table)}>
+        Use the Economy page&apos;s
+      </button>
+    </p>
+  )
 }
 
 // THE RECIPES. One row a dish, one column an ingredient.
@@ -442,7 +467,7 @@ export default function DishesStep({ state, update }) {
                       <th className={`${TH} text-center`} title="The worth of all the Main dishes for this segment. Dish prizes are not rounded.">
                         Dishes
                       </th>
-                      <th className={`${TH} text-center`} title={`The Main grand prize for this segment: scaled, then its worth rounded to the nearest ${rewards.grandPrizeRoundTo}. The figure before rounding is beside it.`}>
+                      <th className={`${TH} text-center`} title="The Main grand prize for this segment: scaled, then its worth rounded by RoundReward (under 90 to the 5, and 5 becomes 10; 90 to 200 down to the 10; above 200 to the 50). The figure before rounding is beside it.">
                         Grand prize
                       </th>
                     </tr>
@@ -482,6 +507,7 @@ export default function DishesStep({ state, update }) {
                     </label>
                   ))}
                 </div>
+                <EconomyValuesNote values={rewards.values} onUse={(values) => setRewards({ values: { ...rewards.values, ...values } })} />
                 <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600" title="Scaling gives 4.8 undos. How that becomes a whole number in the game has not been decided, so this is a setting, and the amounts shown are targets - not quantities for production. Coins are never changed to make up for a rounded item.">
                   Whole items (not decided yet)
                   <select value={rewards.itemRounding} data-testid="chef-item-rounding" onChange={(e) => setRewards({ itemRounding: e.target.value })} className={SELECT}>

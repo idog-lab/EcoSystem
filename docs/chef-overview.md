@@ -28,8 +28,10 @@ with them. Leave them alone unless a task names them.
 trustworthy simulation, manual catch-up presets. Build 02 (done): the tool
 PROPOSES recipe quantities, basket weights and threshold schedules against
 the targets, shows the current event beside the proposal, and applies it only
-when told to (section 5, "A proposal"). Build 03: it proposes targeted
-catch-up presets - **that does not exist, and no screen may say it does.**
+when told to (section 5, "A proposal"). Build 03 (done, 24 November 2026): it
+SUGGESTS targeted catch-up presets, judged the same way, added beside the
+economist's own and applied only when told to (section 5, "Catch-up
+suggestions").
 One rule engine serves the simulation, the proposal and every later tool. A
 proposal is the best of a bounded search, never "the optimum", and its values
 are suggestions, not confirmed design values.
@@ -79,7 +81,7 @@ migration }`
 | Source | `id, label, kind, day, ingredientId, amount, coveragePct, segmentIds, bypassThreshold` | `kind`: `ingredient` or `joker`. |
 | Preset | `id, name, enabled, chestType, round, startDay, endDay, priority, segmentIds, eligibility, maxUses, sizeMode, allocations, fixedTotal, fixedContents, fallback` | A catch-up preset. |
 | Targets | `mainFuDay, mainFuSharePct, checkpoints` | Shared. A checkpoint is `{ day, dishes, sharePct }`. |
-| Rewards | `values, grandPrize: { main, rc }, itemRounding, cappedFactor, grandPrizeRoundTo` | |
+| Rewards | `values, grandPrize: { main, rc }, itemRounding, cappedFactor` (an older save's `grandPrizeRoundTo` is dropped) | |
 
 ### The confirmed rules
 
@@ -158,11 +160,13 @@ it is reported in days since entering as well as by event day.
 
 **Prizes.** A prize is stored as what it is made of - coins (allowance),
 wilds, extra stock, free rounds, undos - and its allowance worth comes from
-the value table (1, 2.5, 2, 1, 0.25). For a segment the base prize is scaled
+the value table (1, 2.5, 2, 1, 0.25) - the economy's, shared by the whole app (docs/economy-rules.md; a chef keeps its own copy and step 2 says when it differs from the Economy page's, with one click to take it). For a segment the base prize is scaled
 by prize factor x burnout: coins by all of it; free rounds and undos by 2 at
 most (the limit is on the multiplier, not on the count); wilds and extra
-stock not at all. A grand prize's worth is then rounded to the nearest 5 (raw
-kept beside it); a dish prize is not. An unknown prize is unknown, not zero,
+stock not at all. A grand prize's worth is then rounded by the economy's RoundReward
+(under 90 to the 5, a 5 becoming 10; 90 to 200 down to the 10; above 200 to
+the 50 - economist: "Yes, RoundReward"; it was the nearest 5; raw kept
+beside it); a dish prize is not. An unknown prize is unknown, not zero,
 and makes the payout "incomplete". How a scaled amount becomes whole items is
 not decided: a setting, raw targets by default, and nothing is a production
 quantity. Coins are never changed to make up for a rounded item.
@@ -519,6 +523,48 @@ lacking one. It does not move or add odds periods. Raising progress raises
 what players are paid; prizes are never changed, the payout before and after
 is shown.
 
+### Catch-up suggestions (build 03): `chefCatchup.js`
+
+Step 4's second choice ("Suggest: Catch-up presets"). The tool suggests
+catch-up presets that bring the segments closer to their targets. The
+economist's four answers (24 November 2026, each the recommended one):
+
+- **Who**: "Tool picks, both kinds" - players **behind pace** (at most N Main
+  dishes, in a window of days before a target day) or **stuck on an
+  ingredient** (still missing at least N of it for the dishes left).
+- **What it holds**: "Common and rare only" - ordinary ingredients the Main
+  recipes use, never the semi-blocker or the blocker. Like every preset, never
+  past a threshold and never over the pantry (the engine's rule).
+- **Between equals**: "Fewest players touched" - after build 02's order (the
+  worst segment, then all segments), the set fewer players ever get a
+  suggested basket from; then fewer presets; then fewer such baskets.
+- **The economist's presets**: "Never touch them" - played as they are and
+  going first; suggestions are added after (`origin: 'build-03'`, a later
+  priority, ids of their own), marked "Suggested (step 4)" in step 3, and one
+  undo takes them out.
+
+How it searches: the event as it is first (already met on the check players:
+nothing is suggested, and it says so); then sets of up to N presets on search
+players - add one for the segment furthest from an FU or checkpoint target
+(what that segment lacks on the target day, read from the engine's probe, sets
+what a basket holds), move one (its days, who qualifies, how often, the basket
+it replaces, its segments, what it holds) or take one away; each preset left
+has to earn its place; the event and the suggestion are then checked on
+others, in both views. Controls (this tool's own defaults, said on screen): at
+most 3 presets, a player at most twice, Basic and Rare baskets (Epic off),
+both kinds on; 40 sets on 100 players, checked on 400. Targets, segments and
+the view are the proposal's. The engine counts the players who got a
+suggested basket (`presets.suggestedShare`, a reading only).
+
+On screen: the rules in words, the targets, the controls, Suggest / Stop; then
+the outcome, each preset in words (who, segments, days, how often, the basket,
+what a basket of the middle size holds, the share of players given it, the
+target it was made for), one row a segment (each target now → with it and
+its verdict, the other view, players touched, baskets a player), **what holds
+players back on the FU day** (where they are and what they lack besides the
+blocker - opened by itself when it is the semi-blocker, which a catch-up does
+not give), Apply / Discard / Undo, out of date after an edit.
+
 ## 6. The screens
 
 A **six-step flow**, on the same logic as the Merge "Build event" flow: a
@@ -533,7 +579,7 @@ little scrolling as possible at 1500 x 800. A step gets the whole chef
 | 1. Event and players | Dates, odds periods, Dish Master days, the FU target (day, share), checkpoints. Segments: Brut Wins, effort, prize factor, burnout, baskets as an average or day by day, shape. | Baskets day by day. How players differ (assumptions). |
 | 2. Ingredients and dishes | Ingredients with pantry caps (and the sheet's "Cap", with one click to use it). Recipes: the base, or a segment's (the blocker typed there); totals and the budget reference. | Prizes by component, grand prizes, the value table, whole-item rounding, each segment's totals. Dishes as cards. |
 | 3. Baskets | The three baskets of a phase: weight, chance at the start, most a basket. | Progression thresholds (schedules, the semi-blocker helper, the two unconfirmed policies). Special sources and jokers. Catch-up presets. Where each blocker comes from. |
-| 4. Proposal | What a proposal may change (five switches), the targets in words and the segments it is judged on, the recipe budget (a range or free, chosen), what is missing / invalid / proved impossible (with its assumptions) / only a risk, Generate with progress and Stop. With a proposal: its outcome in plain words, the budget line (current, range, proposal, change), the starting point when it is not the current event, Apply / Discard / Undo, one row a segment (in FU now -> proposed with its range, the difference and met / missed / close; finished; ever in FU; recipes alone; checkpoints; longest wait; finish Main; Recompletion; paid), what got better / worse / is still not met, one segment day by day (dishes and FU, current beside proposed, Dish Master, checkpoint, threshold steps and FU target marked) and all segments in small. | Bounds and optional targets. Pacing (ordinary ingredients allowed a new schedule, the days, the semi-blocker's bounds and what its limit allows per segment). Locks (recipe cells, dishes, weights, opening a 0 - never the blocker's, schedules). How it searches. The semi-blocker and Dish Master. Every change with what it was (recipes at the base or a segment's size, weights with starting chances, schedules, what happens to each ingredient). Why these changes. The proposal without presets. What the search tried. |
+| 4. Proposal | A choice: recipes, weights and thresholds, or catch-up presets (build 03, above). For a proposal: what it may change (five switches), the targets in words and the segments it is judged on, the recipe budget (a range or free, chosen), what is missing / invalid / proved impossible (with its assumptions) / only a risk, Generate with progress and Stop. With a proposal: its outcome in plain words, the budget line (current, range, proposal, change), the starting point when it is not the current event, Apply / Discard / Undo, one row a segment (in FU now -> proposed with its range, the difference and met / missed / close; finished; ever in FU; recipes alone; checkpoints; longest wait; finish Main; Recompletion; paid), what got better / worse / is still not met, one segment day by day (dishes and FU, current beside proposed, Dish Master, checkpoint, threshold steps and FU target marked) and all segments in small. | Bounds and optional targets. Pacing (ordinary ingredients allowed a new schedule, the days, the semi-blocker's bounds and what its limit allows per segment). Locks (recipe cells, dishes, weights, opening a 0 - never the blocker's, schedules). How it searches. The semi-blocker and Dish Master. Every change with what it was (recipes at the base or a segment's size, weights with starting chances, schedules, what happens to each ingredient). Why these changes. The proposal without presets. What the search tried. |
 | 5. Simulate | What this event still needs (folded; on every step of a reference chef). What needs a fix. One button. After a run, one row a segment: on the FU day (in FU with its range and met / not met, finished, ever in FU), checkpoints, dishes, finish Main, Recompletion, paid. What the run was played on. | A segment in detail. Day by day. With and without presets. One player's event. More or fewer baskets. What is not settled about the real game. All the checks. |
 | 6. Basket value | One more basket, played both ways on the engine. The older estimate, labelled as one. | What one ingredient counts for (older estimate). |
 
@@ -551,17 +597,21 @@ basket luck"; Needs a fix / Worth a look / Good to know; met / not met.
 
 ```
 src/features/chef/
-  components/  ChefApp, EventStep, DishesStep, BasketsStep, ProposalStep, SimulateStep,
-               ValueStep, ReadinessPanel, chefUi
-  lib/         chefModel, chefEngine, chefGenerator (build 02), chefRewards, chefValidation,
+  components/  ChefApp, EventStep, DishesStep, BasketsStep, ProposalStep, CatchupPanel (build 03),
+               SimulateStep, ValueStep, ReadinessPanel, chefUi
+  lib/         chefModel, chefEngine, chefGenerator (build 02), chefCatchup (build 03), chefRewards, chefValidation,
                chefReadiness, chefMigration, chefPersistence, chefRng, chefFormat,
                chefBasketValue (legacy), chefLegacyModel (the older factories, for data/ only)
   data/        the two real chefs, as read from the workbooks; the synthetic example
-scripts/verify/verify-chef.mjs            the rules, one check each (180 checks, about 25 seconds)
+scripts/verify/verify-chef.mjs            the rules, one check each (182 checks, about 25 seconds)
 scripts/verify/verify-chef-proposal.mjs   the proposal: what it may and may not change, the search,
                                           the check, apply and undo; new schedules, the budget,
                                           the semi-blocker, proofs and risks, both views (135 checks, about 65 seconds)
+scripts/verify/verify-chef-catchup.mjs    catch-up suggestions: what stops one, what a preset may hold,
+                                          the economist's presets untouched, the order of "better",
+                                          apply, undo, out of date (42 checks, a few seconds)
 scripts/e2e/chef-flow.mjs                 the flow in a real browser (185 checks, about 5 minutes)
+scripts/e2e/chef-catchup.mjs              step 4's catch-up suggestions in a real browser (17 checks)
 ```
 
 - `npx vite-node scripts/verify/verify-chef.mjs` and
@@ -606,7 +656,14 @@ step 5 ("What is not settled about the real game"). Do not resolve silently.**
 
 **Limits.**
 
-- Automatic catch-up presets (build 03) do not exist.
+- Catch-up suggestions (build 03) hold only common and rare ingredients (the
+  economist's rule), so they cannot move players held back by the
+  semi-blocker; the screen says when that is what holds them back. They were
+  only run on small test events and the made-up example - never on a
+  completed real event. On the made-up example they barely move the FU day
+  (Pumpkin, the semi-blocker, is what 96-99% lack there) while reaching most
+  players: "Fewest players touched" only decides between sets that meet the
+  targets equally well.
 - A proposal (build 02) is the best of a bounded search on simulated players:
   not the best possible event, and not a confirmed design. Every default of
   its controls is this tool's own. It was only ever run on small test events

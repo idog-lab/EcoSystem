@@ -411,7 +411,7 @@ export default function TwisterPage({ phase, phaseLabel, activeSegmentIndex, bas
                   <input
                     className="min-w-0 border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-mono bg-white/70"
                     placeholder={twisterItemSyntax(ladder[rank - 1].prizeAmount ?? 0) || 'Ops item syntax'}
-                    title="Left empty, the export writes the amount as shown here (dr-twister is this tool's own name, not a confirmed Ops one)"
+                    title="Left empty, the export writes the amount as shown here"
                     aria-label={`Twister rank ${rank} item syntax`}
                     value={ladder[rank - 1].syntax ?? ''}
                     onChange={(e) => updateLadder(rank - 1, { syntax: e.target.value })}

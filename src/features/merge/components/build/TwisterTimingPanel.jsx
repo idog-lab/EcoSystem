@@ -14,6 +14,7 @@ function Shell({ embedded, title, subtitle, tag, children }) {
   )
 }
 import { boardsWithDraftApplied } from '../../lib/build/eventBuild'
+import { targetSpinsForSegment } from '../../lib/rewards/twisterEconomy'
 import { REWARD_TYPES, REWARD_TARGET_LABELS } from '../../lib/rewards/rewardChain'
 import { candidateById, measureCandidate, timingOf, builtTwisterOf, twisterMark, TWISTER_WINDOW_PCT, TWISTER_WINDOW_MARGIN_PTS, DEMAND_MARKS } from '../../lib/rewards/twisterCadence'
 
@@ -44,7 +45,7 @@ const share = (v) => (v == null ? '—' : `${Math.round(v * 100)} of 100`)
 // How far outside the window, in points of demand (0 inside it).
 const distance = (reach, window) => (reach == null ? null : reach < window[0] ? window[0] - reach : reach > window[1] ? reach - window[1] : 0)
 
-export default function TwisterTimingPanel({ phase, draft, segments, activeSegmentIndex, embedded = false }) {
+export default function TwisterTimingPanel({ phase, draft, segments, activeSegmentIndex, current = true, embedded = false }) {
   const rows = draft?.twister?.rows ?? []
   const [results, setResults] = useState(null)
   const [running, setRunning] = useState(null)
@@ -56,6 +57,9 @@ export default function TwisterTimingPanel({ phase, draft, segments, activeSegme
   const inWindow = asked.filter((r) => r.demandTiming.verdict === 'in-window')
   const outside = asked.filter((r) => r.demandTiming.verdict !== 'in-window')
   const row = timed.find((r) => r.index === activeSegmentIndex) ?? timed[0] ?? null
+  // The twists step 3 holds now, per segment (the same reading the build makes of them).
+  const plan = segments?.[0]?.twisterPlan?.[phase] ?? null
+  const typedNow = (index) => (plan ? (targetSpinsForSegment(plan, index) ?? null) : null)
   const draftSeg = row ? draft.segments.find((s) => s.index === row.index) : null
 
   const compare = async () => {
@@ -167,7 +171,18 @@ export default function TwisterTimingPanel({ phase, draft, segments, activeSegme
                 <Fragment key={r.index}>
                   <tr className="align-top" data-twister-price={r.index} data-demand-timing={r.index} data-verdict={t?.verdict ?? ''}>
                     <td className="whitespace-nowrap pt-1.5 pr-4 font-semibold text-slate-700">{r.name}</td>
-                    <td className="pt-1.5 pr-4 text-right">{r.twists ?? '—'}</td>
+                    <td className="pt-1.5 pr-4 text-right" data-field="twists-asked">
+                      {r.twists ?? '—'}
+                      {/* The twists typed now, when they are not the ones this build was priced for (economist: "i asked
+                          10 twists in the simulator and it shows 15 asked in the Build"). A current build is re-priced by
+                          itself when only the twists change; an out-of-date one is not - its boards are old - so the
+                          number it was made for is said to be that, and the one typed now beside it. */}
+                      {typedNow(r.index) !== (r.twists ?? null) && (
+                        <span className="block whitespace-nowrap text-[11px] font-semibold text-amber-700" data-field="twists-typed-now" data-current={current ? 'yes' : 'no'} title={current ? 'The price is being worked out again for the twists typed now.' : 'The build is out of date, so its price was not worked out again for the twists typed now. Build again to price them.'}>
+                          {current ? `${typedNow(r.index) ?? 'none'} typed now - pricing...` : `built for these; ${typedNow(r.index) ?? 'none'} typed now - build again`}
+                        </span>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap pt-1.5 pr-4 text-right" data-field="values">
                       {r.values ? r.values.join(' / ') : '—'}
                       {r.valuesLocked && <span className="block text-[11px] text-slate-500">{r.valuesLocked === 'typed' ? 'as you typed them' : "the normal event's"}</span>}

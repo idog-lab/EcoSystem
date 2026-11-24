@@ -14,6 +14,9 @@ import PlayStage from './features/merge/components/play/PlayStage'
 import HeroPage from './components/HeroPage'
 import DiamondMineApp from './features/diamondMine/components/DiamondMineApp'
 import ChefApp from './features/chef/components/ChefApp'
+import EconomyApp from './features/economy/EconomyApp'
+import { loadEconomy, saveEconomy } from './lib/economy/economyStore'
+import { normalizeEconomy } from './lib/economy/economyModel'
 import Button from './components/ui/Button'
 import Card from './components/ui/Card'
 import { RC_MIN_RANK_UNDER_TILES, RC_FIRST_BOARD_SUBSIDY_CAP_DR, createBoard, invalidateLayout } from './features/merge/lib/core/board'
@@ -1567,6 +1570,9 @@ function EditorApp({ onHome }) {
       ...buildSaveShape(segments),
       ...(buildDrafts.main || buildDrafts.rc ? { buildDrafts: JSON.parse(serializeDrafts({ drafts: buildDrafts, validation: buildValidation })) } : {}),
       effortTargets: { main: mainTargetPctInputs, rc: recompletionTargetPctInputs },
+      // The Economy page's economy, so a file sent to reproduce an issue
+      // values things the same way (restored from a file only when asked).
+      economy: loadEconomy(),
     }
   }
   function downloadPayload(payload, fileName) {
@@ -1603,6 +1609,14 @@ function EditorApp({ onHome }) {
     // What is open now came from a file, not from the list of saved events.
     setOpenEventId(null)
     setOpenSavedId(null)
+    // The economy (the Economy page: worth, currencies, keys) is the whole
+    // app's, Chef's too: a file's is put in use only when the economist says
+    // so. (A saved event opened from the switcher never touches it.)
+    if (parsed.economy && typeof parsed.economy === 'object') {
+      const theirs = JSON.stringify({ ...normalizeEconomy(parsed.economy), updatedAt: null })
+      const ours = JSON.stringify({ ...loadEconomy(), updatedAt: null })
+      if (theirs !== ours && window.confirm('The file also holds an economy (what everything is worth, the currencies and keys) that differs from this browser\'s. It is used by every feature, Chef too. Replace this browser\'s economy with the file\'s?')) saveEconomy(parsed.economy)
+    }
   }
 
   // Puts the contents of a backup (a file, or a saved event) on screen.
@@ -1894,6 +1908,7 @@ function EditorApp({ onHome }) {
               <li>All 8 segments: DR demand and board subsidy, board layouts, what is under every tile, reward targets and rules, rank values, the Twister, dates.</li>
               <li>The event in use - the normal event and Recompletion, exactly as the Play tester and the exports use it.</li>
               <li>The results of the last build of each phase with its test on players, the build before it (for &quot;Go back to the previous build&quot;), and the effort shape typed in step 4.</li>
+              <li>The Economy page (what everything is worth, the currencies and keys). Importing asks before it replaces this browser&apos;s, since every feature uses it.</li>
             </ul>
             <div className="mt-1">
               Not in it: results of the advanced Twister tool, and which tab or step you were on. <span className="font-semibold text-slate-700">To reproduce an issue</span>, export a backup right
@@ -2319,6 +2334,7 @@ function App() {
   if (!feature) return <HeroPage onSelect={setFeature} />
   if (feature === 'diamond-mine') return <DiamondMineApp onHome={() => setFeature(null)} />
   if (feature === 'chef') return <ChefApp onHome={() => setFeature(null)} />
+  if (feature === 'economy') return <EconomyApp onHome={() => setFeature(null)} />
   return <EditorApp onHome={() => setFeature(null)} />
 }
 

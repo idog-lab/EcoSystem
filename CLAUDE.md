@@ -57,12 +57,39 @@ When this file and the history disagree, this file wins.
   reading. A proposal is the best of a
   bounded search - never called the optimum - and its values are suggestions,
   not confirmed ones; every default of its controls is this app's own; what
-  can be proved impossible from the inputs is said instead of searched. Build
-  03 - automatic catch-up presets - does not exist yet and no screen may say
-  it does. Its rules are the economist's the way the Merge economy is: a
+  can be proved impossible from the inputs is said instead of searched. **Build
+  03 exists: catch-up suggestions** (`lib/chefCatchup.js`, `CatchupPanel.jsx`,
+  the second choice of step 4) - on the economist's four answers: both kinds
+  of player (behind pace, stuck on an ingredient), common and rare
+  ingredients only, the fewest players touched between equals, their own
+  presets never touched (suggestions added after them, `origin: 'build-03'`,
+  marked in step 3, one undo). Judged on build 02's targets, order and both
+  views; it says what holds players back on the FU day (a catch-up cannot
+  give the semi-blocker). Chef's rules are the economist's the way the Merge economy is: a
   suspected flaw is measured, said on screen and written down, not fixed,
   and what is not confirmed about the real game is a visible setting, never
   a silent constant.
+
+## The economy (shared by every feature)
+
+**Read `docs/economy-rules.md` before touching a prize, a reward text, a value
+table or a segment condition in any feature.** The economist's "Economy Rules &
+Reward Syntax": value is always **allowance** (coin 1, wild 2.5, extra stock 2,
+undo 0.25, free round 1, energy feature-specific), reward text is built from
+parts and checked, keys (currencies, packs, presets, chests, triggers, buckets)
+are **never invented** - they come from the Economy page's lists - and the
+sheets' rounding rules (RoundReward, MergeRoundReward, spin cost, ...) are
+matched exactly. Rules in `src/lib/economy/` (rounding, economyModel, syntax,
+parse, segments, economyStore); the **Economy** page on the home screen
+(`src/features/economy/`) holds the values and keys, kept in this browser.
+**These rules are for prizes on a feature's tiers only** (economist: "all the
+rules we got from befor for small reweards and twister are untouched"): Merge
+Mania's small rewards keep their own rounding and up to 3 coin decimals, the
+Twister's price stays any whole number. Chef's grand prize follows RoundReward;
+Chef's value table comes from the economy (a chef keeps its own copy, step 2
+says when it differs). Merge's Syntax tab reads its item text with the checker
+(a reading only). Diamond Mine is not connected. Open questions are listed in
+that file.
 
 ## Repository map
 
@@ -71,6 +98,8 @@ src/
   main.jsx, App.jsx, index.css     app entry; App.jsx holds the Merge editor state and routing
   components/                      shared UI (HeroPage, ui/Button, Card, Collapsible, NumberField, Slider, InfoHint)
   lib/gridWidth.js                 shared grid sizing
+  lib/economy/                     the economy every feature shares (docs/economy-rules.md)
+  features/economy/                the Economy page (worth, keys, check, build, segments, rounding)
   features/merge/
     lib/core/        ranks, board, layout edits, the bank of board layouts, item generation and
                      placement, onboarding goal, generator tiers, lucky drops, subsidy budget
@@ -100,6 +129,7 @@ reference/         the economist's reference spreadsheets: Merge Out.xlsx (Small
                    syntax example), chef_*.xlsx (Chef source data) (untracked)
 docs/history.md    the full design history
 docs/chef-overview.md   the Chef feature: what it is and how to work on it
+docs/economy-rules.md   the economy's rules, where they apply, what is open
 ```
 
 Dev: `npm run dev` (port 5173, `strictPort` - localStorage is per origin
@@ -787,7 +817,8 @@ economist's live reference spreadsheet is the authority on format. Reward
 keys in queue/layout cells and the Endless pages are
 unverified and labelled so. The Twister rows of Small Rewards are written
 `[dynamic(dr-twister:value)]` when no syntax was typed (`twisterSyntaxFor`;
-`dr-twister` is our own name), and a typed one-amount syntax follows the
+`dr-twister` is the game's name - economist, 24 Nov 2026: "its the name of
+it"; the container key `dr-twister-r{n}` is still this app's own pattern), and a typed one-amount syntax follows the
 values the build sizes (`syntaxWithAmount`). Open questions on the Small Rewards sheets
 (literal coins vs allowance) were asked and not yet answered; which extra
 tabs belong was answered (above).
@@ -954,7 +985,15 @@ segment's size, schedules, a weight of 0 staying 0 - that a poor event with
 reachable targets is brought to them and checked on other players, that the
 worst segment is what is compared, a proved conflict against a search that
 ran out, blanks, stopping, out-of-date proposals, apply and undo; every
-check types a seed, so a run is the same every time).
+check types a seed, so a run is the same every time; verify-economy holds
+the economy's rules - the value table, every rounding rule, the reader and
+checker, the economist's four real rewards read and written back exactly and
+built from their parts, empty input giving nothing, worth by date, segment
+conditions to the character).
+`scripts/e2e/economy-page.mjs` walks the Economy page and the two features
+that read it. verify-chef-catchup holds Chef build 03 (what a suggested
+catch-up may hold, the economist's presets untouched, the order of better,
+apply and undo); `scripts/e2e/chef-catchup.mjs` walks it in step 4.
 `scripts/analysis/twister-validation.mjs [players]` - three events, eight
 segments, both phases, players the build never saw (an investigation, not a
 check; about 20 minutes). `twister-cadence.mjs` is the first investigation.

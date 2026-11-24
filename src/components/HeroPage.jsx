@@ -1,4 +1,4 @@
-import { Puzzle, Pickaxe, ChefHat, ArrowRight } from 'lucide-react'
+import { Puzzle, Pickaxe, ChefHat, Coins, ArrowRight } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -18,6 +18,12 @@ const FEATURES = [
     name: 'Chef',
     description: 'Design a Chef live-ops event in five steps: players, dishes and baskets, then simulate it and value a basket.',
     icon: ChefHat,
+  },
+  {
+    id: 'economy',
+    name: 'Economy',
+    description: 'What everything is worth in allowance, the keys the game knows, and the rules every feature uses: check a reward, build a prize, write segment conditions.',
+    icon: Coins,
   },
 ]
 

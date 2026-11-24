@@ -7,6 +7,7 @@ import { shareInterval } from '../lib/chefRng'
 import { CHANGE_LABELS, STATUS_LABELS, applyProposal, budgetSummary, canApply, cellKey, configurationProblems, describeTargets, existingStepDays, generateProposal, inputProblems, periodNote, planOf, proposalIsInUse, searchWarnings, semiExposure, staleReason, structuralConflicts, undoProposal, weightKey, withoutPresets } from '../lib/chefGenerator'
 import { dayLabel, num, pct, shortDay } from '../lib/chefFormat'
 import { Check, Num, Pills, Toggle, TD, TH } from './chefUi'
+import CatchupPanel from './CatchupPanel'
 
 // STEP 4 - A PROPOSAL. The economist says what may change, the tool searches
 // for recipes, basket weights and threshold schedules that bring every
@@ -1154,6 +1155,8 @@ function TargetMoves({ proposal }) {
   )
 }
 
+const kindMemory = { value: 'proposal' }
+
 export default function ProposalStep({ state, update, onGoTo }) {
   const plan = useMemo(() => planOf(state), [state])
   const proposal = state.generator?.proposal ?? null
@@ -1161,6 +1164,12 @@ export default function ProposalStep({ state, update, onGoTo }) {
   const [progress, setProgress] = useState(null)
   const [segmentId, setSegmentId] = useState(null)
   const [noPresets, setNoPresets] = useState(null)
+  // (Which kind is in view is remembered for the visit, like a folded section.)
+  const [kind, setKindState] = useState(() => kindMemory.value)
+  const setKind = (value) => {
+    kindMemory.value = value
+    setKindState(value)
+  }
   const cancel = useRef(false)
   const running = progress != null
 
@@ -1216,8 +1225,24 @@ export default function ProposalStep({ state, update, onGoTo }) {
   const lockCount = Object.keys(plan.locks.cells).length + Object.keys(plan.locks.dishes).length + Object.keys(plan.locks.weights).length + Object.keys(plan.locks.thresholds).length
   const openCount = Object.keys(plan.locks.open).length
 
+  // Two kinds of suggestion share this step: a proposal (build 02) and catch-up presets (build 03).
+  const switcher = (
+    <div className="flex flex-wrap items-center gap-2" data-testid="chef-step4-kind">
+      <span className="text-sm font-semibold text-slate-700">Suggest</span>
+      <Pills value={kind} onChange={setKind} options={[['proposal', 'Recipes, weights and thresholds'], ['catchup', 'Catch-up presets']]} />
+    </div>
+  )
+  if (kind === 'catchup')
+    return (
+      <div className="flex flex-col gap-4">
+        {switcher}
+        <CatchupPanel state={state} update={update} onGoTo={onGoTo} />
+      </div>
+    )
+
   return (
     <div className="flex flex-col gap-4">
+      {switcher}
       <Card>
         <div className="grid grid-cols-1 gap-x-8 gap-y-4 xl:grid-cols-2">
           <div data-testid="chef-proposal-may-change">

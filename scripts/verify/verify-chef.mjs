@@ -246,7 +246,7 @@ console.log('--- 7. Main to Recompletion: at once, the same pantry, a new count,
   check(`...and nobody cooks a Recompletion dish before finishing the Main round (${(a.rc.enteredShare * 100).toFixed(0)}% enter it, ${(a.rc.cookedAtEntryShare * 100).toFixed(0)}% cook one at once from the pantry carried over)`, a.rc.enteredShare > 0 && a.records.every((r) => Object.values(r.dishDay.rc).every((day) => r.rcEntryDay != null && day >= r.rcEntryDay)) && near(a.rc.enteredShare, a.finish.share, 1e-9))
 }
 
-console.log('--- 8. Prizes: components, the segment\'s factor, the grand prize to the nearest 5 ---')
+console.log('--- 8. Prizes: components, the segment\'s factor, the grand prize by RoundReward ---')
 {
   const values = createRewards().values
   const reward = createReward({ coins: 10, wild: 1, extraStock: 2, freeRound: 3, undo: 4 })
@@ -258,16 +258,20 @@ console.log('--- 8. Prizes: components, the segment\'s factor, the grand prize t
   check(`the limit is on the multiplier, not on the count: x1.2 gives ${small.raw.undo} undos and ${small.raw.freeRound} free rounds`, near(small.raw.undo, 4.8, 1e-9) && near(small.raw.freeRound, 3.6, 1e-9))
   check(`whole items are a setting, raw targets by default (4.8 undos: ${scaleReward(reward, 1.2, { itemRounding: 'nearest' }).items.undo} to the nearest, ${scaleReward(reward, 1.2, { itemRounding: 'down' }).items.undo} down, ${scaleReward(reward, 1.2, { itemRounding: 'up' }).items.undo} up), and coins are never changed to make up for it`, scaleReward(reward, 1.2, { itemRounding: 'nearest' }).items.undo === 5 && scaleReward(reward, 1.2, { itemRounding: 'down' }).items.undo === 4 && scaleReward(reward, 1.2, { itemRounding: 'up' }).items.undo === 5 && scaleReward(reward, 1.2, { itemRounding: 'nearest' }).items.coins === 12 && small.items.undo === small.raw.undo)
   const gp = grandPrize(createReward({ coins: 90 }), createSegment({ prizeFactor: 1.37 }), createRewards())
-  check(`a grand prize's worth is rounded to the nearest 5 after scaling, raw kept beside it (${gp.rawWorth.toFixed(1)} -> ${gp.worth})`, near(gp.rawWorth, 123.3, 1e-9) && gp.worth === 125)
+  check(`a grand prize's worth is rounded by RoundReward after scaling (90 to 200: down to the 10), raw kept beside it (${gp.rawWorth.toFixed(1)} -> ${gp.worth})`, near(gp.rawWorth, 123.3, 1e-9) && gp.worth === 120)
+  const gpSmall = grandPrize(createReward({ coins: 4 }), createSegment({ prizeFactor: 1.2 }), createRewards())
+  const gpBig = grandPrize(createReward({ coins: 230 }), createSegment({ prizeFactor: 1 }), createRewards())
+  check(`...under 90 to the 5, and a 5 becomes 10 (4.8 -> ${gpSmall.worth}); above 200 to the 50 (230 -> ${gpBig.worth})`, gpSmall.worth === 10 && gpBig.worth === 250)
+  check('...and an older save\'s "round to" is not read', grandPrize(createReward({ coins: 90 }), createSegment({ prizeFactor: 1.37 }), { ...createRewards(), grandPrizeRoundTo: 5 }).worth === 120)
   const d = dishPrize(dish('d', { a: 1 }, { reward: createReward({ coins: 7, undo: 1 }) }), createSegment({ prizeFactor: 1.37 }), createRewards())
   check(`a dish prize is not rounded that way (${d.worth.toFixed(4)})`, near(d.worth, 7 * 1.37 + 1.37 * 0.25, 1e-9))
   check('a prize that is not known is unknown, not zero', dishPrize(dish('d', { a: 1 }), seg, createRewards()).worth === null && grandPrize(null, seg, createRewards()).worth === null && rewardWorth({ coins: 1, wild: null, extraStock: 0, freeRound: 0, undo: 0 }, values) === null && rewardWorth(createReward({ wild: 1 }), { ...values, wild: null }) === null)
   const legacy = dishPrize(dish('d', { a: 1 }, { legacyWorth: 4 }), seg, createRewards())
   check('an older single prize number is counted as coins, and marked as such', legacy.worth === 12 && legacy.legacy === true)
   const table = prizeTable(chef({ dishes: [dish('d1', { a: 1 }, { reward }), dish('d2', { a: 1 })], rewards: { grandPrize: { main: createReward({ coins: 90 }) } } }), seg)
-  check(`the payout of a run counts what is known and says what is not ("${table.missing[0]}")`, !table.complete && table.missing.length === 1 && table.main[0].worth === 44.5 && table.mainGrand.worth === 270)
+  check(`the payout of a run counts what is known and says what is not ("${table.missing[0]}")`, !table.complete && table.missing.length === 1 && table.main[0].worth === 44.5 && table.mainGrand.worth === 250)
   const paid = play(chef({ dishes: [dish('d1', { a: 1 }, { reward: createReward({ coins: 5 }) }), dish('d2', { a: 1 }, { reward: createReward({ coins: 3, undo: 4 }) })], rc: [dish('r1', { b: 1 }, { reward: createReward({ coins: 2 }) })], rewards: { grandPrize: { main: createReward({ coins: 90 }), rc: createReward({ coins: 20 }) } }, segment: { prizeFactor: 1.2 }, sources: [give(1, 'a', 2), give(2, 'b', 1)] }))
-  check(`a player is paid each dish cooked, the grand prize on the last Main dish, and Recompletion's own (${paid.worth.main.toFixed(2)} + ${paid.worth.mainGrand} + ${paid.worth.rc.toFixed(2)} + ${paid.worth.rcGrand})`, near(paid.worth.main, 6 + 3.6 + 1.2, 1e-9) && paid.worth.mainGrand === 110 && near(paid.worth.rc, 2.4, 1e-9) && paid.worth.rcGrand === 25 && near(paid.payout, paid.worth.main + 110 + 2.4 + 25, 1e-9))
+  check(`a player is paid each dish cooked, the grand prize on the last Main dish, and Recompletion's own (${paid.worth.main.toFixed(2)} + ${paid.worth.mainGrand} + ${paid.worth.rc.toFixed(2)} + ${paid.worth.rcGrand})`, near(paid.worth.main, 6 + 3.6 + 1.2, 1e-9) && paid.worth.mainGrand === 100 && near(paid.worth.rc, 2.4, 1e-9) && paid.worth.rcGrand === 25 && near(paid.payout, paid.worth.main + 100 + 2.4 + 25, 1e-9))
 }
 
 console.log('--- 9. The same players; a change moves nothing but what it changes ---')

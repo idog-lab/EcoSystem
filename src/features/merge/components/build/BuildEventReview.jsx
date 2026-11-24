@@ -1104,7 +1104,7 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
           summary="Each segment's four Twister values and price, when the twists are reached and how they arrive - and an experiment with bigger Twister items."
           tag={<SegmentTag />}
         >
-          <TwisterTimingPanel phase={phase} draft={shown} segments={segments} activeSegmentIndex={activeSegmentIndex} embedded />
+          <TwisterTimingPanel phase={phase} draft={shown} segments={segments} activeSegmentIndex={activeSegmentIndex} current={shown === draft ? draftCurrent : false} embedded />
         </Collapsible>
       )}
 

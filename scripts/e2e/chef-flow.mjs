@@ -160,7 +160,7 @@ console.log('--- 4. Ingredients and dishes: the pantry cap, recipes for a segmen
   await openFold('chef-prizes')
   const eyeball = page.locator('[data-prize="eyeball-jelly-treat"]')
   ok('a prize is what it is made of - 3 coins and a wild are worth 5.5', (await eyeball.locator('[data-reward="coins"]').inputValue()) === '3' && (await eyeball.locator('[data-reward="wild"]').inputValue()) === '1' && (await text(eyeball.locator('[data-cell="worth"]'))) === '5.5')
-  ok('a segment\'s grand prize is scaled, then rounded to the nearest 5, the raw figure beside it (x1.2: 110, raw 108)', /110 \(raw 108\)/.test(await text(page.locator('[data-segment-prize="p90-dau"] [data-cell="grand"]'))))
+  ok('a segment\'s grand prize is scaled, then rounded by RoundReward (90 to 200: down to the 10), the raw figure beside it (x1.2: 100, raw 108)', /100 \(raw 108\)/.test(await text(page.locator('[data-segment-prize="p90-dau"] [data-cell="grand"]'))))
   ok('a prize that is not set is unknown, not zero', /unknown/.test(await text(page.locator('[data-grand="rc"]'))))
   ok('how a scaled prize becomes whole items is a setting, marked as not decided', /not decided yet/.test(await text(fold('chef-prizes'))) && (await page.getByTestId('chef-item-rounding').inputValue()) === 'none')
   await page.getByTestId('chef-dish-list').locator('[data-option="recompletion"]').click()
@@ -220,7 +220,7 @@ console.log('--- 5. Baskets: thresholds, special sources and jokers, catch-up pr
   await set(page.locator('[data-preset]').getByLabel('From day'), 8)
   await set(page.locator('[data-preset]').getByLabel('Most uses a player'), 2)
   await set(page.locator('[data-preset]').getByLabel('Dishes cooked: from'), 4)
-  ok('who qualifies, when, how often and what happens when it cannot be given are all typed', (await page.locator('[data-preset] select[aria-label="Fallback"]').inputValue()) === 'next' && /never gives past a progression threshold and never overfills the pantry/.test(await text(page.getByTestId('chef-presets'))) && /nothing here proposes or tunes a preset/.test(await text(page.getByTestId('chef-presets'))))
+  ok('who qualifies, when, how often and what happens when it cannot be given are all typed', (await page.locator('[data-preset] select[aria-label="Fallback"]').inputValue()) === 'next' && /never gives past a progression threshold and never overfills the pantry/.test(await text(page.getByTestId('chef-presets'))) && /step 4 can also suggest catch-up presets/.test(await text(page.getByTestId('chef-presets'))))
   await openFold('chef-blockers')
   ok('where each blocker comes from, with its threshold', /Main threshold: from day 1 up to 6, from day 18 no limit/.test(await text(page.locator('[data-blocker="green-jelly"]'))))
 }
@@ -245,7 +245,7 @@ console.log('--- 6. Simulate: one button, the FU target first, the rest folded -
   ok('an incomplete payout is marked, not shown as exact', /\*$/.test(await text(top.locator('[data-cell="paid"]'))))
   const identity = await text(page.getByTestId('chef-sim-identity'))
   ok(`a run says what it was played on and with ("${identity}")`, /^Played on chef \w+ · chef-engine [\d.]+ · 150 players a segment · players number 7 · player activity and basket luck$/.test(identity))
-  ok('the legend tells the range of a share from the spread of the players, and says nothing is proposed', /the range after a share says by how much\. "Most players" is something else/.test(await text(page.getByTestId('chef-sim-legend'))) && /nothing here proposes them yet/.test(await text(page.getByTestId('chef-sim-legend'))))
+  ok('the legend tells the range of a share from the spread of the players, and says nothing is proposed', /the range after a share says by how much\. "Most players" is something else/.test(await text(page.getByTestId('chef-sim-legend'))) && /this step proposes nothing/.test(await text(page.getByTestId('chef-sim-legend'))))
   // BOTH VIEWS OF THE PLAYERS, side by side (agreed in planning: the targets depend on the activity assumptions).
   const otherFu = await page.locator('[data-cell="other-in-fu"]').allInnerTexts()
   ok(`both views of the players side by side: a column group "With basket luck only" - in FU and the checkpoint - for every segment (10% of Revenue: ${await text(top.locator('[data-cell="in-fu"]'))} with activity, ${await text(top.locator('[data-cell="other-in-fu"]'))} with luck only)`, /With basket luck only/i.test(await text(page.getByTestId('chef-sim-other-head'))) && otherFu.length === 9 && otherFu.every((t) => /^\d+% \(\d+-\d+\)$/.test(t.trim())) && (await page.locator('[data-cell="other-checkpoint"]').count()) === 9)
@@ -449,7 +449,7 @@ console.log('--- 11. A proposal: what may change, generate, review, apply, undo 
   }
   await step('proposal')
   heights.proposal = await pageHeight()
-  ok('step 4 says what it is for, and the checks of the other steps are not repeated in it', /^Step 4 of 6 · recipes, basket weights and thresholds that bring every segment closer to the targets - to review, then apply or not\.$/.test(await text(page.getByTestId('chef-step-purpose'))) && (await page.getByTestId('chef-step-findings').count()) === 0)
+  ok('step 4 says what it is for, and the checks of the other steps are not repeated in it', /^Step 4 of 6 · recipes, basket weights and thresholds, or catch-up presets, that bring every segment closer to the targets - to review, then apply or not\.$/.test(await text(page.getByTestId('chef-step-purpose'))) && (await page.getByTestId('chef-step-findings').count()) === 0)
   const switches = await page.getByTestId('chef-proposal-may-change').locator('input[type="checkbox"]').evaluateAll((list) => list.map((el) => el.checked))
   ok(`what may change is five switches - recipes, weights and threshold amounts on to start with (${switches.join(' ')})`, switches.join() === 'true,true,true,false,false' && /Base recipe quantities.*Basket weights.*Threshold amounts.*Threshold opening days.*Blocker quantities by segment/.test(await text(page.getByTestId('chef-proposal-may-change'))))
   ok('what is never changed is said beside them', /Never changed: which ingredients a dish needs, the segments and what they open, basket sizes and the most a basket gives, pantry caps, prizes, special sources and jokers, the dates, the targets, catch-up presets, pricing odds\. Nothing is added/.test(await text(page.getByTestId('chef-proposal-may-change'))))

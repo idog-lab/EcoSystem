@@ -11,8 +11,9 @@
 //   undos        the same (the limit is on the multiplier, not on the count)
 //   wilds        unchanged
 //   extra stock  unchanged
-// A GRAND PRIZE's worth is then rounded to the nearest 5 (raw and rounded are
-// both kept). A dish prize's worth is not rounded.
+// A GRAND PRIZE's worth is then rounded by RoundReward - under 90 to the 5 (a
+// 5 becomes 10), 90 to 200 down to the 10, above 200 to the 50 - raw and
+// rounded both kept. A dish prize's worth is not rounded.
 //
 // WHOLE ITEMS. Scaling gives 4.8 undos. How that becomes a whole number in
 // production has not been decided, so `itemRounding` is a setting ('none'
@@ -26,6 +27,7 @@
 // (The source workbook's own medium and high columns are not reused: they
 // scale wilds and round each item their own way.)
 import { REWARD_KEYS } from './chefModel'
+import { roundReward } from '../../../lib/economy/rounding'
 
 export const effectiveFactor = (segment) => (Number(segment?.prizeFactor) || 1) * (Number(segment?.burnout) || 1)
 
@@ -94,13 +96,15 @@ export function dishPrize(dish, segment, rewards) {
   return { worth: null, baseWorth: null, raw: null, items: null, known: false, legacy: false }
 }
 
-// A grand prize for a segment: scaled, then its worth to the nearest 5.
+// A grand prize for a segment: scaled, then its worth by RoundReward (the
+// economy's rule for a tier prize, src/lib/economy/rounding.js; economist,
+// asked: "Yes, RoundReward"). It was the nearest 5 at every size, the
+// `grandPrizeRoundTo` an older save may still carry, no longer read.
 export function grandPrize(reward, segment, rewards) {
   if (!hasComponents(reward)) return { worth: null, rawWorth: null, baseWorth: null, raw: null, items: null, known: false }
   const scaled = scaleReward(reward, effectiveFactor(segment), { cappedFactor: rewards?.cappedFactor ?? 2, itemRounding: rewards?.itemRounding ?? 'none' })
   const rawWorth = rewardWorth(scaled.items, rewards?.values)
-  const step = Number(rewards?.grandPrizeRoundTo) > 0 ? Number(rewards.grandPrizeRoundTo) : 5
-  const worth = rawWorth == null ? null : Math.round(rawWorth / step) * step
+  const worth = rawWorth == null ? null : roundReward(rawWorth)
   return { worth, rawWorth, baseWorth: rewardWorth(reward, rewards?.values), raw: scaled.raw, items: scaled.items, known: worth != null }
 }
 

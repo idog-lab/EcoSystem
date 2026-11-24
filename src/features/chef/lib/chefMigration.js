@@ -89,7 +89,7 @@ function fromV1(raw) {
     )
   }
   if (totalPrize) {
-    notes.push(`The prize for cooking every dish had one value a prize size (${['low', 'medium', 'high'].map((t) => totalPrize[t]).filter((v) => v != null).join(' / ')}). The first is now the Main grand prize, in coins; a segment's own is worked out from its prize factor and burnout, and rounded to the nearest 5.`)
+    notes.push(`The prize for cooking every dish had one value a prize size (${['low', 'medium', 'high'].map((t) => totalPrize[t]).filter((v) => v != null).join(' / ')}). The first is now the Main grand prize, in coins; a segment's own is worked out from its prize factor and burnout, and rounded the economy's way (RoundReward).`)
   }
   const rc = raw.recompletionDishes ?? []
   if (rc.length && rc.length !== 3) {

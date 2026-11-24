@@ -1643,6 +1643,10 @@ export function withoutPresets(state, proposal, plan) {
   })
 }
 
+// What build 03 (catch-up suggestions, chefCatchup.js) reads the same way a proposal does: the targets, a
+// segment's shortfalls against them, the order of "better", and a verdict on the check players.
+export { context as generatorContext, measure as measureSegment, verdictOf }
+
 // The phases a basket's weights belong to are not created or moved by a proposal; this says when more would help.
 export function periodNote(state) {
   const fuDay = state.targets?.mainFuDay

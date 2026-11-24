@@ -50,7 +50,7 @@ const STEPS = [
   { id: 'event', label: 'Event and players', purpose: 'when the event runs, what it aims at, and what each segment opens' },
   { id: 'dishes', label: 'Ingredients and dishes', purpose: 'what players collect, what they cook with it, and what a dish pays' },
   { id: 'baskets', label: 'Baskets', purpose: 'what a basket gives, what holds an ingredient back, and what is handed out besides' },
-  { id: 'proposal', label: 'Proposal', purpose: 'recipes, basket weights and thresholds that bring every segment closer to the targets - to review, then apply or not' },
+  { id: 'proposal', label: 'Proposal', purpose: 'recipes, basket weights and thresholds, or catch-up presets, that bring every segment closer to the targets - to review, then apply or not' },
   { id: 'simulate', label: 'Simulate', purpose: 'the event played by many players, against its targets' },
   { id: 'value', label: 'Basket value', purpose: 'what one more basket changes for a player' },
 ]

@@ -948,8 +948,8 @@ export default function SimulateStep({ state, update, findings, stepLabels, conf
               </table>
             </div>
             <p className="mt-3 text-sm text-slate-500" data-testid="chef-sim-legend" data-note>
-              These are simulated players: another run gives slightly different figures - the range after a share says by how much. "Most players" is something else: how far apart the players are. Recipes and
-              baskets are typed by you; nothing here proposes them yet.
+              These are simulated players: another run gives slightly different figures - the range after a share says by how much. "Most players" is something else: how far apart the players are. Recipes,
+              baskets and catch-up presets are played as they are - typed by you, or a suggestion you applied in step 4; this step proposes nothing.
             </p>
             <p className="mt-1 text-sm text-slate-600" data-testid="chef-sim-views" data-note>
               {otherLabel

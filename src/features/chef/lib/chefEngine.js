@@ -814,6 +814,10 @@ export function summarize(world, records, meta = {}) {
     presets: {
       affectedShare: share(affected.length),
       basketsMean: meanOf(records.map((r) => r.presetBaskets)),
+      // The presets a build-03 suggestion added (`origin: 'build-03'`): the players who got at least one of their
+      // baskets, and how many such baskets a player got. A reading; nothing is played differently.
+      suggestedShare: share(records.filter((r) => world.presets.some((p) => p.origin === 'build-03' && (r.presetUses[p.id] ?? 0) > 0)).length),
+      suggestedBasketsMean: meanOf(records.map((r) => world.presets.reduce((s, p) => s + (p.origin === 'build-03' ? (r.presetUses[p.id] ?? 0) : 0), 0))),
       byPreset: world.presets.map((p) => ({ id: p.id, name: p.name, playersShare: share(records.filter((r) => (r.presetUses[p.id] ?? 0) > 0).length), usesMean: meanOf(records.map((r) => r.presetUses[p.id] ?? 0)) })),
     },
   }

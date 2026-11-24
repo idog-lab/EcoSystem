@@ -469,8 +469,8 @@ export function withBlankCoinValues(rewardChainConfig) {
 }
 
 // THE TWISTER ITEM'S SYNTAX, when none was typed: the amount written the way
-// the other rewards write theirs ("[dynamic(dr-merge:75)]"), with this app's
-// own name for the resource - `dr-twister`, NOT a confirmed Ops name. Without
+// the other rewards write theirs ("[dynamic(dr-merge:75)]"), with the
+// resource's name - `dr-twister` (economist, 24 Nov 2026: "its the name of it"). Without
 // it the Small Rewards sheet listed the Twister keys with no amount at all
 // (economist: "why dont we have the twister amount in the ranks?"). A syntax
 // typed by hand always wins.

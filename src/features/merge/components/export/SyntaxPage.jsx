@@ -26,6 +26,8 @@ import {
 } from '../../lib/export/eventSheets'
 import { createGoogleSheet } from '../../lib/export/googleSheetsExport'
 import { rewardTextIssues, REWARD_TYPE_LABELS } from '../../lib/rewards/rewardChain'
+import { economyTextFindings } from '../../lib/export/economyCheck'
+import { useEconomy } from '../../../../lib/economy/economyStore'
 
 // Ordered to match the workbook's own tab order (eventSheets.js's
 // buildWorkbook), which in turn matches the economist's reference
@@ -72,7 +74,7 @@ const DESCRIPTIONS = {
   'recompletion-board-layouts':
     'Same shape as Board Layouts, but for the separate Recompletion board list (the "Recompletion" tab) — the board(s) a player cycles through after reaching the event\'s Last Tier.',
   'small-rewards':
-    'The real Ops "Small Rewards" sheet — one row per reward-chain key (coin/dr/puzzle/charm, rank 1-4), driven by the Rewards tab\'s own reward-chain config (syntax, Asset ID, prize). Seeded with the economist\'s real reference values, fully editable from there. The dr-twister rows (when the drops carry Twister items) are written as [dynamic(dr-twister:value)] unless a syntax was typed in the Twister tool - "dr-twister" is this tool\'s own name, NOT a confirmed Ops one.',
+    'The real Ops "Small Rewards" sheet — one row per reward-chain key (coin/dr/puzzle/charm, rank 1-4), driven by the Rewards tab\'s own reward-chain config (syntax, Asset ID, prize). Seeded with the economist\'s real reference values, fully editable from there. The dr-twister rows (when the drops carry Twister items) are written as [dynamic(dr-twister:value)] unless a syntax was typed in the Twister tool.',
   'small-rewards-bank':
     'The Ops "Small Rewards Bank" sheet — the containers a merge can drop in the normal event, followed by any container only the rank 13 and 14 merges drop. Each container is one drop the model built and plays (Build event), named ContA, ContB, ... and written in the Small Rewards keys above (coin-r1+dr-r1 = a coin rank 1 and a merge energy rank 1 dropping together). Every container is a different drop.',
   'small-reward-weights':
@@ -154,6 +156,10 @@ export default function SyntaxPage({
   const canExportAll = exportOverride || designIssues.length === 0
   // Ranks whose item text cannot carry the value the game pays (several amounts, or none): written as typed, named here.
   const textIssues = rewardTextIssues(boards?.[0]?.rewardChainConfig)
+  // The same texts read by the Economy page's rules (a reading only).
+  const economy = useEconomy()
+  const economyFindings = economyTextFindings(boards?.[0]?.rewardChainConfig, economy)
+  const economyErrors = economyFindings.filter((f) => f.issues.some((i) => i.level === 'error')).length
   const [view, setView] = useState('normal')
   // What a download holds: the segment shown, or every segment in one file.
   const [scope, setScope] = useState('segment')
@@ -358,6 +364,25 @@ export default function SyntaxPage({
             {textIssues.map((i) => `${REWARD_TYPE_LABELS[i.type] ?? i.type} rank ${i.rank} pays ${i.value}, ${i.reason}${i.syntax ? ` ("${i.syntax}")` : ''}`).join('; ')}.
           </span>
         </div>
+      )}
+      {economyFindings.length > 0 && (
+        <details className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${economyErrors ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white/80 text-slate-700'}`} data-testid="syntax-economy-check" open={economyErrors > 0}>
+          <summary className="cursor-pointer font-semibold">
+            Item text read by the Economy page&apos;s rules: {economyErrors ? `${economyErrors} the game cannot read as written` : 'readable'}
+            {economyFindings.length - economyErrors > 0 && `, ${economyFindings.length - economyErrors} with something to look at`}
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {economyFindings.map((f) => (
+              <li key={`${f.type}-${f.rank}`} data-economy-item={`${f.type}-${f.rank}`}>
+                <span className="font-semibold">
+                  {REWARD_TYPE_LABELS[f.type] ?? f.type} rank {f.rank}
+                </span>{' '}
+                <span className="font-mono text-xs">{f.text}</span>: {f.issues.map((i) => i.message).join(' ')}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs opacity-80">A reading only - nothing is changed by it. The keys and currencies it knows are on the Economy page (home screen).</p>
+        </details>
       )}
       <div className="mb-3">
         <ExportGate issues={designIssues} override={exportOverride} onOverride={onExportOverride} onRebuild={onRebuild}>

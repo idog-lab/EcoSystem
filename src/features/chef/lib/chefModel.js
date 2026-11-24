@@ -20,6 +20,8 @@
 //                          every segment.
 //   most a basket          the most one basket can roll of the ingredient.
 
+import { chefValuesFromEconomy, createEconomy } from '../../../lib/economy/economyModel'
+
 export const SCHEMA_VERSION = 2
 
 export const RARITY = {
@@ -311,8 +313,12 @@ export function createSource({ id, label = '', kind = 'ingredient', day = 1, ing
 //             goes straight to the ordinary basket.
 // A preset never gives past a progression threshold and never overfills the
 // pantry: it has no permission to.
-export function createPreset({ id, name = 'Catch-up', enabled = true, chestType = 'basic', round = 'main', startDay = 1, endDay = null, priority = 1, segmentIds = null, eligibility = null, maxUses = 1, sizeMode = 'by-total', allocations = {}, fixedTotal = null, fixedContents = {}, fallback = 'next' } = {}) {
+// `origin`: null for a preset the economist typed; 'build-03' for one a catch-up suggestion added (step 4), so it
+// can be told apart, listed with its reason and taken out again by one undo.
+export function createPreset({ id, name = 'Catch-up', enabled = true, chestType = 'basic', round = 'main', startDay = 1, endDay = null, priority = 1, segmentIds = null, eligibility = null, maxUses = 1, sizeMode = 'by-total', allocations = {}, fixedTotal = null, fixedContents = {}, fallback = 'next', origin = null } = {}) {
   return {
+    // (Only on a suggested preset: an `origin: null` on the economist's would change every saved chef's fingerprint.)
+    ...(origin ? { origin } : {}),
     id: id ?? nextId('preset'),
     name,
     enabled,
@@ -345,11 +351,16 @@ export function createTargets({ mainFuDay = null, mainFuSharePct = 80, checkpoin
 }
 
 // --- Rewards -----------------------------------------------------------------
-export const DEFAULT_REWARD_VALUES = { coins: 1, wild: 2.5, extraStock: 2, freeRound: 1, undo: 0.25 }
+// The economy's value table (src/lib/economy, one for the whole app): coins 1,
+// wild 2.5, extra stock 2, free round 1, undo 0.25. A chef keeps its own copy
+// (typed in step 2); step 2 says when it differs from the Economy page's.
+export const DEFAULT_REWARD_VALUES = chefValuesFromEconomy(createEconomy())
 export const ITEM_ROUNDINGS = ['none', 'nearest', 'down', 'up']
 export const ITEM_ROUNDING_LABELS = { none: 'Not rounded (raw targets)', nearest: 'To the nearest whole item', down: 'Down', up: 'Up' }
-export function createRewards({ values = null, grandPrize = null, itemRounding = 'none', cappedFactor = 2, grandPrizeRoundTo = 5 } = {}) {
-  return { values: { ...DEFAULT_REWARD_VALUES, ...(values ?? {}) }, grandPrize: { main: null, rc: null, ...(grandPrize ?? {}) }, itemRounding, cappedFactor, grandPrizeRoundTo }
+// (A grand prize is rounded by the economy's RoundReward; the older
+// `grandPrizeRoundTo` of a save is dropped here and never read.)
+export function createRewards({ values = null, grandPrize = null, itemRounding = 'none', cappedFactor = 2 } = {}) {
+  return { values: { ...DEFAULT_REWARD_VALUES, ...(values ?? {}) }, grandPrize: { main: null, rc: null, ...(grandPrize ?? {}) }, itemRounding, cappedFactor }
 }
 
 // --- The rules that are not settled yet, as settings --------------------------

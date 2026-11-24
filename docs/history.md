@@ -7877,3 +7877,79 @@ dishes picked in step 1 (`dishMaster.dishIds`; Dish Master progress read on
 them; checks and the readiness list say when they are not three or lack the
 semi-blocker), and "New chef: from the Black Friday chef". verify-chef 180,
 chef-flow 185 (a walk through every open question in the app).
+
+## The economy, shared by the whole app
+
+24 Nov 2026. The economist: "the next thing i want us to do is to learn the way
+we calculate things in our economy. its not only for the chef, all the app
+should know how to handle the calculations of the game we got." Asked how they
+would give it and where it should live: "Explain it in chat" and "One shared
+economy page". They pasted "Economy Rules & Reward Syntax" (value in allowance
+and its table, the reward-text grammar, currencies with dated values, the text
+builders DR_Syntax_V5 / DR_AltReward / PackSyntax / RewardSyntax, segment
+conditions, the sheets' rounding, the checks to build). Read back against the
+app: Chef's value table and live segments already matched it. Four conflicts
+were asked: Merge's small-reward rounding against MergeRoundReward ("the small
+reward rounding should not be affected from the rules u got now"), coins to 2
+decimals against Merge's 3 when small ("Keep 3 decimals when small"), Chef's
+grand prize to the nearest 5 against RoundReward ("Yes, RoundReward"), the
+Twister's any-whole price against the spin-cost steps ("all the rules u got now
+are applied only on prizes we will add to the tiers in the features. all the
+rules we got from befor for small reweards and twister are untouched").
+
+Built: `src/lib/economy/` (rounding, the value table and currencies with dated
+values, the builders, a reader that writes a text back exactly and checks it,
+worth, segment conditions, kept in this browser) and the Economy page on the
+home screen (worth, keys, check a reward, build a prize, segments, rounding;
+download / load / start again). Chef: grand prize by RoundReward (90 x 1.37 =
+123.3 was 125, is 120; 108 was 110, is 100), its default value table read from
+the economy, step 2 saying when a chef's own differs. Merge: the Syntax tab
+reads every item text with the checker (a reading; dr-twister named as this
+app's own); a backup carries the economy and importing asks before replacing
+it; a saved event never touches it. Nothing invented: the seeded currency
+names, packs, presets, chests, triggers and buckets are the ones in the
+economist's text, with no worth but dr-hidden's 0. Open questions are listed
+in docs/economy-rules.md. verify-economy 167 checks; economy-page.mjs 37;
+verify-chef 182, chef-flow 185, text-layout 10 (single runs).
+
+## Chef build 03: catch-up suggestions; the economy's answers and the game's keys
+
+24 Nov 2026. Asked "continue whatever you have to still do in the chef", the
+economist chose build 03 among four pieces left, then answered its four forks
+(all the recommended ones): both kinds of player (behind pace, stuck on an
+ingredient), common and rare ingredients only, the fewest players touched
+between equals, their own presets never touched. Built `chefCatchup.js` on
+build 02's targets, order, verdicts and both views; step 4 got a choice
+between the two kinds of suggestion; the engine counts the players given a
+suggested basket (a reading); suggested presets carry `origin: 'build-03'`
+(only on them, so no saved chef's fingerprint changes). On the made-up
+example a suggestion barely moved the FU day while reaching 95-99% of the
+players: what held them back was the semi-blocker (Pumpkin, 96-99% lacking on
+day 14), which a catch-up may not give. Rather than hide it behind "Missed",
+the result says what holds players back on the FU day and opens that by
+itself when it is the semi-blocker. verify-chef-catchup 42, chef-catchup 17.
+
+The economy, same day: a second currency goes inside the last fallback, which
+may be any core resource; dr-twister is the game's name; the pack counter is
+worth 0 and the basket counter is removed ("that logic is not up to date");
+energy is removed; pricing is removed (game play only; no Rate of Economy,
+on-cards multiplier or currency factor for now); Chef baskets keep their tier
+worth every day. The game's keys were given: 608 sticker packs (every one
+worth 0), 81 presets (the real Chef baskets - not every tier comes in every
+kind, so baskets are known by the list, not a pattern - picks, market and the
+rest) and 21 more presets (Chef_Inject_*, Chef_DishN_Complete). The keys
+lists are searched; a saved economy gets them added and keeps its own. The
+presets' syntax and values (mini-game from merge and picks, puzzle from the
+average daily puzzle value) are to come. verify-economy 183, economy-page 41.
+
+## Merge: the twists a build was made for, and the twists typed now
+
+24 Nov 2026. The economist: "i asked 10 twists in the simulator and it shows
+15 asked in the Build". Reproduced (scripts/e2e/twister-retype.mjs): when only
+the twists change, a build is priced again by itself and step 4 shows the new
+twists (15 -> 10, price 11 -> 16 Twister DR); but when anything else changed
+too, the build is out of date, nothing is priced again (its boards are old),
+and "Twists asked" kept showing the twists it was built for as if they were
+asked now. Step 4 now says so in that cell: "built for these; 12 typed now -
+build again" (while a current build is being priced: "12 typed now -
+pricing..."). Presentation only; nothing about the build or the price changed.
