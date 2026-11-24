@@ -174,6 +174,7 @@ const priced = createEconomy({
   ],
   keys: { packs: [createKey({ key: 'Common_T4_1_1C_Low_Vague_Game', value: 0.5 })], presets: [createKey({ key: 'mf_90_gameplay_entry_cross', value: 3 })] },
 })
+check('a date that does not exist (30 Feb, month 13) is never read as one', (() => { const r = parseDailyValues('2026-02-30=1|2026-13-01=2|2026-03-01=3'); return r.entries.length === 1 && r.entries[0].date === '2026-03-01' && r.bad.length === 2 })())
 eq('the dated values are read in order', parseDailyValues('2026-12-01=2|2026-11-30=1').entries.map((e) => e.value).join(','), '1,2')
 eq('a date between two reads the one before it', currencyValue(priced.currencies[0], { date: '2026-12-01' }).value, 0.0333518)
 check('a date before the first is the first (clamped)', currencyValue(priced.currencies[0], { date: '2026-11-01' }).value === 0.0376875 && currencyValue(priced.currencies[0], { date: '2026-11-01' }).clamped)

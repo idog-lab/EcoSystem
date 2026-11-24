@@ -39,7 +39,7 @@ export default function SegmentsTab() {
               <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} data-testid="economy-seg-split" />
               Split each band by mode at
             </label>
-            <Num aria-label="Mode split" value={modeSplit} onCommit={(v) => v > 0 && setModeSplit(v)} className="mb-0.5 w-14" disabled={!split} />
+            <Num aria-label="Mode split" value={modeSplit} min={0.01} onCommit={setModeSplit} className="mb-0.5 w-14" disabled={!split} />
           </div>
           {badCuts.length > 0 && <p className="text-sm text-rose-700">Not a band end: {badCuts.join(', ')}</p>}
           {issues.map((s) => (

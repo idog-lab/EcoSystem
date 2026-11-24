@@ -11,38 +11,60 @@ export const BUTTON = 'rounded-xl border border-slate-200 bg-white px-3 py-1.5 t
 export const PRIMARY = 'rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:brightness-105'
 
 // A number taken when the field is left (or on Enter). Empty means "not set"
-// when `allowEmpty`, and is never read as 0.
-export function Num({ value, onCommit, allowEmpty = false, className = '', ...props }) {
+// when `allowEmpty`, and is never read as 0. What it will not take - not a
+// number, below `min`, above `max`, not whole when `integer` - is refused and
+// said under the field (economist: "there should be data validation on the
+// types entered"); the value before stays.
+export function Num({ value, onCommit, allowEmpty = false, min = 0, max = Infinity, integer = false, className = '', ...props }) {
   const shown = value == null ? '' : String(value)
   const [text, setText] = useState(shown)
+  const [rejected, setRejected] = useState(null)
   useEffect(() => setText(shown), [shown])
+  function refuse(why) {
+    setRejected(why)
+    setText(shown)
+  }
   function commit() {
     if (text.trim() === '') {
       if (allowEmpty) {
+        setRejected(null)
         if (value != null) onCommit(null)
-      } else setText(shown)
+      } else refuse('A number is needed here.')
       return
     }
-    const n = Number(text)
-    if (!Number.isFinite(n)) {
-      setText(shown)
-      return
-    }
+    const n = Number(text.replace(',', '.'))
+    if (!Number.isFinite(n)) return refuse(`"${text}" is not a number.`)
+    if (n < min) return refuse(`At least ${min}.`)
+    if (n > max) return refuse(`At most ${max}.`)
+    if (integer && !Number.isInteger(n)) return refuse('A whole number.')
+    setRejected(null)
     if (n !== value) onCommit(n)
   }
   return (
-    <input
-      type="number"
-      step="any"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-      className={`rounded-lg border border-slate-200 bg-white/80 px-1.5 py-1 text-center text-sm font-medium tabular-nums text-slate-800 [appearance:textfield] focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-200/60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${className}`}
-      {...props}
-    />
+    <span className="inline-flex flex-col items-center">
+      <input
+        {...props}
+        type="number"
+        step="any"
+        min={Number.isFinite(min) ? min : undefined}
+        max={Number.isFinite(max) ? max : undefined}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        data-field-rejected={rejected ? 'yes' : undefined}
+        title={rejected ?? props.title}
+        className={`rounded-lg border bg-white/80 px-1.5 py-1 text-center text-sm font-medium tabular-nums text-slate-800 [appearance:textfield] focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-200/60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${rejected ? 'border-rose-300' : 'border-slate-200'} ${className}`}
+      />
+      {rejected && (
+        <span className="mt-0.5 max-w-[10rem] text-center text-[10px] font-medium leading-tight text-rose-700" data-field-rejected-why>
+          {rejected}
+        </span>
+      )}
+    </span>
   )
 }
+
 
 // A text taken when the field is left (or on Enter).
 export function Text({ value, onCommit, className = '', ...props }) {

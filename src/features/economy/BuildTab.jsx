@@ -87,7 +87,7 @@ export default function BuildTab({ economy }) {
               ['freeRound', 'Free rounds'],
             ].map(([key, label]) => (
               <Field key={key} label={label}>
-                <Num aria-label={label} value={reward[key]} allowEmpty onCommit={(v) => setR(key, v)} className="w-16" />
+                <Num aria-label={label} value={reward[key]} allowEmpty integer onCommit={(v) => setR(key, v)} className="w-16" />
               </Field>
             ))}
           </div>
@@ -183,7 +183,7 @@ export default function BuildTab({ economy }) {
                             <CurrencySelect economy={economy} value={c.name} onChange={(name) => setC(i, { name })} label={`Currency ${i + 1}`} />
                           </td>
                           <td className={`${TD} text-center`}>
-                            <Num aria-label={`Currency ${i + 1} amount`} value={c.amount} allowEmpty onCommit={(amount) => setC(i, { amount })} className="w-20" />
+                            <Num aria-label={`Currency ${i + 1} amount`} value={c.amount} allowEmpty min={1} onCommit={(amount) => setC(i, { amount })} className="w-20" />
                           </td>
                           <td className={`${TD} whitespace-nowrap text-right tabular-nums ${v == null ? 'text-amber-700' : 'text-slate-600'}`}>{v == null ? 'not set' : worthText(v * (Number(c.amount) || 0))}</td>
                           <td className={TD}>
@@ -198,7 +198,7 @@ export default function BuildTab({ economy }) {
                           <td className={TD}>
                             <div className="flex items-center gap-1">
                               <CurrencySelect economy={economy} value={c.altDrName} onChange={(altDrName) => setC(i, { altDrName })} label={`Currency ${i + 1} second currency`} empty="none" />
-                              {c.altDrName && <Num aria-label={`Currency ${i + 1} second amount`} value={c.altDrAmount} allowEmpty onCommit={(altDrAmount) => setC(i, { altDrAmount })} className="w-16" placeholder="auto" />}
+                              {c.altDrName && <Num aria-label={`Currency ${i + 1} second amount`} value={c.altDrAmount} allowEmpty min={1} onCommit={(altDrAmount) => setC(i, { altDrAmount })} className="w-16" placeholder="auto" />}
                             </div>
                           </td>
                           <td className={TD}>

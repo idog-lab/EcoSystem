@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import Card from '../../components/ui/Card'
 import { CHEF_BASKET_TIERS, RESOURCES, createCurrency, parseDailyValues } from '../../lib/economy/economyModel'
 import { BUTTON, INPUT, MONO, Num, TD, TH, Text } from './economyUi'
+import DailyValues from './DailyValues'
 
 const DR_NAME = /^dr-[a-z0-9]+(?:-[a-z0-9]+)*$/
+// 2026-11-30 -> "30 Nov 2026"
+const readable = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 // WHAT EVERYTHING IS WORTH, in allowance: the resources, the currencies
 // (dynamic resources) and the Chef baskets.
@@ -13,6 +16,8 @@ export default function WorthTab({ economy, onChange }) {
   const setCurrency = (i, patch) => onChange({ ...economy, currencies: economy.currencies.map((c, j) => (j === i ? { ...c, ...patch } : c)) })
   const removeCurrency = (i) => onChange({ ...economy, currencies: economy.currencies.filter((_, j) => j !== i) })
   const [newName, setNewName] = useState('')
+  // The currency whose values by date are open for editing (one at a time).
+  const [openDaily, setOpenDaily] = useState(null)
   const nameProblem = !newName ? '' : !DR_NAME.test(newName) ? 'A currency name starts with "dr-", in lower case with "-".' : economy.currencies.some((c) => c.name === newName) ? 'Already on the list.' : ''
   function addCurrency() {
     if (!newName || nameProblem) return
@@ -72,11 +77,10 @@ export default function WorthTab({ economy, onChange }) {
               <thead>
                 <tr className="border-b border-slate-200">
                   <th className={TH}>Name</th>
-                  <th className={TH}>Feature</th>
                   <th className={`${TH} text-center`} title="The worth of one unit when a prize is balanced (game play).">
                     Worth
                   </th>
-                  <th className={TH} title="For a currency that loses value day by day: paste the dated map, 2026-11-30=0.0376875|2026-12-01=0.0333518|... A date reads its own value, clamped to the first and last date given. When it is set it replaces the game-play worth.">
+                  <th className={TH} title="For a currency that loses value day by day: a value for each date, picked on a calendar (or a whole list pasted). A date reads its own value, clamped to the first and last date given. When it is set it replaces the one worth.">
                     By date
                   </th>
                   <th className={TH}>Note</th>
@@ -86,8 +90,10 @@ export default function WorthTab({ economy, onChange }) {
               <tbody>
                 {economy.currencies.map((c, i) => {
                   const daily = parseDailyValues(c.daily)
+                  const open = openDaily === c.name
                   return (
-                    <tr key={`${c.name}-${i}`} className="border-b border-slate-100 text-sm" data-currency={c.name}>
+                    <Fragment key={`${c.name}-${i}`}>
+                    <tr className={`text-sm ${open ? '' : 'border-b border-slate-100'}`} data-currency={c.name}>
                       <td className={`${TD} ${MONO} whitespace-nowrap text-slate-800`}>
                         {c.name}
                         {c.ownName && (
@@ -96,20 +102,19 @@ export default function WorthTab({ economy, onChange }) {
                           </span>
                         )}
                       </td>
-                      <td className={TD}>
-                        <Text aria-label={`${c.name}: feature`} value={c.feature} onCommit={(v) => setCurrency(i, { feature: v })} className="w-32" />
-                      </td>
                       <td className={`${TD} text-center`}>
                         <Num aria-label={`${c.name}: game play worth`} value={c.valueGameplay} allowEmpty onCommit={(v) => setCurrency(i, { valueGameplay: v })} className="w-24" placeholder="not set" />
                       </td>
                       <td className={TD}>
-                        <Text aria-label={`${c.name}: values by date`} value={c.daily} placeholder="date=value|..." onCommit={(v) => setCurrency(i, { daily: v })} className="w-48" />
-                        {daily.entries.length > 0 && (
-                          <div className="mt-0.5 text-[11px] text-slate-500" data-cell="daily">
-                            {daily.entries.length} dates, {daily.entries[0].date} to {daily.entries[daily.entries.length - 1].date}
-                          </div>
-                        )}
-                        {daily.bad.length > 0 && <div className="mt-0.5 text-[11px] text-rose-700">Not read: {daily.bad.slice(0, 2).join(', ')}</div>}
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-[12px] text-slate-600" data-cell="daily">
+                            {daily.entries.length ? `${daily.entries.length} ${daily.entries.length === 1 ? 'date' : 'dates'}, ${readable(daily.entries[0].date)} to ${readable(daily.entries[daily.entries.length - 1].date)}` : 'none'}
+                          </span>
+                          <button type="button" className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:text-purple-700" onClick={() => setOpenDaily(open ? null : c.name)} aria-expanded={open} data-testid={`economy-daily-toggle-${c.name}`}>
+                            {open ? 'Close' : daily.entries.length ? 'Edit dates' : 'Add dates'}
+                          </button>
+                        </span>
+                        {daily.bad.length > 0 && <div className="mt-0.5 text-[11px] text-rose-700">Not read, and not used: {daily.bad.slice(0, 2).join(', ')}</div>}
                       </td>
                       <td className={TD}>
                         <Text aria-label={`${c.name}: note`} value={c.note} onCommit={(v) => setCurrency(i, { note: v })} className="w-56" />
@@ -120,6 +125,14 @@ export default function WorthTab({ economy, onChange }) {
                         </button>
                       </td>
                     </tr>
+                    {open && (
+                      <tr className="border-b border-slate-100 bg-slate-50/60" data-daily-editor={c.name}>
+                        <td colSpan={5} className="px-3 py-2">
+                          <DailyValues name={c.name} value={c.daily} onChange={(daily) => setCurrency(i, { daily })} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>

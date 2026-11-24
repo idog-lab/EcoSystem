@@ -7969,3 +7969,17 @@ at the top of step 6 beside the tier worth of the Economy page - a reading
 only, no value is changed. Made-up example, single run: about 0.5 / 2.5 / 5
 over the event against 0.25 / 1 / 4. verify-chef-worth 8, chef-worth 7,
 chef-flow 185.
+
+## Economy page: no Feature column; dates on a calendar; fields say why they refuse
+
+24 Nov 2026. The economist: "there is no need in the currency tables for the
+feature column. there should be data validation on the types entered to the
+placeholders, specially the dates, calendare pop up is the best." The Feature
+column is gone (the field stays in saved data, unused). A currency's values by
+date are entered in an editor under its row: a date picked on a calendar and
+its value, a list to change or remove from, "Add the day" starting the day
+after the last, a date given twice refused; a whole list can still be pasted
+in the export writing, and a date that does not exist (30 Feb) or a broken
+part is refused and named, never kept. Every number field of the page says
+why it refuses a value (below 0, not whole where a resource is, not a number)
+and keeps the value before. verify-economy 192, economy-page 48.

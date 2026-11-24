@@ -158,6 +158,13 @@ export function normalizeEconomy(raw) {
 
 // --- Currencies whose value changes by date ---------------------------------
 
+// A real calendar date, YYYY-MM-DD (2026-02-30 is not one).
+export function isRealDate(text) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(text ?? ''))) return false
+  const d = new Date(`${text}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text
+}
+
 // "2026-11-30=0.0376875|2026-12-01=0.0333518" -> [{ date, value }] by date.
 // Returns { entries, bad } - `bad` the parts that are not date=value.
 export function parseDailyValues(text) {
@@ -165,7 +172,7 @@ export function parseDailyValues(text) {
   const bad = []
   for (const part of String(text ?? '').split(/[|\n\r,;]+/).map((s) => s.trim()).filter(Boolean)) {
     const m = part.match(/^(\d{4}-\d{2}-\d{2})\s*[=:\t ]\s*(-?\d+(?:\.\d+)?)$/)
-    if (m) entries.push({ date: m[1], value: Number(m[2]) })
+    if (m && isRealDate(m[1])) entries.push({ date: m[1], value: Number(m[2]) })
     else bad.push(part)
   }
   entries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))

@@ -12,7 +12,7 @@ export default function RulesTab() {
         <div className="flex flex-col gap-3">
           <label className="flex items-center gap-2 text-sm text-slate-600">
             Try a number
-            <Num aria-label="A number to round" value={x} onCommit={setX} className="w-24" data-testid="economy-rules-x" />
+            <Num aria-label="A number to round" value={x} min={-Infinity} onCommit={setX} className="w-24" data-testid="economy-rules-x" />
           </label>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse" data-dense data-testid="economy-rules">
