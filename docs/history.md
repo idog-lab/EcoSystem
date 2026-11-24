@@ -7983,3 +7983,19 @@ in the export writing, and a date that does not exist (30 Feb) or a broken
 part is refused and named, never kept. Every number field of the page says
 why it refuses a value (below 0, not whole where a resource is, not a number)
 and keeps the value before. verify-economy 192, economy-page 48.
+
+## Chef: special-event suggestions
+
+24 Nov 2026. Asked to go on, the planning's next agreed piece: "if the model
+will sence a danger for somehting missing, he can suggest in the calender to
+do a special event that will give the players those ingredients". (Per-segment
+thresholds and changing basket odds wait: "we will not do those for the
+start".) The economist answered four forks: a share the tool finds; common,
+rare and the semi-blocker (not the blocker); the fewest ingredients given
+between equals; the same event for every segment. Built `chefEvents.js` on
+build 02's yardstick, as step 4's third choice, with the "what holds players
+back" reading shared with catch-up (an event gives the semi-blocker only up to
+its threshold). Small test event: the weak segment 4% -> 77% in FU with two
+Cherry events. Made-up example: Sugar and Flour events, still missing - the
+semi-blocker's threshold holds players there. verify-chef-events 32,
+chef-events 11, chef-catchup 17, chef-flow 185, verify-chef 182.

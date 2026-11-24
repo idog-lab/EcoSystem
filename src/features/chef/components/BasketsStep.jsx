@@ -388,6 +388,11 @@ function Sources({ state, update }) {
                   </td>
                   <td className={TD}>
                     <input value={source.label ?? ''} aria-label="Note" placeholder="sale, event..." onChange={(e) => setSource(source.id, { label: e.target.value })} className={TEXT_INPUT} />
+                    {source.origin === 'events-suggested' && (
+                      <span className="mt-0.5 inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800" data-source-suggested title="Added by a special-event suggestion in step 4. A suggestion, not a confirmed design value; one undo in step 4 takes it out again.">
+                        Suggested (step 4)
+                      </span>
+                    )}
                   </td>
                   <td className={`${TD} text-right`}>
                     <RowActions what="this line" onRemove={() => update((s) => ({ ...s, sources: s.sources.filter((x) => x.id !== source.id) }))} />

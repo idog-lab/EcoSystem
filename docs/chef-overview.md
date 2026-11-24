@@ -565,6 +565,30 @@ players back on the FU day** (where they are and what they lack besides the
 blocker - opened by itself when it is the semi-blocker, which a catch-up does
 not give), Apply / Discard / Undo, out of date after an edit.
 
+### Special-event suggestions: `chefEvents.js`
+
+Step 4's third choice ("Suggest: Special events"). From the planning
+(economist): "if the model will sence a danger for somehting missing, he can
+suggest in the calender to do a special event that will give the players those
+ingredients." The tool reads what players lack on the target days and suggests
+special events - a day, one ingredient, an amount and the share of players it
+reaches - played as the engine plays a special source (never past a threshold,
+reaching its share by the chef's "who gets a special source" setting). The
+economist's answers (24 November 2026): **a share the tool finds** (the
+smallest that works); **common, rare and the semi-blocker**, never the
+blocker; between equals **the fewest ingredients given** (as played: what the
+events really gave a player, the economist's own sources cancelling out); **the
+same event for every segment** (one calendar). The economist's sources are
+played as they are; suggestions are added after (`origin: 'events-suggested'`,
+"Suggested (step 4)" in step 3), one undo takes them out. Judged like a
+proposal and a catch-up, on the same targets, players, verdicts and both views;
+controls this tool's own (at most 3 events, at most 30 an event, a share from
+10%). On screen: each event in words, the targets now → with it per segment,
+what a player was given, what holds players back on the FU day (an event gives
+the semi-blocker only up to its threshold - said when that is what holds them),
+Apply / Discard / Undo. On the made-up example it gives Sugar and Flour and
+still misses: Pumpkin's threshold is what holds players there (single run).
+
 ## 6. The screens
 
 A **six-step flow**, on the same logic as the Merge "Build event" flow: a
@@ -597,9 +621,9 @@ basket luck"; Needs a fix / Worth a look / Good to know; met / not met.
 
 ```
 src/features/chef/
-  components/  ChefApp, EventStep, DishesStep, BasketsStep, ProposalStep, CatchupPanel (build 03),
+  components/  ChefApp, EventStep, DishesStep, BasketsStep, ProposalStep, CatchupPanel (build 03), EventsPanel,
                SimulateStep, ValueStep, ReadinessPanel, chefUi
-  lib/         chefModel, chefEngine, chefGenerator (build 02), chefCatchup (build 03), chefRewards, chefValidation,
+  lib/         chefModel, chefEngine, chefGenerator (build 02), chefCatchup (build 03), chefEvents, chefRewards, chefValidation,
                chefReadiness, chefMigration, chefPersistence, chefRng, chefFormat,
                chefBasketWorth (a basket's worth day by day, on the engine),
                chefBasketValue (legacy), chefLegacyModel (the older factories, for data/ only)
@@ -616,6 +640,9 @@ scripts/verify/verify-chef-worth.mjs      a basket's worth day by day: every day
                                           "one more basket", the same players again, Basic < Rare < Epic (8 checks)
 scripts/e2e/chef-catchup.mjs              step 4's catch-up suggestions in a real browser (17 checks)
 scripts/e2e/chef-worth.mjs                step 6's basket worth in a real browser (7 checks)
+scripts/verify/verify-chef-events.mjs     special-event suggestions: what stops one, what an event may be,
+                                          the economist's sources untouched, fewest given, apply, undo (32 checks)
+scripts/e2e/chef-events.mjs               step 4's special events in a real browser (11 checks)
 ```
 
 - `npx vite-node scripts/verify/verify-chef.mjs` and

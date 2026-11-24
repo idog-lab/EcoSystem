@@ -65,7 +65,14 @@ When this file and the history disagree, this file wins.
   presets never touched (suggestions added after them, `origin: 'build-03'`,
   marked in step 3, one undo). Judged on build 02's targets, order and both
   views; it says what holds players back on the FU day (a catch-up cannot
-  give the semi-blocker). Chef's rules are the economist's the way the Merge economy is: a
+  give the semi-blocker). **Special-event suggestions** (`lib/chefEvents.js`,
+  `EventsPanel.jsx`, step 4's third choice): a day, an ingredient, an amount
+  and a share the tool finds, the same for every segment; common, rare and the
+  semi-blocker (never the blocker, never past a threshold); the fewest
+  ingredients given between equals; the economist's sources untouched
+  (`origin: 'events-suggested'`). **Step 6 measures a basket's worth day by
+  day** on the engine (`lib/chefBasketWorth.js`), a reading beside the
+  economist's tier worths. Chef's rules are the economist's the way the Merge economy is: a
   suspected flaw is measured, said on screen and written down, not fixed,
   and what is not confirmed about the real game is a visible setting, never
   a silent constant.

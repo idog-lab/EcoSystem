@@ -8,6 +8,7 @@ import { CHANGE_LABELS, STATUS_LABELS, applyProposal, budgetSummary, canApply, c
 import { dayLabel, num, pct, shortDay } from '../lib/chefFormat'
 import { Check, Num, Pills, Toggle, TD, TH } from './chefUi'
 import CatchupPanel from './CatchupPanel'
+import EventsPanel from './EventsPanel'
 
 // STEP 4 - A PROPOSAL. The economist says what may change, the tool searches
 // for recipes, basket weights and threshold schedules that bring every
@@ -1229,9 +1230,16 @@ export default function ProposalStep({ state, update, onGoTo }) {
   const switcher = (
     <div className="flex flex-wrap items-center gap-2" data-testid="chef-step4-kind">
       <span className="text-sm font-semibold text-slate-700">Suggest</span>
-      <Pills value={kind} onChange={setKind} options={[['proposal', 'Recipes, weights and thresholds'], ['catchup', 'Catch-up presets']]} />
+      <Pills value={kind} onChange={setKind} options={[['proposal', 'Recipes, weights and thresholds'], ['catchup', 'Catch-up presets'], ['events', 'Special events']]} />
     </div>
   )
+  if (kind === 'events')
+    return (
+      <div className="flex flex-col gap-4">
+        {switcher}
+        <EventsPanel state={state} update={update} onGoTo={onGoTo} />
+      </div>
+    )
   if (kind === 'catchup')
     return (
       <div className="flex flex-col gap-4">

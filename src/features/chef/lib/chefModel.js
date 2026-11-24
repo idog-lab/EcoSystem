@@ -290,8 +290,10 @@ export function thresholdLimitOn(threshold, day) {
 // `segmentIds`: the segments it is for (null: all). `bypassThreshold`: whether
 // it may give an ingredient past its progression threshold - off unless set.
 export const SOURCE_KINDS = ['ingredient', 'joker']
-export function createSource({ id, label = '', kind = 'ingredient', day = 1, ingredientId = null, amount = 0, coveragePct = 100, segmentIds = null, bypassThreshold = false } = {}) {
-  return { id: id ?? nextId('source'), label, kind, day, ingredientId, amount, coveragePct, segmentIds, bypassThreshold }
+// `origin`: 'events-suggested' on a special event a step-4 suggestion added (only on those, so a saved chef's
+// fingerprint does not change).
+export function createSource({ id, label = '', kind = 'ingredient', day = 1, ingredientId = null, amount = 0, coveragePct = 100, segmentIds = null, bypassThreshold = false, origin = null } = {}) {
+  return { ...(origin ? { origin } : {}), id: id ?? nextId('source'), label, kind, day, ingredientId, amount, coveragePct, segmentIds, bypassThreshold }
 }
 
 // --- Catch-up presets --------------------------------------------------------

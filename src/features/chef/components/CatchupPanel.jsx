@@ -120,7 +120,21 @@ function ResultTable({ suggestion }) {
 // semi-blocker or the blocker it cannot give - said here rather than left to be guessed from a "Missed".
 const REASON_LABELS = { fu: 'in FU', finished: 'finished', waiting: 'waiting for the blocker', ordinary: 'one dish left, short of an ordinary ingredient', behind: 'more than one dish left' }
 const RARITY_WORDS = { common: 'common', rare: 'rare', 'semi-blocker': 'semi-blocker', blocker: 'blocker' }
-function WhyPanel({ suggestion, state }) {
+// `what`: 'catchup' (it may not give the semi-blocker) or 'events' (it may, but never past its threshold).
+const WHY_WORDS = {
+  catchup: {
+    id: 'chef-catchup-why',
+    summary: 'which a catch-up does not give',
+    note: 'A suggested catch-up holds only common and rare ingredients (your rule). Where players lack the semi-blocker most, a catch-up cannot bring them to FU: it is paced by its threshold - a proposal (the other kind of suggestion) or the schedule in step 3 is where it moves.',
+  },
+  events: {
+    id: 'chef-events-why',
+    summary: 'which an event gives only up to its threshold',
+    note: 'A suggested event may give the semi-blocker, but never past its threshold (no permission to pass it). Where players lack the semi-blocker most, the threshold is what holds them back: a proposal (the first kind of suggestion) or the schedule in step 3 is where it moves.',
+  },
+}
+export function WhyPanel({ suggestion, state, what = 'catchup' }) {
+  const words = WHY_WORDS[what] ?? WHY_WORDS.catchup
   const day = state.targets?.mainFuDay
   const rows = (suggestion.validation.proposed ?? suggestion.validation.base).map((s) => ({ s, probe: s.result.probes?.[day] })).filter((r) => r.probe)
   if (day == null || !rows.length) return null
@@ -136,11 +150,11 @@ function WhyPanel({ suggestion, state }) {
     return { s, top, reasons }
   })
   return (
-    <Collapsible id="chef-catchup-why" tone="inner" openWhen={notGiveable > 0} title={`What holds players back on day ${day}, with the suggestion`} summary={notGiveable > 0 ? `In ${notGiveable} of ${lines.length} segments what players lack most is the semi-blocker, which a catch-up does not give` : 'Where the players are that day, and what they lack'}>
-      <div className="flex flex-col gap-2" data-testid="chef-catchup-why">
+    <Collapsible id={words.id} tone="inner" openWhen={notGiveable > 0} title={`What holds players back on day ${day}, with the suggestion`} summary={notGiveable > 0 ? `In ${notGiveable} of ${lines.length} segments what players lack most is the semi-blocker, ${words.summary}` : 'Where the players are that day, and what they lack'}>
+      <div className="flex flex-col gap-2" data-testid={words.id}>
         {notGiveable > 0 && (
           <p className="text-sm text-amber-900" data-note>
-            A suggested catch-up holds only common and rare ingredients (your rule). Where players lack the semi-blocker most, a catch-up cannot bring them to FU: it is paced by its threshold - a proposal (the other kind of suggestion) or the schedule in step 3 is where it moves.
+            {words.note}
           </p>
         )}
         <table className="w-full border-collapse" data-dense>
