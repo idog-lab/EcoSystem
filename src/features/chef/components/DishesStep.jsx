@@ -6,6 +6,7 @@ import { dishPrize, effectiveFactor, grandPrize, rewardWorth } from '../lib/chef
 import { AddButton, Num, Pills, RowActions, Toggle, NAME_INPUT, SELECT, TD, TH } from './chefUi'
 import { num } from '../lib/chefFormat'
 import { useEconomy } from '../../../lib/economy/economyStore'
+import PrizeTextPanel from './PrizeTextPanel'
 import { chefValuesFromEconomy } from '../../../lib/economy/economyModel'
 
 const RARITY_COLOR = {
@@ -521,6 +522,10 @@ export default function DishesStep({ state, update }) {
               </div>
             </div>
           </div>
+        </Collapsible>
+
+        <Collapsible id="chef-prize-text" className="xl:open:col-span-2" title="Prizes as reward text" summary="Every dish prize and grand prize of a segment, written in the game's syntax by the Economy page's rules - a reading, nothing is exported">
+          <PrizeTextPanel state={state} />
         </Collapsible>
 
         <Collapsible id={`chef-dish-cards-${view}`} className="xl:open:col-span-2" title={view === 'main' ? 'The dishes as cards' : 'The Recompletion dishes as cards'} summary={`${activeDishes.length} ${activeDishes.length === 1 ? 'dish' : 'dishes'}, each with what it needs by name`}>

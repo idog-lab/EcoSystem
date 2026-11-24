@@ -7999,3 +7999,16 @@ its threshold). Small test event: the weak segment 4% -> 77% in FU with two
 Cherry events. Made-up example: Sugar and Flour events, still missing - the
 semi-blocker's threshold holds players there. verify-chef-events 32,
 chef-events 11, chef-catchup 17, chef-flow 185, verify-chef 182.
+
+## Chef: prizes as reward text
+
+24 Nov 2026, going on with Chef. A Chef prize is a prize on a feature's tier,
+so the economy's rules apply: step 2 now shows, for any segment, every dish
+prize and grand prize in the game's syntax (`chefPrizeText.js`, folded "Prizes
+as reward text"), checked by the Economy page's checker, with a copy button. A
+reading - nothing is exported (there is no Chef export layout). What cannot be
+written is said, never dropped or rounded by the tool: a prize not known, or a
+part that is not a whole item while "Whole items" is not decided (a scaled
+segment's 4.8 undos). A grand prize says when RoundReward rounds its worth away
+from what its items add up to (108 coins, worth 100) - which the game pays is
+not settled. verify-chef-prize-text 9, chef-worth 10, chef-flow 185.

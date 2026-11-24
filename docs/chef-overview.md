@@ -643,6 +643,7 @@ scripts/e2e/chef-worth.mjs                step 6's basket worth in a real browse
 scripts/verify/verify-chef-events.mjs     special-event suggestions: what stops one, what an event may be,
                                           the economist's sources untouched, fewest given, apply, undo (32 checks)
 scripts/e2e/chef-events.mjs               step 4's special events in a real browser (11 checks)
+scripts/verify/verify-chef-prize-text.mjs prizes as reward text: the economy's order and 2 decimals, what cannot be written (9 checks)
 ```
 
 - `npx vite-node scripts/verify/verify-chef.mjs` and
@@ -704,7 +705,13 @@ step 5 ("What is not settled about the real game"). Do not resolve silently.**
   0.05 a new ordinary schedule costs among the preferences, the 20% lacking
   above which a guided step does not pace an ingredient, the shape of a new
   ordinary schedule (a rising share of the most demanding segment's need).
-- No export to the game's configuration; do not invent the syntax.
+- No export to the game's configuration; do not invent the syntax. Step 2 shows
+  every prize as reward text by the economy's rules ("Prizes as reward text",
+  `chefPrizeText.js`) - a reading to copy, nothing exported. A prize with a part
+  that is not a whole item (4.8 undos, while "Whole items" is not decided) gets
+  no text and says why; a grand prize says when RoundReward rounds its worth
+  away from what its items add up to (which of the two the game pays is not
+  settled).
 - A basket's worth on the engine, day by day (step 6, `chefBasketWorth.js`)
   is a READING beside the economist's tier worths (Basic 0.25, Rare 1, Epic
   4 on the Economy page); nothing takes it as a value until the economist
