@@ -208,8 +208,23 @@ was explained in, an example, and what is not confirmed - never invented:
   `CoinsInAllowance < 2 && CurrentLevel > 519`.
 - **Parts are joined with `&&`** ("its another fucntions they are added up
   with &&"): progression is a part like any other.
-The Segments tab builds a condition of parts (progression by event id,
-balance, level; `buildCondition`), lists the functions, and
+**The flow of building segments** (`segmentFlow.js`; economist, 25 Nov 2026:
+"we need first to let the user give the feature name ... we pick the number of
+segments then we give the rule for each segment. we need to let the model be
+able to know the base of the segment. then specific, or duplication"):
+1. the feature's name; 2. **the base**: the Brut Wins bands ("pretty nicelly
+built"), one segment a band, numbered; 3. **specifics**: a condition of parts
+added with && to the segments picked - its tag, typed, goes into their names
+(asked: "A tag I type is added": Disco_BW_0_9_OOC); 4. **duplications**, the
+average mode for now: the segments picked are split at the values typed - one
+value makes two of one (`_Mode_0_3`, `_Mode_3_plus`, to the character of the
+rules), two make three (`_Mode_2_4` between). A tag goes before the mode
+(this app's own order, said on screen). A segment can be in one mode split
+only. A specific leaves out the players of its segments who do not match it:
+said for each one, nothing added (the economist's answer to whether to add a
+segment for them did not come through - open). The plan is kept in this
+browser (`economy-segment-plan`); "Copy as a table" gives name, key, condition.
+The Segments tab lists the functions, and
 **reads any condition** (`readCondition`): in words, part by part; an event id
 without U, a wrong number of inputs or a bracket left open must be fixed; a
 function not in the dictionary is named "not known to the app yet", never

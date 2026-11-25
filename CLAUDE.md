@@ -129,9 +129,11 @@ copied as given; dr-basket-counter on it is never offered - removed by them).
 dictionary (Brut Wins and the mode multiplier - modes x1, x2, x4, x8 -,
 `CoinsInAllowance` and `CurrentLevel` without brackets, Diamond Mine and
 Merge progression by event id), with their words. **Parts of a condition
-are joined with `&&`**; the Segments tab builds one of parts and reads any
-condition in words, naming a function it does not know. Add a function only
-as explained in chat.
+are joined with `&&`**. The Segments tab is a flow (`segmentFlow.js`,
+economist): the feature, the base (the Brut Wins bands), specifics (parts
+added to the segments picked, a typed tag in their names) and mode splits
+(duplication of the segments picked); it also reads any condition in words,
+naming a function it does not know. Add a function only as explained in chat.
 **These rules are for prizes on a feature's tiers only** (economist: "all the
 rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the

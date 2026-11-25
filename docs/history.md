@@ -8267,3 +8267,19 @@ balance") and `CurrentLevel`, names without brackets; their example
 "Build a condition": parts (progression, balance, level) joined with &&. The
 reader says when a name is written with brackets or a function without.
 verify-economy 254, economy-page 83.
+
+Then the flow: "the brut wins bands are pretty nicelly built ... we just need
+to be able to add more logics for the segments. we need first to let the user
+give the feature name, then ... we pick the number of segments then we give
+the rule for each segment. we need to let the model be able to know the base
+of the segment. then specific, or duplication. a specific will just be added
+to the specific segments that the user picks. duplications will be used for
+now with the average modes ... lets say we give the base of the segments the
+BW splits, then we say we want that the 3 first segmetns to get avg mode split
+so 3 new segmnets will be added". Asked how a specific is named: "A tag I type
+is added". Asked what to do with the players a specific leaves out: the answer
+came through empty - the flow says it, adds nothing; open. The Segments tab is
+four steps now (`segmentFlow.js`): the feature and the base, specifics, mode
+splits, the segments; the "Split each band by mode" box and the separate
+"Build a condition" card are folded into them. verify-economy 265,
+economy-page 88.
