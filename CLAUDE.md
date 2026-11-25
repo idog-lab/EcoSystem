@@ -134,7 +134,8 @@ dictionary (Brut Wins and the mode multiplier - modes x1, x2, x4, x8 -,
 Merge progression by event id), with their words. **Parts of a condition
 are joined with `&&`**. The Segments tab is a flow (`segmentFlow.js`,
 economist): the feature, the base (the bands of one rule, toggled - Brut
-Wins most of the time; each rule named by its fixed code, BW, Level, ...), specifics (parts
+Wins most of the time; each rule named by its fixed code, BW, Level, ...,
+ChefDishes - the last this app's own), specifics (parts
 added to the segments picked, a typed tag in their names) and mode splits
 (duplication of the segments picked); it also reads any condition in words,
 naming a function it does not know. Add a function only as explained in chat.

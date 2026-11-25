@@ -252,6 +252,15 @@ function PartsEditor({ parts, onChange, prefix }) {
               )}
               {def?.needsCohort && (
                 <label className={LABEL}>
+                  The player is
+                  <select value={p.negate ? 'not' : 'in'} onChange={(e) => set(i, { negate: e.target.value === 'not' })} className={`${INPUT} w-28`} data-testid={`economy-part-negate-${prefix}-${i}`}>
+                    <option value="in">in</option>
+                    <option value="not">not in</option>
+                  </select>
+                </label>
+              )}
+              {def?.needsCohort && (
+                <label className={LABEL}>
                   Cohort id
                   <input value={p.cohortId ?? ''} onChange={(e) => set(i, { cohortId: e.target.value.trim() })} placeholder="1234" inputMode="numeric" className={`${INPUT} w-28 font-mono`} data-testid={`economy-part-cohort-${prefix}-${i}`} />
                 </label>

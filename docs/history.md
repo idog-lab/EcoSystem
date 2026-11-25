@@ -8312,3 +8312,9 @@ in the chef feature". The reader learned names with a dot, text in quotes
 specific (a cohort asks for its id only). Asked: whether Chef dishes should
 be a base rule, and whether "not in a cohort" (!) is used. verify-economy 286,
 economy-page 97.
+
+Answered: "no namds for the chef. put someting looks good in the naming" -
+Chef dishes is a base rule, code `ChefDishes` (this app's own), each
+comparison in brackets as the example; "yes as for the cohort" - a cohort part
+is "in" or "not in" (`!PjCohorts.ContainsCohort(1234)`). verify-economy 289,
+economy-page 99.

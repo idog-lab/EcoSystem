@@ -214,8 +214,11 @@ was explained in, an example, and what is not confirmed - never invented:
   feature"; the event id with U. Written as the example, in its brackets,
   plain quotes (the chat's curly ones are read the same). Without ?.Count()
   it must be fixed; another list than "CompletedItems" is named, not known.
-  Both are parts of a specific; neither is a base rule yet (open: whether
-  Chef dishes should be, and its code).
+  Both are parts of a specific. **Not in a cohort** is used ("yes"):
+  `!PjCohorts.ContainsCohort(1234)`, "Not in cohort 1234". **Chef dishes is a
+  base rule too**, code `ChefDishes` - this app's own (economist: "no namds
+  for the chef. put someting looks good in the naming"); its bands keep each
+  comparison in brackets, as the example: `Disco_ChefDishes_10_30`.
 - **Parts are joined with `&&`** ("its another fucntions they are added up
   with &&"): progression is a part like any other.
 **The flow of building segments** (`segmentFlow.js`; economist, 25 Nov 2026:

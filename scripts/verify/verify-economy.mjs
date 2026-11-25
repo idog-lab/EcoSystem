@@ -293,6 +293,8 @@ section('8a. The functions segments are made of (segmentFunctions.js)')
   // The cohort (economist: "it just gives true or false if the user is in the cohort", PjCohorts.ContainsCohort(####)).
   const co = readCondition('PjCohorts.ContainsCohort(1234)')
   check(`a cohort stands alone, true or false, a dot in its name (${co.clauses[0]})`, co.ok && !co.issues.length && co.clauses[0] === 'In cohort 1234')
+  const notIn = readCondition('!PjCohorts.ContainsCohort(1234)')
+  check(`not in a cohort (economist: "yes"), written with ! and read so (${notIn.clauses[0]})`, notIn.ok && !notIn.issues.length && notIn.clauses[0] === 'Not in cohort 1234' && partCondition({ kind: 'cohort', cohortId: '1234', negate: true }).text === '!PjCohorts.ContainsCohort(1234)')
   eq('...written by the flow with its id and no U, as the example', partCondition({ kind: 'cohort', cohortId: '1109' }).text, 'PjCohorts.ContainsCohort(1109)')
   check('...a cohort id that is not digits must be fixed', /digits only/.test(partCondition({ kind: 'cohort', cohortId: '11a' }).problems[0]) && /Type the cohort id/.test(partCondition({ kind: 'cohort' }).problems[0]))
   // Chef dishes finished (economist: "(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10) ... returns how many dishes the user finished in the chef feature").
@@ -357,7 +359,10 @@ section('8c. The flow of building segments (segmentFlow.js)')
   check('two specifics with one tag clash', buildPlan({ ...plan, specifics: [1, 2].map(() => ({ tag: 'X', parts: [{ kind: 'level', op: '>', value: 5 }], segments: [0] })) }).errors.some((e) => /given to two specifics/.test(e)))
   // The base is one rule, toggled (economist: "the base is not 100% of the time will be brutwins"), in bands, named
   // by its fixed code.
-  eq('the rules that can be the base and their codes', BASE_RULES.map((r) => r.code).join(' '), 'BW Mode Balance Level WinRate DMProg MergeProg')
+  eq('the rules that can be the base and their codes (ChefDishes this app\'s own: "put someting looks good in the naming")', BASE_RULES.map((r) => r.code).join(' '), 'BW Mode Balance Level WinRate DMProg MergeProg ChefDishes')
+  const chefBase = buildPlan({ ...withBaseRule(plan, 'chef-dishes'), baseEventId: '53524' })
+  check(`a Chef dishes base: bands of dishes finished, each comparison in brackets as the example (${chefBase.segments.map((s) => `${s.name}: ${s.condition}`).join(' | ')})`, chefBase.errors.length === 0 && chefBase.segments.map((s) => s.name).join(' ') === 'Disco_ChefDishes_0_10 Disco_ChefDishes_10_30 Disco_ChefDishes_30_Plus' && chefBase.segments[1].condition === '(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10) && (GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() <= 30)')
+  check('...its event id needed, its band ends whole', buildPlan(withBaseRule(plan, 'chef-dishes')).errors.some((e) => /type the event id/.test(e)) && buildPlan({ ...withBaseRule(plan, 'chef-dishes'), baseEventId: '1', cuts: '2.5' }).errors.some((e) => /whole numbers/.test(e)))
   check('a plan saved before the base could change is a Brut Wins base, as it was', buildPlan({ feature: 'Disco', cuts: '9, 18', weights: '1m,2m,4m,8m', specifics: [], splits: [] }).segments.map((s) => s.name).join(' ') === 'Disco_BW_0_9 Disco_BW_9_18 Disco_BW_18_Plus')
   const level = buildPlan(withBaseRule(plan, 'level'))
   check(`a level base: bands of the current level, named Disco_Level_ (${level.segments.map((s) => `${s.name}: ${s.condition}`).join(' | ')})`, level.errors.length === 0 && level.segments.map((s) => s.name).join(' ') === 'Disco_Level_0_100 Disco_Level_100_300 Disco_Level_300_519 Disco_Level_519_Plus' && level.segments[1].condition === 'CurrentLevel > 100 && CurrentLevel <= 300' && level.segments[3].condition === 'CurrentLevel > 519')
