@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist",
+    "deploy": "node -e \"console.error('The site is published by GitHub when a pull request is merged into master (.github/workflows/deploy.yml). npm run deploy:manual only if that is broken, from an up-to-date master.'); process.exit(1)\"",
+    "deploy:manual": "npm run build && gh-pages -d dist",
     "verify": "npx vite-node scripts/verify/verify-event-build.mjs && npx vite-node scripts/verify/verify-containers.mjs && npx vite-node scripts/verify/verify-v2-rewards.mjs && npx vite-node scripts/verify/verify-twister.mjs && npx vite-node scripts/verify/verify-endless.mjs && npx vite-node scripts/verify/verify-real-play.mjs && npx vite-node scripts/verify/verify-twister-cadence.mjs && npx vite-node scripts/verify/verify-board-bank.mjs && npx vite-node scripts/verify/verify-stage-link.mjs && npx vite-node scripts/verify/verify-chef.mjs && npx vite-node scripts/verify/verify-chef-proposal.mjs && npx vite-node scripts/verify/verify-chef-catchup.mjs && npx vite-node scripts/verify/verify-chef-worth.mjs && npx vite-node scripts/verify/verify-chef-events.mjs && npx vite-node scripts/verify/verify-chef-prize-text.mjs && npx vite-node scripts/verify/verify-economy.mjs && npx vite-node scripts/verify/verify-small-rewards-cc.mjs",
     "e2e": "node scripts/e2e/run-all.mjs"
   },

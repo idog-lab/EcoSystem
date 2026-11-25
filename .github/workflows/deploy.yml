@@ -1,0 +1,38 @@
+# Publishes the site (https://idog-lab.github.io/EcoSystem/) whenever
+# something is merged into master - the economist's choice, 25 Nov 2026:
+# "Automatic on every merge". Builds the app the way `npm run build` does and
+# writes it to the gh-pages branch, which GitHub Pages serves. Nobody deploys
+# by hand any more (a hand deploy from a branch or an old master would take
+# the other person's merged work off the site).
+name: Deploy the site
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: # "Run workflow" on the Actions tab: publish master again by hand
+
+permissions:
+  contents: write # to write the gh-pages branch
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          commit_message: 'Deploy master'
