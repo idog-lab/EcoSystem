@@ -43,6 +43,7 @@ ok('dr-hidden and the pack counter are taught at 0 and cannot be removed; the ot
 ok('nothing is typed in this browser only yet', (await page.getByTestId('economy-not-taught').count()) === 0)
 const coreRows = await page.getByTestId('economy-core-currencies').locator('[data-core-currency]').evaluateAll((els) => els.map((e) => e.getAttribute('data-core-currency')).join(' '))
 ok(`puzzle, merge, picks and pet are in a table of their own, with no remove button and no worth without dates (${coreRows})`, coreRows === 'dr-puzzle dr-merge dr-pickaxe dr-pet' && (await page.getByTestId('economy-core-currencies').locator('button[aria-label^="Remove"], input[aria-label$="game play worth"]').count()) === 0 && (await page.getByTestId('economy-currencies').locator('[data-currency="dr-puzzle"], [data-currency="dr-pet"]').count()) === 0)
+ok('the currency tables have no note column (economist: "there is no need in the notes of the DRs")', !/Note/i.test(await text(page.getByTestId('economy-currencies').locator('thead'))) && !/Note/i.test(await text(page.getByTestId('economy-core-currencies').locator('thead'))) && (await page.locator('[data-currency] input[aria-label$=": note"]').count()) === 0)
 ok('the remove button is the first thing on a currency\'s row, beside its name', (await page.locator('[data-currency="dr-sugar-gp"] td').first().locator('button[aria-label="Remove dr-sugar-gp"]').count()) === 1)
 await page.locator('[data-currency="dr-sugar-gp"] button[aria-label="Remove dr-sugar-gp"]').click()
 await page.waitForTimeout(150)

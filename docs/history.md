@@ -8222,3 +8222,7 @@ Two names may be cut short in their sheet (dr-christmas-wheel-with-i,
 dr-wicked-trails-dr-gold): copied as they are, and pointed out. The drop list
 offers 99 (the other four are on the page already). verify-economy 229,
 economy-page 72.
+
+Then: "there is no need in the notes of the DRs" - the note column is gone
+from both currency tables (a note already saved stays in the data, unseen).
+economy-page 73.
