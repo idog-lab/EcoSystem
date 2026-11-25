@@ -14,6 +14,7 @@ import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES }
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
+import { buildPlan, createPlan, modeRanges, parseSplitValues } from '../../src/lib/economy/segmentFlow.js'
 import { SEGMENT_FUNCTIONS, MODE_MULTIPLIERS, buildCondition, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
 import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
@@ -313,6 +314,32 @@ section('8a. The functions segments are made of (segmentFunctions.js)')
   check('a function the app does not know is named, never guessed at - a warning, the rest still read', unknown.ok && unknown.issues.some((i) => i.code === 'unknown-function' && /fn_Something_New/.test(i.text)))
   check('a condition that cannot be read says why (a bracket left open, an "&&" with nothing after)', /expected/.test(readCondition('(fn_Merge_Progression(1U) > 95').issues[0].text) && /ends too soon/.test(readCondition('fn_Merge_Progression(1U) > 95 &&').issues[0].text))
   check('every segment the Segments tab writes reads with nothing to fix', buildSegments('Disco', bands, { splitByMode: true }).every((s) => readCondition(s.condition).ok && !readCondition(s.condition).issues.length))
+}
+
+section('8c. The flow of building segments (segmentFlow.js)')
+{
+  const plan = { ...createPlan(), feature: 'Disco', cuts: '9, 18, 40, 60, 100, 150, 240' }
+  const only = buildPlan(plan)
+  const eight = buildSegments('Disco', bandsFromCuts([9, 18, 40, 60, 100, 150, 240]))
+  check(`the base: the Brut Wins bands, one segment a band, as before (${only.segments.length})`, only.segments.length === 8 && only.errors.length === 0 && only.segments.every((s, i) => s.name === eight[i].name && s.condition === eight[i].condition))
+  // The economist's example: the first three segments get a mode split - three more segments.
+  const split = buildPlan({ ...plan, splits: [{ values: '3', segments: [0, 1, 2] }] })
+  check(`a mode split on the first three: 3 new segments (${split.segments.length}), in the order of the base`, split.segments.length === 11 && split.segments.slice(0, 6).map((s) => s.name).join(' ') === 'Disco_BW_0_9_Mode_0_3 Disco_BW_0_9_Mode_3_plus Disco_BW_9_18_Mode_0_3 Disco_BW_9_18_Mode_3_plus Disco_BW_18_40_Mode_0_3 Disco_BW_18_40_Mode_3_plus' && split.segments[6].name === 'Disco_BW_40_60')
+  const rules = buildSegments('Disco', bandsFromCuts([9, 18, 40, 60, 100, 150, 240]), { splitByMode: true })
+  check('...each to the character of the rules\' mode split (Disco_BW_9_18_Mode_0_3 and _Mode_3_plus)', ['Disco_BW_9_18_Mode_0_3', 'Disco_BW_9_18_Mode_3_plus'].every((n) => split.segments.find((s) => s.name === n).condition === rules.find((s) => s.name === n).condition))
+  const two = buildPlan({ ...plan, splits: [{ values: '2, 4', segments: [7] }] })
+  const top = two.segments.filter((s) => s.base === 7)
+  check(`two split values make three (${top.map((s) => s.name).join(', ')})`, top.map((s) => s.name).join(' ') === 'Disco_BW_240_Plus_Mode_0_2 Disco_BW_240_Plus_Mode_2_4 Disco_BW_240_Plus_Mode_4_plus' && /\(.*fn_DailyAvgModeMultiplier_m4.* >= 2m\) && \(.*< 4m\)$/.test(top[1].condition))
+  // A specific: a tag and a condition, on the segments picked.
+  const ooc = buildPlan({ ...plan, specifics: [{ tag: 'OOC', parts: [{ kind: 'balance', op: '<', value: 2 }], segments: [0, 1] }], splits: [{ values: '3', segments: [0] }] })
+  check(`a specific is added with && to its segments only, its tag in their names, before the mode (${ooc.segments.slice(0, 3).map((s) => s.name).join(', ')})`, ooc.segments[0].name === 'Disco_BW_0_9_OOC_Mode_0_3' && ooc.segments[2].name === 'Disco_BW_9_18_OOC' && ooc.segments[2].condition.endsWith('<= 18 && CoinsInAllowance < 2') && ooc.segments[0].condition.includes('<= 9 && CoinsInAllowance < 2 && (') && ooc.segments[3].name === 'Disco_BW_18_40' && !ooc.segments[3].condition.includes('CoinsInAllowance'))
+  check(`...and the players of those bands it leaves out are said (${ooc.warnings[0]})`, ooc.warnings.length === 2 && /Disco_BW_0_9_OOC: the players of Disco_BW_0_9 who are not "Balance is below 2 allowance" are in no segment/.test(ooc.warnings.join(' ')))
+  check('every segment of the flow reads with nothing to fix', ooc.segments.every((s) => readCondition(s.condition).ok && !readCondition(s.condition).issues.length))
+  const wrong = buildPlan({ ...plan, feature: '', specifics: [{ tag: '', parts: [{ kind: 'dm-progression', eventId: '', op: '>', value: 95 }], segments: [] }], splits: [{ values: 'x', segments: [0] }, { values: '3', segments: [0] }] })
+  check(`what must be fixed is said: no feature, a specific without a tag or event id, a segment in two mode splits, a split value that is not one (${wrong.errors.length})`, ['feature\'s name', 'type its tag', 'event id', 'two mode splits', 'not a split value'].every((w) => wrong.errors.some((e) => e.includes(w))) && wrong.warnings.some((w) => /added to no segment/.test(w)))
+  check('two specifics with one tag clash', buildPlan({ ...plan, specifics: [1, 2].map(() => ({ tag: 'X', parts: [{ kind: 'level', op: '>', value: 5 }], segments: [0] })) }).errors.some((e) => /given to two specifics/.test(e)))
+  eq('split values read: "2, 4" and junk', JSON.stringify(parseSplitValues('4, 2, x, 0')), JSON.stringify({ values: [2, 4], bad: ['x', '0'] }))
+  eq('mode ranges of one split: the rules\' names', modeRanges([3]).map((r) => r.name).join(' '), 'Mode_0_3 Mode_3_plus')
 }
 
 section('8b. The game keys (given 24 Nov 2026)')
