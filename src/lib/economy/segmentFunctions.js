@@ -76,6 +76,18 @@ export const SEGMENT_FUNCTIONS = [
     example: 'CurrentLevel > 519',
   },
   {
+    name: 'fn_Avg_winrate',
+    form: 'call',
+    label: 'Average win rate',
+    returns: "the player's average win rate over the last given days, as a share (0.9 = 90%)",
+    unit: 'share',
+    args: [{ name: 'days', kind: 'days' }],
+    said: 'another function to know is win rate function. fn_Avg_winrate(7) > 0.9 - here is an example of in the last 7 days if the win rate is more than 90%',
+    on: '2026-11-25',
+    by: 'economist',
+    example: 'fn_Avg_winrate(7) > 0.9',
+  },
+  {
     name: 'fn_DiamondMine_Progression',
     form: 'call',
     label: 'Diamond Mine progression',
@@ -125,12 +137,14 @@ export const CONDITION_PARTS = [
   { id: 'merge-progression', fn: 'fn_Merge_Progression', label: 'Merge progression', needsEvent: true, unit: '%', min: 0, max: 100 },
   { id: 'balance', fn: 'CoinsInAllowance', label: 'Balance in allowance', unit: 'allowance', min: 0 },
   { id: 'level', fn: 'CurrentLevel', label: 'Current level', unit: 'level', min: 0, whole: true },
+  // The share is written as the economist's example writes it: fn_Avg_winrate(7) > 0.9, no m.
+  { id: 'winrate', fn: 'fn_Avg_winrate', label: 'Average win rate', needsDays: true, unit: 'share', min: 0, max: 1, bareDecimal: true },
 ]
 export const conditionPart = (id) => CONDITION_PARTS.find((p) => p.id === id) ?? null
 
 // One part: fn_DiamondMine_Progression(57634U) > 95, CoinsInAllowance < 2, CurrentLevel > 519.
 // Returns { text, problems } - no text while something is missing or wrong.
-export function partCondition({ kind, eventId = '', op = '>', value = null } = {}) {
+export function partCondition({ kind, eventId = '', days = 7, op = '>', value = null } = {}) {
   const part = conditionPart(kind)
   const problems = []
   if (!part) return { text: '', problems: ['Pick what this part checks.'] }
@@ -139,13 +153,16 @@ export function partCondition({ kind, eventId = '', op = '>', value = null } = {
     if (!id) problems.push('Type the event id.')
     else if (!/^\d+$/.test(id)) problems.push(`"${eventId}" is not an event id: digits only.`)
   }
+  const d = Number(days)
+  if (part.needsDays && !(Number.isInteger(d) && d >= 1)) problems.push('The days are a whole number, at least 1.')
   if (!COMPARISONS.some((c) => c.op === op)) problems.push('Pick a comparison.')
   const n = Number(value)
-  if (value == null || value === '') problems.push(`Type the ${part.unit === '%' ? '%' : part.unit === 'level' ? 'level' : 'amount'}.`)
+  if (value == null || value === '') problems.push(`Type the ${part.unit === '%' ? '%' : part.unit === 'level' ? 'level' : part.unit === 'share' ? 'share' : 'amount'}.`)
   else if (!Number.isFinite(n) || n < part.min || (part.max != null && n > part.max)) problems.push(part.max != null ? `A ${part.unit} from ${part.min} to ${part.max}.` : `At least ${part.min}.`)
   else if (part.whole && !Number.isInteger(n)) problems.push('A level is a whole number.')
   if (problems.length) return { text: '', problems }
-  return { text: `${part.needsEvent ? `${part.fn}(${id}U)` : part.fn} ${op} ${literal(n)}`, problems }
+  const call = part.needsEvent ? `${part.fn}(${id}U)` : part.needsDays ? `${part.fn}(${d})` : part.fn
+  return { text: `${call} ${op} ${part.bareDecimal ? String(n) : literal(n)}`, problems }
 }
 
 // The parts, joined with && (economist: "they are added up with &&"). Returns { condition, problems: [{ index,
@@ -338,7 +355,9 @@ function describe(node, issues) {
     const right = describeValue(node.right, issues)
     const leftFn = node.left.k === 'call' ? segmentFunction(node.left.name) : node.left.k === 'name' ? segmentFunction(node.left.v) : null
     const unit = leftFn?.unit === '%' ? '%' : leftFn?.unit === 'allowance' ? ' allowance' : ''
-    return `${left} is ${OP_WORDS[node.op]} ${right}${unit}`
+    // A share in words is a % too: 0.9 (90%).
+    const share = leftFn?.unit === 'share' && node.right.k === 'num' ? ` (${Math.round(Number(node.right.v) * 1000) / 10}%)` : ''
+    return `${left} is ${OP_WORDS[node.op]} ${right}${unit}${share}`
   }
   issues.push({ level: 'warn', text: 'A part with no comparison: it does not say who is in.' })
   return describeValue(node, issues)

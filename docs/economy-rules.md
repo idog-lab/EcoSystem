@@ -220,9 +220,14 @@ average mode for now: the segments picked are split at the values typed - one
 value makes two of one (`_Mode_0_3`, `_Mode_3_plus`, to the character of the
 rules), two make three (`_Mode_2_4` between). A tag goes before the mode
 (this app's own order, said on screen). A segment can be in one mode split
-only. A specific leaves out the players of its segments who do not match it:
-said for each one, nothing added (the economist's answer to whether to add a
-segment for them did not come through - open). The plan is kept in this
+only. A specific leaves out the players of its segments who do not match it -
+a hole: **warned, nothing added** (economist: "it shouldnt add a segments for
+the rest, but it should warn when there are holes i nthe segments").
+- `fn_Avg_winrate(days)`: the player's average win rate over the last days,
+  a share ("fn_Avg_winrate(7) > 0.9 - in the last 7 days if the win rate is
+  more than 90%"). **Written as the example: `0.9` with no `m`** - unlike the
+  other decimals (0.7m, 3m); the flow writes it so. Read as "Average win rate
+  over the last 7 days is above 0.9 (90%)". The plan is kept in this
 browser (`economy-segment-plan`); "Copy as a table" gives name, key, condition.
 The Segments tab lists the functions, and
 **reads any condition** (`readCondition`): in words, part by part; an event id

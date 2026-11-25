@@ -188,9 +188,10 @@ function SegmentPicker({ base, picked, onChange, testid }) {
 
 // The parts of a condition - progression in an event, balance, level - joined with && (economist: "they are
 // added up with &&"). Each part: what it checks, the event id when it needs one, a comparison and a number.
-const DEFAULT_VALUE = { 'dm-progression': 95, 'merge-progression': 95, balance: 2, level: 519 }
-const DEFAULT_OP = { 'dm-progression': '>', 'merge-progression': '>', balance: '<', level: '>' }
-const newPart = (kind = 'balance') => ({ kind, eventId: '', op: DEFAULT_OP[kind], value: DEFAULT_VALUE[kind] })
+const DEFAULT_VALUE = { 'dm-progression': 95, 'merge-progression': 95, balance: 2, level: 519, winrate: 0.9 }
+const DEFAULT_OP = { 'dm-progression': '>', 'merge-progression': '>', balance: '<', level: '>', winrate: '>' }
+const newPart = (kind = 'balance') => ({ kind, eventId: '', days: 7, op: DEFAULT_OP[kind], value: DEFAULT_VALUE[kind] })
+const VALUE_LABEL = { '%': '%', level: 'Level', allowance: 'Allowance', share: 'Share (0-1)' }
 
 function PartsEditor({ parts, onChange, prefix }) {
   const set = (i, patch) => onChange(parts.map((p, j) => (j === i ? { ...p, ...patch } : p)))
@@ -222,6 +223,12 @@ function PartsEditor({ parts, onChange, prefix }) {
                   <input value={p.eventId} onChange={(e) => set(i, { eventId: e.target.value.trim() })} placeholder="57634" inputMode="numeric" className={`${INPUT} w-28 font-mono`} data-testid={`economy-part-event-${prefix}-${i}`} />
                 </label>
               )}
+              {def?.needsDays && (
+                <label className={LABEL}>
+                  Last days
+                  <Num aria-label={`Part ${i + 1}: days`} value={p.days ?? 7} allowEmpty min={1} integer onCommit={(v) => set(i, { days: v })} className="w-16" data-testid={`economy-part-days-${prefix}-${i}`} />
+                </label>
+              )}
               <label className={LABEL}>
                 Is
                 <select value={p.op} onChange={(e) => set(i, { op: e.target.value })} className={`${INPUT} w-28`} data-testid={`economy-part-op-${prefix}-${i}`}>
@@ -233,7 +240,7 @@ function PartsEditor({ parts, onChange, prefix }) {
                 </select>
               </label>
               <label className={LABEL}>
-                {def?.unit === '%' ? '%' : def?.unit === 'level' ? 'Level' : 'Allowance'}
+                {VALUE_LABEL[def?.unit] ?? 'Value'}
                 <Num aria-label={`Part ${i + 1}: ${def?.unit}`} value={p.value} allowEmpty max={def?.max ?? Infinity} integer={!!def?.whole} onCommit={(v) => set(i, { value: v })} className="w-24" data-testid={`economy-part-value-${prefix}-${i}`} />
               </label>
             </div>
