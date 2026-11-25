@@ -6,6 +6,28 @@ as this app holds them. One economy for the whole app: `src/lib/economy/`
 (`src/features/economy/`). Read this before touching a prize, a reward text, a
 value table or a segment condition in any feature.
 
+## How the app is taught (economist, 25 Nov 2026)
+
+The economist and their coworker teach the app the economy, and later each
+event, **by explaining in chat**; what they teach is **kept in the project**
+(not in a browser), so both of them and the published site have the same.
+
+- Every value taught is in `src/lib/economy/taught.js`: the value table, the
+  Chef basket tiers, currencies (a worth, or values by date) and keys
+  (presets, packs, chests, triggers, buckets, with a worth where they have
+  one). Each entry carries `said` (their words), `on` (the day) and `by`.
+  Write an entry only for what was said in so many words; a key is the
+  game's, never made up.
+- **A taught value wins over a browser's own.** The Economy page shows it with
+  a "Taught" mark (the words in its hover), with no field to change it and no
+  Remove button. A browser that held its own value is told once which it was;
+  a file loaded from before says so too.
+- What is typed on the Economy page and not taught stays in that browser. The
+  Worth tab lists it ("Typed in this browser only") with **Copy as a message**,
+  to paste in chat and have it taught.
+- Teaching goes the usual way of the repo: a branch, a pull request the
+  economist merges, the site published by the merge.
+
 ## Where the rules apply (economist)
 
 > "all the rules u got now are applied only on prizes we will add to the tiers
@@ -82,9 +104,37 @@ list, falls back to `_allowance` for mini-games; never makes a key up),
 
 Name `dr-` + kebab-case. One worth: **game play** ("we will use only the
 gameplay, u can remove all the pricing things from the app"; the Rate of
-Economy, on-cards multiplier and currency factor are not used for now). Some
-lose value by day: the dated map `2026-11-30=0.0376875|2026-12-01=0.0333518|...`;
-a date reads its own value, clamped to the first and last date (`currencyValue`).
+Economy, on-cards multiplier and currency factor are not used for now).
+
+**Always in the game** (economist, 25 Nov 2026: "there are DRs that will
+always be in the game ... puzzle, merge, picks, pet. those should be in a
+different table, that also holds the dates that the value is relevant to";
+`CORE_CURRENCIES`): **dr-puzzle** a value for each day, **dr-pet** a value
+for each week it is live (7 days "From the day I type"), **dr-merge** and
+**dr-pickaxe** (merge and picks, "like we got in the table now") a value
+"From date to date". Each holds `periods` - `{ from, to, value }`, both days
+included, never two on one day - and is worth only what they say: a worth
+without dates is not used (the page says so when an older save has one).
+They are always on the page, in a table of their own on the Worth tab, never
+removed and never on the drop list. The puzzle's values saved in the dated
+writing (`2026-11-30=0.0376875|...`) become one day each; that writing is
+still what a puzzle list is pasted in.
+
+**A date with no value is unknown** (asked: "Unknown"), never the nearest
+date's: before the first, after the last, or a week the pet is not live. The
+reader says "no value given for <date>". Event currencies with values by date
+(the dated writing) read the last date before one between two, and nothing
+outside them (`currencyValue`). With no date chosen, the first date is read,
+and said.
+
+**Adding a currency**: a drop list of the game's currencies not in the table
+(`currencyChoices`: `GAME_CURRENCIES` in gameKeys.js - the economist's list
+of 106, pasted 25 Nov 2026, copied as given: two names twice, and two that
+may be cut short in their sheet, `dr-christmas-wheel-with-i` and
+`dr-wicked-trails-dr-gold` - and the ones the page starts with). The basket
+counter is on that list but never offered (removed by the economist on 24
+Nov). Its last choice, "A new currency...", takes a new
+name, which then stays in this browser until it is taught.
 
 On the list to start: the names the economist gave (dr-puzzle, dr-pickaxe,
 dr-midnight-blast-heel, dr-pet, dr-sugar-gp, dr-candy-catcher-red,
@@ -113,7 +163,7 @@ brought up to date when opened (a worth someone typed is kept).
   Free_round3). Worth by tier: Basic 0.25, Rare 1, Epic 4, the same every day for
   now ("when the chef model in the app will be better we will change its value
   daily"). The prize builder offers the 17 game-play ones (not `_pricing_`).
-- **Coming from the economist**: the presets' syntax. Mini-game presets are
+- **Coming from the economist** (the next thing to teach, 25 Nov 2026: "Finish the basics"): the presets' syntax. Mini-game presets are
   built from merge and picks: their values are to be held, the preset's text
   built from them, and that is its worth. Puzzle presets: the puzzle's daily
   values over a time range are to be held, and a preset's worth is the average

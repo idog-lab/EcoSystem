@@ -10,7 +10,7 @@
 //            app's own
 // The order of the parts is never a finding.
 
-import { RESOURCE_BY_TOKEN, findCurrency, findKey, isKnownPreset, currencyValue, presetValue } from './economyModel'
+import { RESOURCE_BY_TOKEN, findCurrency, findKey, isKnownPreset, currencyValue, hasDatedValues, presetValue } from './economyModel'
 
 const NUMBER = /^-?\d+(?:\.\d+)?$/
 const DR_NAME = /^dr-[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -289,8 +289,9 @@ export function rewardWorth(textOrNode, economy, { date = null } = {}) {
       case 'dynamic': {
         const c = findCurrency(economy, n.name)
         const v = currencyValue(c, { date })
-        if (!v) return line(n, null, c ? 'no worth given for it' : 'not on the list')
-        const note = v.dated ? `${v.value} a unit on ${v.date}${v.clamped ? ' (the nearest date given)' : ''}${v.noDate ? ' - no date chosen: the first date' : ''}` : ''
+        if (!v) return line(n, null, !c ? 'not on the list' : date && hasDatedValues(c) ? `no value given for ${date}` : 'no worth given for it')
+        const when = v.to && v.to !== v.date ? `${v.date} to ${v.to}` : v.date
+        const note = v.dated ? `${v.value} a unit ${v.to && v.to !== v.date ? 'from' : 'on'} ${when}${v.noDate ? ' - no date chosen: the first date' : ''}` : ''
         return line(n, NUMBER.test(n.amount) ? Number(n.amount) * v.value : null, note)
       }
       case 'pack': {

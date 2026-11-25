@@ -84,6 +84,27 @@ export function Text({ value, onCommit, className = '', ...props }) {
 }
 
 
+// A value the app was taught (lib/economy/taught.js): the same for everyone, not changed on this page. Its hover
+// says who said it, when, and in what words.
+const taughtHover = (t) => `Taught to the app on ${t.on} (${t.by}): "${t.said}". The same for everyone who opens the app; to change it, explain the new value in chat.`
+export function TaughtMark({ taught }) {
+  if (!taught) return null
+  return (
+    <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold normal-case tracking-normal text-emerald-800" title={taughtHover(taught)} data-taught>
+      Taught
+    </span>
+  )
+}
+// A taught number, shown in a field's place.
+export function TaughtValue({ value, taught, label }) {
+  return (
+    <span className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium tabular-nums text-slate-800" aria-label={label} title={taughtHover(taught)} data-taught-value={value ?? ''}>
+      {value == null || value === '' ? 'not set' : value}
+      <TaughtMark taught={taught} />
+    </span>
+  )
+}
+
 export function CopyButton({ text, label = 'Copy', ...props }) {
   const [done, setDone] = useState(false)
   return (

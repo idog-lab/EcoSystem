@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import Card from '../../components/ui/Card'
-import { KEY_LISTS, createKey } from '../../lib/economy/economyModel'
-import { BUTTON, INPUT, MONO, Num, TD, TH, Text } from './economyUi'
+import { KEY_LISTS, createKey, isTaught, taughtKey } from '../../lib/economy/economyModel'
+import { BUTTON, INPUT, MONO, Num, TD, TH, TaughtMark, TaughtValue, Text } from './economyUi'
 
 const KEY = /^[A-Za-z0-9_\-.]+$/
 const SHOWN = 12
@@ -71,31 +71,43 @@ function KeyList({ list, items, onItems }) {
           <table className="w-full border-collapse" data-dense>
             <thead>
               <tr className="border-b border-slate-200">
+                <th className={`${TH} w-8`} />
                 <th className={TH}>Key</th>
                 {list.valueLabel && <th className={`${TH} text-center`}>{list.valueLabel}</th>}
                 <th className={TH}>Note</th>
-                <th className={TH} />
               </tr>
             </thead>
             <tbody>
-              {shown.map(({ k, i }) => (
-                <tr key={`${k.key}-${i}`} className="border-b border-slate-100 text-sm" data-key={k.key}>
-                  <td className={`${TD} ${MONO} text-slate-800`}>{k.key}</td>
-                  {list.valueLabel && (
-                    <td className={`${TD} text-center`}>
-                      <Num aria-label={`${k.key}: ${list.valueLabel}`} value={k.value} allowEmpty onCommit={(v) => set(i, { value: v })} className="w-20" placeholder="not set" />
+              {shown.map(({ k, i }) => {
+                const taught = taughtKey(list.id, k.key)
+                return (
+                  <tr key={`${k.key}-${i}`} className="border-b border-slate-100 text-sm" data-key={k.key}>
+                    <td className={`${TD} w-8`}>
+                      {!taught && (
+                        <button type="button" aria-label={`Remove ${k.key}`} title={`Remove ${k.key}`} className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => onItems(items.filter((_, j) => j !== i))}>
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </td>
-                  )}
-                  <td className={TD}>
-                    <Text aria-label={`${k.key}: note`} value={k.note} onCommit={(v) => set(i, { note: v })} className="w-40" />
-                  </td>
-                  <td className={TD}>
-                    <button type="button" aria-label={`Remove ${k.key}`} title="Remove" className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => onItems(items.filter((_, j) => j !== i))}>
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className={`${TD} ${MONO} text-slate-800`}>
+                      {k.key}
+                      {taught && !isTaught(taught, 'value') && <TaughtMark taught={taught} />}
+                    </td>
+                    {list.valueLabel && (
+                      <td className={`${TD} text-center`}>
+                        {isTaught(taught, 'value') ? (
+                          <TaughtValue value={k.value} taught={taught} label={`${k.key}: ${list.valueLabel}`} />
+                        ) : (
+                          <Num aria-label={`${k.key}: ${list.valueLabel}`} value={k.value} allowEmpty onCommit={(v) => set(i, { value: v })} className="w-20" placeholder="not set" />
+                        )}
+                      </td>
+                    )}
+                    <td className={TD}>
+                      {isTaught(taught, 'note') ? <span className="text-[12px] text-slate-600">{k.note}</span> : <Text aria-label={`${k.key}: note`} value={k.note} onCommit={(v) => set(i, { note: v })} className="w-40" />}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         ) : (

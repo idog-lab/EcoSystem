@@ -8168,3 +8168,57 @@ first; adds the saved events, puts in what this browser has none of, replaces
 a part only when ticked; downloads what is here first). This version is
 published once to the old site too (idoggk/Merge, built for /Merge/), so the
 old data can be downloaded there. verify-browser-data 11, browser-data 10.
+
+## The economy is taught in the project
+
+25 Nov 2026: "the big big project we got is to learn the economy and how to
+write syntax. later me and my coworker will start teaching the app about each
+event we got." Asked three things, the economist chose: what is taught is kept
+"In the project" (not each browser), it is taught by "Explain in chat", and
+"Finish the basics" comes first (the worths of the currencies and presets,
+the text behind the mini-game and puzzle presets) before any one event.
+
+The Economy page kept everything in the browser that typed it, so a worth the
+economist typed would never reach the coworker or the site. Now
+`src/lib/economy/taught.js` holds every value taught, each with the words it
+was said in, the day and who said it: to start with what was already
+settled on 24 Nov (the value table, the Chef basket tiers, dr-pack-counter
+and dr-hidden at 0). A taught value wins over a browser's own: the page shows
+it with a "Taught" mark and no field, its hover gives the words; a browser
+whose own value was replaced is told once, and a file loaded from before says
+so too. What is typed in a browser and not taught is listed on the Worth tab
+("Typed in this browser only"), with "Copy as a message" to paste in chat.
+(Before, "a worth someone typed is never overwritten"; with the economist's
+choice that holds only for what was not taught.) verify-economy 214 (1b: what
+was taught), economy-page 61 - the suite typed a wild of 3 throughout and now
+uses a currency of its own, and Chef's own wild, instead.
+
+Same day, on the Worth tab: "the delete button in the currencies should be in
+the left side, its hard to know what ur pickign to remove" - it is the first
+thing on a row now, in the Keys tab too. "is a list of DRs we got. let the use
+be able to use a drop list, and if needed he can add a new DR that will be
+added to the drop list" - a currency is added from a drop list
+(`GAME_CURRENCIES`, `currencyChoices`), its last choice a new name. The list
+came as a picture with most names cut off: nothing was copied from it, it is
+asked for as text.
+
+Then: "there are DRs that will always be in the game (from the currencie
+table), puzzle, merge, picks, pet. those should be in a different table, that
+also holds the dates that the value is relevant to. the puzzle should have
+different value for each day, and the pet should have different values for
+each week he is live." Asked, the economist answered: merge and picks are
+dr-merge and dr-pickaxe; their values "From date to date"; a pet week "From
+the day I type"; a date with no value reads "Unknown". `CORE_CURRENCIES`
+holds the four with `periods`, a table of their own ("Always in the game",
+`PeriodValues.jsx`: a day, a week or from-to, picked on a calendar or pasted,
+never two on one day). The "unknown" rule also replaced the clamp of an event
+currency's dates (before the first date read the first, after the last the
+last). verify-economy 227, economy-page 72.
+
+The list then came as text (106 names, 104 different) and is `GAME_CURRENCIES`
+as given. dr-basket-counter is on it although the economist removed it on 24
+Nov: the drop list leaves it out, and they were asked whether to bring it back.
+Two names may be cut short in their sheet (dr-christmas-wheel-with-i,
+dr-wicked-trails-dr-gold): copied as they are, and pointed out. The drop list
+offers 99 (the other four are on the page already). verify-economy 229,
+economy-page 72.

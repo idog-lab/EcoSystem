@@ -9,7 +9,8 @@
 // 2 rounding                 5 the builders                        8 segment conditions
 // 3 reading and checking     6 empty input gives nothing           9 Chef reads the same table
 import { mround, roundTo, roundReward, mergeRoundReward, roundCost, roundAltDrAmount, roundPuzzleFallback, roundCoins } from '../../src/lib/economy/rounding.js'
-import { chefBasketKeys, createEconomy, createCurrency, createKey, normalizeEconomy, resourceIdOf, currencyValue, parseDailyValues, presetValue, chefValuesFromEconomy, DEFAULT_RESOURCE_VALUES } from '../../src/lib/economy/economyModel.js'
+import { chefBasketKeys, createEconomy, createCurrency, createKey, normalizeEconomy, resourceIdOf, currencyValue, parseDailyValues, presetValue, chefValuesFromEconomy, DEFAULT_RESOURCE_VALUES, applyTaught, notTaught, notTaughtMessage, currencyChoices, CORE_CURRENCIES, coreCurrency, parsePeriods, formatPeriods, overlapping, cleanPeriods } from '../../src/lib/economy/economyModel.js'
+import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from '../../src/lib/economy/taught.js'
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
@@ -36,7 +37,7 @@ eq('a wild is 2.5', economy.resources.wild, 2.5)
 eq('extra stock is 2', economy.resources.stock, 2)
 eq('an undo is 0.25', economy.resources.undo, 0.25)
 eq('a free round is 1', economy.resources.entry, 1)
-check('energy is not on the table (economist: "u can remove this energy"), and an older save\'s is dropped', !('energy' in economy.resources) && !('energy' in normalizeEconomy({ resources: { energy: 0.3, wild: 3 } }).resources) && normalizeEconomy({ resources: { energy: 0.3, wild: 3 } }).resources.wild === 3)
+check('energy is not on the table (economist: "u can remove this energy"), and an older save\'s is dropped', !('energy' in economy.resources) && !('energy' in normalizeEconomy({ resources: { energy: 0.3, wild: 3 } }).resources))
 eq('"Extra Stock" is free_stock', resourceIdOf('Extra Stock'), 'stock')
 eq('"ExtraStock" is free_stock', resourceIdOf('ExtraStock'), 'stock')
 eq('"FreeRound" is free_entry', resourceIdOf('FreeRound'), 'entry')
@@ -52,10 +53,46 @@ check('dr-twister is the game\'s own name (economist: "its the name of it")', ec
   const older = normalizeEconomy({ version: 1, currencies: [createCurrency({ name: 'dr-twister', ownName: true }), createCurrency({ name: 'dr-pack-counter' }), createCurrency({ name: 'dr-x', valueGameplay: 3 })] })
   check('an economy saved before is brought up to date: dr-twister confirmed, the pack counter 0, a typed worth kept', older.currencies[0].ownName === false && older.currencies[1].valueGameplay === 0 && older.currencies[2].valueGameplay === 3)
   const v2 = normalizeEconomy({ version: 2, currencies: [{ name: 'dr-basket-counter', valueGameplay: 0 }, { name: 'dr-x', valueGameplay: 1, valuePricing: 2 }] })
-  check('an economy saved before is brought up to date: the basket counter gone, no pricing worth kept', v2.currencies.length === 1 && v2.currencies[0].name === 'dr-x' && !('valuePricing' in v2.currencies[0]))
+  check('an economy saved before is brought up to date: the basket counter gone, no pricing worth kept', !v2.currencies.some((c) => c.name === 'dr-basket-counter') && v2.currencies[0].name === 'dr-x' && v2.currencies.every((c) => !('valuePricing' in c)))
   check('the starting economy has no basket counter and no pricing worth', !economy.currencies.some((c) => c.name === 'dr-basket-counter') && economy.currencies.every((c) => !('valuePricing' in c)))
-  const typed = normalizeEconomy({ version: 1, currencies: [createCurrency({ name: 'dr-pack-counter', valueGameplay: 0.5 })] })
-  eq('...a pack counter worth someone typed is kept', typed.currencies[0].valueGameplay, 0.5)
+}
+
+section('1b. What was taught (taught.js) wins over a browser\'s own')
+{
+  // A browser that typed its own worths before they were taught.
+  const here = normalizeEconomy({ version: 4, resources: { wild: 3 }, chefBaskets: { Rare: 2 }, currencies: [createCurrency({ name: 'dr-pack-counter', valueGameplay: 0.5 }), createCurrency({ name: 'dr-x', valueGameplay: 3 })] })
+  check('a taught value wins: the wild is 2.5, the Rare basket 1, the pack counter 0, whatever this browser typed', here.resources.wild === 2.5 && here.chefBaskets.Rare === 1 && here.currencies.find((c) => c.name === 'dr-pack-counter').valueGameplay === 0)
+  check(`...and what it replaced is said once (${here.replacedHere.map((r) => r.what).join('; ')})`, here.replacedHere.length === 3 && here.replacedHere.some((r) => r.what === 'Wild: worth of one' && r.here === 3 && r.taught === 2.5))
+  check('...but never written down: not in a saved copy, not in a file', !('replacedHere' in JSON.parse(JSON.stringify(here))) && !Object.keys({ ...here }).includes('replacedHere'))
+  check('a taught currency a browser removed comes back (dr-hidden)', here.currencies.some((c) => c.name === 'dr-hidden' && c.valueGameplay === 0))
+  check('a worth nobody taught stays as typed (dr-x 3)', here.currencies.find((c) => c.name === 'dr-x').valueGameplay === 3)
+  eq('a browser with nothing of its own has nothing replaced', createEconomy().replacedHere.length, 0)
+  // Taught keys, on a made-up set of what was taught.
+  const said = { said: 'made up for the check', on: '2026-11-25', by: 'check' }
+  const taught = {
+    resources: {},
+    chefBaskets: {},
+    currencies: [{ name: 'dr-sugar-gp', valueGameplay: 0.4, ...said }, { name: 'dr-new', daily: '2026-12-01=0.5|2026-12-02=0.4', ...said }],
+    keys: { presets: [{ key: 'pick_3', value: 6, ...said }, { key: 'New_Preset', value: 2, note: 'taught', ...said }], packs: [], chests: [{ key: 'blue-chest', ...said }], triggers: [], buckets: [] },
+  }
+  const t = applyTaught(createEconomy({ keys: { ...economy.keys, presets: [createKey({ key: 'pick_3', value: 9 })] } }), taught)
+  check('a taught preset worth wins (pick_3: 6 over the 9 typed), and is said', t.keys.presets.find((k) => k.key === 'pick_3').value === 6 && t.replacedHere.some((r) => r.what === 'preset:pick_3'))
+  check('a taught key a list does not have is added (New_Preset worth 2, blue-chest)', t.keys.presets.find((k) => k.key === 'New_Preset')?.value === 2 && t.keys.chests.some((k) => k.key === 'blue-chest'))
+  check('a taught currency is added with its values by date, and a date reads them', currencyValue(t.currencies.find((c) => c.name === 'dr-new'), { date: '2026-12-02' })?.value === 0.4 && t.currencies.find((c) => c.name === 'dr-sugar-gp').valueGameplay === 0.4)
+  // What this browser holds that was not taught.
+  const mine = normalizeEconomy({ version: 4, currencies: [createCurrency({ name: 'dr-sugar-gp', valueGameplay: 0.7 }), createCurrency({ name: 'dr-mine' }), createCurrency({ name: 'dr-pack-counter', valueGameplay: 0.5 })], keys: { presets: [createKey({ key: 'pick_1', value: 5 }), createKey({ key: 'pick_2' })], triggers: [createKey({ key: 'my_trigger' })] } })
+  const list = notTaught(mine)
+  check(`what was typed here and not taught is listed: ${list.map((x) => x.name).join(', ')}`, list.length === 4 && ['dr-sugar-gp', 'dr-mine', 'pick_1', 'my_trigger'].every((n) => list.some((x) => x.name === n)) && !list.some((x) => x.name === 'dr-pack-counter' || x.name === 'pick_2'))
+  eq('the starting economy has nothing that was not taught', notTaught(createEconomy()).length, 0)
+  const fewer = createEconomy({ currencies: createEconomy().currencies.filter((c) => c.name !== 'dr-sugar-gp' && c.name !== 'dr-hidden') })
+  const all = currencyChoices(createEconomy())
+  check(`the drop list offers the game's currencies the table does not hold (${all.length}: ${all.slice(0, 3).join(', ')}, ...)`, all.length === 99 && all.includes('dr-villains-queen') && all.includes('dr-cascade') && new Set(all).size === all.length && !all.includes('dr-twister') && !all.includes('dr-pack-counter'))
+  check('...one taken out of the table is offered again, a name added here is not on it', currencyChoices(fewer).includes('dr-sugar-gp') && !currencyChoices(fewer).includes('dr-hidden') && !all.includes('dr-sugar-gp') && !currencyChoices(mine).includes('dr-mine'))
+  check('the basket counter, on the game\'s list but removed by the economist, is never offered', !all.includes('dr-basket-counter'))
+  const msg = notTaughtMessage(list)
+  check('...and it is written as a message to send in chat', /dr-sugar-gp: worth 0\.7/.test(msg) && /preset:pick_1: worth 5/.test(msg) && /dr-mine: a currency added here/.test(msg) && /trigger:my_trigger: a key added here/.test(msg))
+  check('every taught entry says who said it, when and what (taught.js)', [...Object.values(TAUGHT_RESOURCES), ...Object.values(TAUGHT_CHEF_BASKETS), ...TAUGHT_CURRENCIES, ...Object.values(TAUGHT_KEYS).flat()].every((e) => e.said && /^\d{4}-\d{2}-\d{2}$/.test(e.on) && e.by))
+  check('every taught currency name is the game\'s pattern (dr- and lower case)', TAUGHT_CURRENCIES.every((c) => /^dr-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(c.name)))
 }
 
 section('2. Rounding, as the sheets do it')
@@ -177,9 +214,34 @@ const priced = createEconomy({
 })
 check('a date that does not exist (30 Feb, month 13) is never read as one', (() => { const r = parseDailyValues('2026-02-30=1|2026-13-01=2|2026-03-01=3'); return r.entries.length === 1 && r.entries[0].date === '2026-03-01' && r.bad.length === 2 })())
 eq('the dated values are read in order', parseDailyValues('2026-12-01=2|2026-11-30=1').entries.map((e) => e.value).join(','), '1,2')
-eq('a date between two reads the one before it', currencyValue(priced.currencies[0], { date: '2026-12-01' }).value, 0.0333518)
-check('a date before the first is the first (clamped)', currencyValue(priced.currencies[0], { date: '2026-11-01' }).value === 0.0376875 && currencyValue(priced.currencies[0], { date: '2026-11-01' }).clamped)
-eq('a date after the last is the last', currencyValue(priced.currencies[0], { date: '2027-01-01' }).value, 0.0295148)
+eq('the puzzle\'s values saved in the older writing become one day each', JSON.stringify(priced.currencies[0].periods.map((p) => [p.from, p.to])), JSON.stringify([['2026-11-30', '2026-11-30'], ['2026-12-01', '2026-12-01'], ['2026-12-02', '2026-12-02']]))
+eq('a day reads its own value', currencyValue(priced.currencies[0], { date: '2026-12-01' }).value, 0.0333518)
+check('a date before the first or after the last has no value: unknown, never the nearest (economist: "Unknown")', currencyValue(priced.currencies[0], { date: '2026-11-01' }) === null && currencyValue(priced.currencies[0], { date: '2027-01-01' }) === null)
+{
+  const ev = createCurrency({ name: 'dr-sugar-gp', daily: '2026-12-01=2|2026-12-05=1' })
+  check('an event currency\'s dates: between two reads the one before; outside them unknown', currencyValue(ev, { date: '2026-12-03' }).value === 2 && currencyValue(ev, { date: '2026-12-05' }).value === 1 && currencyValue(ev, { date: '2026-11-30' }) === null && currencyValue(ev, { date: '2026-12-06' }) === null)
+}
+
+section('7b. The currencies always in the game')
+{
+  eq('puzzle, merge, picks and pet: a day, from-to, from-to, a week', CORE_CURRENCIES.map((c) => `${c.name}:${c.step}`).join(' '), 'dr-puzzle:day dr-merge:range dr-pickaxe:range dr-pet:week')
+  check('they are always on the page, even in a save that lost one, and never on the drop list', CORE_CURRENCIES.every((c) => normalizeEconomy({ version: 4, currencies: [] }).currencies.some((x) => x.name === c.name)) && !currencyChoices(normalizeEconomy({ version: 4, currencies: [] })).some((n) => coreCurrency(n)))
+  const pet = createCurrency({ name: 'dr-pet', valueGameplay: 9, periods: parsePeriods('2026-12-01=0.4|2026-12-15=0.35', 'week').periods })
+  check(`a pet week runs 7 days from the day typed (${formatPeriods(pet.periods)})`, formatPeriods(pet.periods) === '2026-12-01..2026-12-07=0.4|2026-12-15..2026-12-21=0.35')
+  check('a day in a live week reads that week; a week it is not live is unknown - and a worth without dates is not used', currencyValue(pet, { date: '2026-12-07' }).value === 0.4 && currencyValue(pet, { date: '2026-12-16' }).value === 0.35 && currencyValue(pet, { date: '2026-12-10' }) === null && currencyValue(createCurrency({ name: 'dr-pet', valueGameplay: 9 })) === null)
+  const merge = parsePeriods('2026-12-01..2026-12-14=0.3\n2026-12-15\t2026-12-31\t0.25\n2026-12-20..2026-12-10=1\nnonsense', 'range')
+  check(`merge and picks: from..to=value, or three columns; a period ending before it starts is not read (${merge.bad.length} not read)`, merge.periods.length === 2 && merge.periods[1].to === '2026-12-31' && merge.bad.length === 2)
+  const pick = createCurrency({ name: 'dr-pickaxe', periods: merge.periods })
+  check('a date inside a period reads it, its last day included', currencyValue(pick, { date: '2026-12-14' }).value === 0.3 && currencyValue(pick, { date: '2026-12-15' }).value === 0.25 && currencyValue(pick, { date: '2027-01-01' }) === null)
+  check('two periods sharing a day are found', overlapping(merge.periods, '2026-12-10', '2026-12-16')?.from === '2026-12-01' && overlapping(merge.periods, '2027-01-01', '2027-01-07') === null)
+  check('a period that is not one is never kept (to before from, 30 Feb, no value)', cleanPeriods([{ from: '2026-12-05', to: '2026-12-01', value: 1 }, { from: '2026-02-30', to: '2026-03-01', value: 1 }, { from: '2026-12-01', to: '2026-12-01', value: '' }]).length === 0)
+  const eco = createEconomy({ currencies: [pick, pet] })
+  const w = rewardWorth('dynamic(dr-pickaxe:10)', eco, { date: '2027-02-01' })
+  check(`a prize on a date with no value is unknown, and says the date (${w.lines[0]?.note})`, w.worth === null && /no value given for 2027-02-01/.test(w.lines[0]?.note ?? ''))
+  check('...and on a date with one, it is counted and its dates said', rewardWorth('dynamic(dr-pickaxe:10)', eco, { date: '2026-12-02' }).worth === 3 && /from 2026-12-01 to 2026-12-14/.test(rewardWorth('dynamic(dr-pickaxe:10)', eco, { date: '2026-12-02' }).lines[0].note))
+  const typed = notTaught(eco)
+  check(`dates typed here and not taught are listed to send (${typed.map((t) => t.name).join(', ')}), a pet worth without dates is not`, typed.length === 2 && /2026-12-01\.\.2026-12-07=0\.4/.test(notTaughtMessage(typed)) && !/worth 9/.test(notTaughtMessage(typed)))
+}
 eq('example 1 on 1 Dec: 0.8 + 0.25 + 5 x 0.0333518 + 0.5 + 0.25 (a Basic basket)', rewardWorth(REAL[0], priced, { date: '2026-12-01' }).worth, 1.966759)
 eq('example 3: a wild and an Epic basket = 6.5', rewardWorth(REAL[2], priced).worth, 6.5)
 const ex4 = rewardWorth(REAL[3], priced)
