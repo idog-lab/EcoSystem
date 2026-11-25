@@ -893,14 +893,22 @@ function addBoardLayoutsSheet(workbook, name, { maxCols, sections }) {
 // external Ops/targeting decision outside this app's own scope. Optional
 // (defaults to an empty array) so every existing caller that only ever knew
 // about one RC variant keeps working unchanged.
-// THE SMALL REWARDS CC SHEETS, in a workbook of their own (smallRewardsCc.js):
-// an index - CC1 = No Twister, ... - then each CC's bank and weights. Kept out
-// of the main workbook, which holds only the economist's pages.
-export function buildCcWorkbook(boards, recompletionBoards) {
-  const workbook = new ExcelJS.Workbook()
+// THE SMALL REWARDS CC SHEETS (smallRewardsCc.js): an index - CC1 = No
+// Twister, ... - then each CC's bank and weights. At the end of every main
+// output, after the Endless pages (economist, asked where: "Add to main
+// output"), and in a workbook of their own too. One table for every segment,
+// like the normal bank and weights.
+function addCcSheets(workbook, boards, recompletionBoards) {
   for (const sheet of ccWorkbookSheets(boards, recompletionBoards ?? [])) {
     addFlatSheet(workbook, sheet.name, sheet, sheet.columns.map((c, i) => (i === 0 ? 14 : sheet.name === 'CC' || /Bank$/.test(sheet.name) ? 48 : 10)))
   }
+}
+const ccValueRows = (boards, recompletionBoards, namePrefix = '') =>
+  ccWorkbookSheets(boards, recompletionBoards ?? []).map((sheet) => ({ title: namePrefix + sheet.name, rows: [sheet.columns, ...sheet.rows.map((r) => r.cells)] }))
+
+export function buildCcWorkbook(boards, recompletionBoards) {
+  const workbook = new ExcelJS.Workbook()
+  addCcSheets(workbook, boards, recompletionBoards)
   return workbook
 }
 
@@ -943,6 +951,7 @@ export function buildWorkbook(boards, recompletionBoards, _recompletionBoards2 =
   // assets are on Small Rewards. The builders of the removed pages are kept:
   // the engine checks read the model through them.
   addFlatSheet(workbook, 'Endless', buildV2EndlessSheet(boards, recompletionBoards), [44, 12, 110])
+  addCcSheets(workbook, boards, rcList)
 
   return workbook
 }
@@ -980,6 +989,7 @@ export function buildAllSheetsAsValueRows(boards, recompletionBoards, namePrefix
     { title: n('Endless Small Reward Weights'), rows: flat(buildEndlessWeightsSheet(boards, recompletionBoards)) },
     // (The same pages as buildWorkbook - see the note there.)
     { title: n('Endless'), rows: flat(buildV2EndlessSheet(boards, recompletionBoards)) },
+    ...ccValueRows(boards, recompletionBoards, namePrefix),
   ]
 }
 
@@ -1114,6 +1124,7 @@ export function buildAllSegmentsWorkbook(segments, _twisterOptions = {}) {
     header: { fill: WORKBOOK_COLOR.navyHeaderFill, fontColor: WORKBOOK_COLOR.navyHeaderFont },
   })
   addFlatSheet(workbook, 'Endless', buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards), [44, 12, 110])
+  addCcSheets(workbook, segments[0]?.boards, rc0)
 
   return workbook
 }
@@ -1155,5 +1166,6 @@ export function buildAllSegmentsSheetsAsValueRows(segments, _twisterOptions = {}
     { title: 'Endless Small Rewards Bank', rows: flat(buildEndlessBankSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
     { title: 'Endless Small Reward Weights', rows: flat(buildEndlessWeightsSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
     { title: 'Endless', rows: flat(buildV2EndlessSheet(segments[0]?.boards, segments[0]?.recompletionBoards)) },
+    ...ccValueRows(segments[0]?.boards, segments[0]?.recompletionBoards),
   ]
 }

@@ -113,9 +113,10 @@ console.log('--- 4. The sheets ---')
   const names = sheetNames(wb)
   // (One bank and one weights table for the normal event and Recompletion: there are no "RC" container tabs any more.)
   check('the workbook keeps the reference tabs in order, with no Recompletion container tabs', names.indexOf('Small Rewards') < names.indexOf('Small Rewards Bank') && names.indexOf('Small Rewards Bank') + 1 === names.indexOf('Small Reward Weights') && !names.some((n) => /^RC Small/.test(n)))
-  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.at(-1) === 'Endless')
+  check('...then the two endless tabs, and the endless rules at the very end', names.indexOf('Small Reward Weights') + 1 === names.indexOf('Endless Small Rewards Bank') && names.indexOf('Endless Small Rewards Bank') + 1 === names.indexOf('Endless Small Reward Weights') && names.indexOf('Endless') === names.indexOf('Endless Small Reward Weights') + 1 && names.slice(names.indexOf('Endless') + 1).every((n) => /^CC\d? ?/.test(n)))
+  // (After the endless rules come only the Small Rewards CC sheets - economist: "Add to main output".)
   // Economist: keep only the pages of the example and the endless ones; no page named "V2".
-  check(`the workbook holds only the economist's pages and the three endless ones, none named V2 (${names.join(', ')})`, names.join('|') === 'Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless')
+  check(`the workbook holds only the economist's pages, the three endless ones and the CC sheets, none named V2 (${names.slice(0, 14).join(', ')} ...)`, names.slice(0, 13).join('|') === 'Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless' && names.length === 28 && names.slice(13).every((n) => /^CC/.test(n)))
   check('no tab name is over Excel\'s 31 characters', names.every((n) => n.length <= 31))
   const read = (name) => {
     const ws = wb.getWorksheet(name)
@@ -135,7 +136,7 @@ console.log('--- 4. The sheets ---')
   const segments = [{ name: 'Segment 1', boards, recompletionBoards: rc }, { name: 'Segment 2', boards, recompletionBoards: rc }]
   const combined = sheetNames(buildAllSegmentsWorkbook(segments))
   check('the combined workbook has them once (containers are shared by every segment), and each segment its own Small Rewards', ['Small Rewards Bank', 'Small Reward Weights', 'Endless Small Rewards Bank', 'Endless Small Reward Weights', 'Endless'].every((t) => combined.filter((n) => n === t).length === 1) && combined.includes('S1 Small Rewards') && combined.includes('S2 Small Rewards') && !combined.includes('Small Rewards') && combined.every((n) => n.length <= 31))
-  check('...and so does the combined Google Sheets export', buildAllSegmentsSheetsAsValueRows(segments).filter((v) => /Small Reward/.test(v.title)).length === 6)
+  check('...and so does the combined Google Sheets export', buildAllSegmentsSheetsAsValueRows(segments).filter((v) => /Small Reward/.test(v.title) && !/^CC/.test(v.title)).length === 6)
   check(`the combined workbook has no page named V2, and no reward chain, drop groups, Twister or economy page (${combined.join(', ')})`, !combined.some((n) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(n)) && combined[0] === 'Segments')
   check('...nor its Google Sheets form', !buildAllSegmentsSheetsAsValueRows(segments).some((v) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(v.title)) && !values.some((v) => /V2|Reward Chain|Drop Groups|Twister|Economy/.test(v.title)))
 }

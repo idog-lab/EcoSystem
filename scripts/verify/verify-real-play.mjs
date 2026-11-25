@@ -151,7 +151,7 @@ console.log('--- 4. One event, one table: Recompletion plays the normal event\'s
   check('values and drop rules typed on the Recompletion list itself are not inputs to its build, and applying it does not make it out of date', buildInputsKey({ phase: 'rc', segments: rcInputsOnMainDraft(odd, mainDraft) }) === rcDraft.key && buildInputsKey({ phase: 'rc', segments: segmentBuildInputs(appliedBoth, 'rc') }) === rcDraft.key && appliedBoth[0].rcBoards[0].minDropRank === mains[0][0].minDropRank)
   const tabs = buildWorkbook(mains[0], rcs[0]).worksheets.map((w) => w.name)
   const weights = buildSmallRewardWeightsSheet(mains[0], { recompletionBoards: rcs[0] })
-  check('the workbook has one Small Rewards Bank and one Small Reward Weights - no Recompletion copies - running to merge tier 14', !tabs.some((n) => /^RC Small/.test(n)) && tabs.filter((n) => /Small Reward/.test(n) && !/Endless/.test(n)).length === 3 && weights.rows.at(-1).cells[0] === 14 && weights.rows.slice(-2).every((r) => r.cells.at(-1) === 0 && r.cells.slice(1).filter((v) => v === 1000).length === 1))
+  check('the workbook has one Small Rewards Bank and one Small Reward Weights - no Recompletion copies - running to merge tier 14', !tabs.some((n) => /^RC Small/.test(n)) && tabs.filter((n) => /Small Reward/.test(n) && !/Endless|^CC/.test(n)).length === 3 && weights.rows.at(-1).cells[0] === 14 && weights.rows.slice(-2).every((r) => r.cells.at(-1) === 0 && r.cells.slice(1).filter((v) => v === 1000).length === 1))
 }
 
 // Exactly what a friend opens: the base segment's link, decoded.

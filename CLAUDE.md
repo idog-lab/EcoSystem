@@ -800,10 +800,12 @@ of three items, where a rank-1 merge energy (`dr-r1`) takes its place** ("u
 can enter a rank 1 energy into it"). A container that held only a Twister
 item drops nothing: it leaves the CC sheets and its weights go to NoDrop -
 merge tier 5 among them ("Nothing"). The other containers keep their keys and
-weights; the rows a CC changes are highlighted. "Download the CC sheets" writes all seven in a
-workbook of their own (an index "CC": CC1 = No Twister ...; then "CC{n} Small
-Rewards Bank" / "CC{n} Small Reward Weights"); the main workbook is not
-changed. With no puzzles or charms a container may name the same coin key
+weights; the rows a CC changes are highlighted. **They are part of the main output** (economist,
+asked where: "Add to main output"): the workbook and the Google Sheet, for one
+segment and for all, end with them after Endless - an index "CC" (CC1 = No
+Twister ...), then "CC{n} Small Rewards Bank" / "CC{n} Small Reward Weights"
+(15 tabs, one table for every segment); "Download the CC sheets" writes the
+same 15 in a file of their own. With no puzzles or charms a container may name the same coin key
 twice (coin-r1+coin-r1: two items) - economist: "the game reads it well". **Removed: V2 Reward Chain, V2 Drop
 Groups, V2 Economy, V2 Twister** - so **the price of a twist is not in the
 output** (it was only on "V2 Twister"; it is on screen and travels in a stage

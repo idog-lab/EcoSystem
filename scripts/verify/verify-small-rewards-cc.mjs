@@ -1,8 +1,9 @@
 // SMALL REWARDS CC (smallRewardsCc.js): the bank and weights for a player who
 // can no longer get some of the items - on a small event shaped like a built one.
 //   npx vite-node scripts/verify/verify-small-rewards-cc.mjs
+import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { buildCcBankSheet, buildCcWeightsSheet, ccOptions, ccSyntax, ccWorkbookSheets } from '../../src/features/merge/lib/export/smallRewardsCc.js'
-import { buildSmallRewardsBankSheet, buildSmallRewardWeightsSheet, buildCcWorkbook } from '../../src/features/merge/lib/export/eventSheets.js'
+import { buildSmallRewardsBankSheet, buildSmallRewardWeightsSheet, buildCcWorkbook, buildWorkbook, buildAllSegmentsWorkbook, buildAllSheetsAsValueRows, buildAllSegmentsSheetsAsValueRows } from '../../src/features/merge/lib/export/eventSheets.js'
 
 let fails = 0
 let total = 0
@@ -61,6 +62,13 @@ const sheets = ccWorkbookSheets(boards, rc)
 check(`one workbook: an index, then each CC's bank and weights (${sheets.length} sheets), every name short enough for Excel`, sheets.length === 15 && sheets[0].name === 'CC' && sheets[0].rows.length === 7 && sheets[0].rows[0].cells.join() === 'CC1,Twister' && sheets.every((s) => s.name.length <= 31) && sheets[13].name === 'CC7 Small Rewards Bank')
 const wb = buildCcWorkbook(boards, rc)
 check('the workbook is written with those sheets', wb.worksheets.length === 15 && wb.worksheets[2].name === 'CC1 Small Reward Weights')
+const real = [{ ...createBoard('Board 1', { rows: 5, cols: 8 }), dropGroups: groups, dropGroupsConfig: board.dropGroupsConfig, minDropRank: 6 }]
+const mainNames = buildWorkbook(real, rc).worksheets.map((w) => w.name)
+const allNames = buildAllSegmentsWorkbook([{ name: 'S', boards: real, recompletionBoards: rc }]).worksheets.map((w) => w.name)
+const valueNames = buildAllSheetsAsValueRows(real, rc).map((s) => s.title)
+const allValueNames = buildAllSegmentsSheetsAsValueRows([{ name: 'S', boards: real, recompletionBoards: rc }]).map((s) => s.title)
+const tail = sheets.map((s) => s.name).join()
+check(`the main outputs (workbook and Google Sheet, this segment and all segments) end with the 15 CC sheets, after Endless (economist: "Add to main output")`, [mainNames, allNames, valueNames, allValueNames].every((names) => names.slice(-15).join() === tail && names.at(-16) === 'Endless'))
 
 console.log(fails ? `${fails} of ${total} checks FAILED` : `${total}/${total} checks passed`)
 process.exit(fails ? 1 : 0)

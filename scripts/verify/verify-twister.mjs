@@ -516,7 +516,7 @@ console.log('--- 13. Sharing and exports ---')
   const wb = buildWorkbook(chain, rcA, [], { twisterPlan: plan, segmentIndex: 0 })
   const all = buildAllSegmentsWorkbook(segs, { twisterPlan: plan })
   check('neither workbook carries a Twister page or a page named V2', !wb.worksheets.some((w) => /Twister|V2/.test(w.name)) && !all.worksheets.some((w) => /Twister|V2/.test(w.name)) && all.worksheets.every((w) => w.name.length <= 31))
-  check('the Ops pages keep their order, the endless rules last', wb.worksheets[0].name === 'Event Data' && wb.worksheets[wb.worksheets.length - 1].name === 'Endless')
+  check('the Ops pages keep their order, the endless rules last before the CC sheets', wb.worksheets[0].name === 'Event Data' && wb.worksheets[wb.worksheets.length - 16].name === 'Endless' && wb.worksheets[wb.worksheets.length - 15].name === 'CC')
 }
 
 console.log(failures === 0 ? `\nALL ${count} TWISTER CHECKS PASSED` : `\n${failures} OF ${count} TWISTER CHECK(S) FAILED`)

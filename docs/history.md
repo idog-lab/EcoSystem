@@ -8104,3 +8104,22 @@ verify-small-rewards-cc 14, small-rewards-cc 9, text-layout 10.
 
 The question about a container naming the same coin twice (coin-r1+coin-r1)
 was answered: "yes the game reads it well".
+
+Then: "i dont see it in the output" - the CC sheets were only in their own
+download. Asked where, the economist chose "Add to main output": every main
+export (workbook and Google Sheet, this segment and all segments) now ends
+with the 15 CC tabs after Endless; the separate download stays. The checks
+that held Endless as the last tab (verify-containers, verify-v2-rewards,
+verify-twister) now hold it last before the CC tabs. verify-small-rewards-cc
+15, small-rewards-cc 9, verify-containers 162, verify-v2-rewards, verify-twister
+146. verify-real-play failed one check on its first run alone ("on about the
+same DR": simulator 478, robot 743) and passed all 70 on the second (632 and
+679) - the export change does not touch play; another draw-dependent result
+for QA.
+
+The economist asked why later containers hold charms (ContK
+coin-r3+dr-r3+charm-r3, ContL coin-r3+puzzle-r3+charm-r3). Those are the two
+rows only Recompletion reaches (merge tiers 13 and 14,
+`tuneRecompletionTopRows`), made from Recompletion's own amounts - it takes
+only a reward whose Recompletion amount is above 0 (the 23 Nov backup:
+charms 200 there). Said so; nothing changed.
