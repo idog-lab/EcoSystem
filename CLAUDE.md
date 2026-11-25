@@ -128,7 +128,9 @@ copied as given; dr-basket-counter on it is never offered - removed by them).
 "the BW and avg mode are very very important"): `segmentFunctions.js` is the
 dictionary (Brut Wins and the mode multiplier - modes x1, x2, x4, x8 -,
 `CoinsInAllowance` and `CurrentLevel` without brackets, `fn_Avg_winrate(days)`
-(a share, written `0.9` with no m - confirmed by the economist), Diamond Mine and
+(a share, written `0.9` with no m - confirmed by the economist), a cohort
+`PjCohorts.ContainsCohort(id)` (true or false), Chef dishes
+`(GetMTXEventDataListAsStr(<id>U, "CompletedItems")?.Count() > N)`, Diamond Mine and
 Merge progression by event id), with their words. **Parts of a condition
 are joined with `&&`**. The Segments tab is a flow (`segmentFlow.js`,
 economist): the feature, the base (the bands of one rule, toggled - Brut

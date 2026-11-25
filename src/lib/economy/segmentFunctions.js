@@ -88,6 +88,31 @@ export const SEGMENT_FUNCTIONS = [
     example: 'fn_Avg_winrate(7) > 0.9',
   },
   {
+    name: 'PjCohorts.ContainsCohort',
+    form: 'call',
+    label: 'In cohort',
+    returns: 'true or false: whether the player is in that cohort - it stands alone, with no comparison',
+    unit: 'yes/no',
+    args: [{ name: 'cohort id', kind: 'cohortId' }],
+    said: 'another function to learn is a cohort function. what it does it just gives true or false if the user is in the cohort. example PjCohorts.ContainsCohort(####)',
+    on: '2026-11-25',
+    by: 'economist',
+    example: 'PjCohorts.ContainsCohort(1234)',
+  },
+  {
+    name: 'GetMTXEventDataListAsStr',
+    form: 'call',
+    label: 'Chef dishes finished',
+    returns: 'how many dishes the player finished in that Chef event (the list of its "CompletedItems", counted with ?.Count())',
+    unit: 'dishes',
+    args: [{ name: 'event id', kind: 'eventId' }, { name: '"CompletedItems"', kind: 'string', value: 'CompletedItems' }],
+    then: { method: 'Count' },
+    said: '(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10) - this one is a chef function, the number with the U is the event number. (the event number is just the numbers we need to add the U, this fucntion returns how many dishes the user finished in the chef feature',
+    on: '2026-11-25',
+    by: 'economist',
+    example: '(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10)',
+  },
+  {
     name: 'fn_DiamondMine_Progression',
     form: 'call',
     label: 'Diamond Mine progression',
@@ -139,15 +164,25 @@ export const CONDITION_PARTS = [
   { id: 'level', fn: 'CurrentLevel', label: 'Current level', unit: 'level', min: 0, whole: true },
   // The share is written with no m: fn_Avg_winrate(7) > 0.9 (economist, asked: "0.9 without m is right").
   { id: 'winrate', fn: 'fn_Avg_winrate', label: 'Average win rate', needsDays: true, unit: 'share', min: 0, max: 1, bareDecimal: true },
+  // In a cohort: true or false, no comparison and no number (PjCohorts.ContainsCohort(1234), no U as the example).
+  { id: 'cohort', fn: 'PjCohorts.ContainsCohort', label: 'In cohort', needsCohort: true, unit: 'yes/no', boolean: true },
+  // Chef dishes finished, written as the example: (GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10).
+  { id: 'chef-dishes', fn: 'GetMTXEventDataListAsStr', label: 'Chef dishes finished', needsEvent: true, unit: 'dishes', min: 0, whole: true },
 ]
 export const conditionPart = (id) => CONDITION_PARTS.find((p) => p.id === id) ?? null
 
 // One part: fn_DiamondMine_Progression(57634U) > 95, CoinsInAllowance < 2, CurrentLevel > 519.
 // Returns { text, problems } - no text while something is missing or wrong.
-export function partCondition({ kind, eventId = '', days = 7, op = '>', value = null } = {}) {
+export function partCondition({ kind, eventId = '', cohortId = '', days = 7, op = '>', value = null } = {}) {
   const part = conditionPart(kind)
   const problems = []
   if (!part) return { text: '', problems: ['Pick what this part checks.'] }
+  if (part.boolean) {
+    const cohort = String(cohortId ?? '').trim()
+    if (!cohort) return { text: '', problems: ['Type the cohort id.'] }
+    if (!/^\d+$/.test(cohort)) return { text: '', problems: [`"${cohortId}" is not a cohort id: digits only.`] }
+    return { text: `${part.fn}(${cohort})`, problems: [] }
+  }
   const id = String(eventId ?? '').trim().replace(/U$/i, '')
   if (part.needsEvent) {
     if (!id) problems.push('Type the event id.')
@@ -157,10 +192,11 @@ export function partCondition({ kind, eventId = '', days = 7, op = '>', value = 
   if (part.needsDays && !(Number.isInteger(d) && d >= 1)) problems.push('The days are a whole number, at least 1.')
   if (!COMPARISONS.some((c) => c.op === op)) problems.push('Pick a comparison.')
   const n = Number(value)
-  if (value == null || value === '') problems.push(`Type the ${part.unit === '%' ? '%' : part.unit === 'level' ? 'level' : part.unit === 'share' ? 'share' : 'amount'}.`)
+  if (value == null || value === '') problems.push(`Type the ${part.unit === '%' ? '%' : part.unit === 'level' ? 'level' : part.unit === 'share' ? 'share' : part.unit === 'dishes' ? 'number of dishes' : 'amount'}.`)
   else if (!Number.isFinite(n) || n < part.min || (part.max != null && n > part.max)) problems.push(part.max != null ? `A ${part.unit} from ${part.min} to ${part.max}.` : `At least ${part.min}.`)
-  else if (part.whole && !Number.isInteger(n)) problems.push('A level is a whole number.')
+  else if (part.whole && !Number.isInteger(n)) problems.push(part.unit === 'dishes' ? 'Dishes are a whole number.' : 'A level is a whole number.')
   if (problems.length) return { text: '', problems }
+  if (part.id === 'chef-dishes') return { text: `(${part.fn}(${id}U, "CompletedItems")?.Count() ${op} ${n})`, problems }
   const call = part.needsEvent ? `${part.fn}(${id}U)` : part.needsDays ? `${part.fn}(${d})` : part.fn
   return { text: `${call} ${op} ${part.bareDecimal ? String(n) : literal(n)}`, problems }
 }
@@ -181,10 +217,11 @@ export function progressionCondition({ feature = 'diamond-mine', eventId = '', o
 
 // --- Reading a condition ----------------------------------------------------------
 
-// Tokens: names, numbers (3, 0.7m, 57634U), operators, brackets, commas.
+// Tokens: names (PjCohorts.ContainsCohort - a dot inside a name), numbers (3, 0.7m, 57634U), text in quotes
+// ("CompletedItems" - curly quotes, as a chat writes them, read the same), operators (?. too), brackets, commas.
 function tokenize(text) {
   const tokens = []
-  const re = /\s*(?:(\d+(?:\.\d+)?)([mU]?)(?![A-Za-z0-9_])|([A-Za-z_][A-Za-z0-9_]*)|(&&|\|\||>=|<=|==|!=|[<>!+\-*/(),]))/y
+  const re = /\s*(?:(\d+(?:\.\d+)?)([mU]?)(?![A-Za-z0-9_])|([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)|["“”]([^"“”]*)["“”]|(&&|\|\||>=|<=|==|!=|\?\.|[<>!+\-*/(),.]))/y
   let i = 0
   const s = String(text ?? '')
   while (i < s.length) {
@@ -194,7 +231,8 @@ function tokenize(text) {
     if (!m) throw new Error(`"${s.slice(i).trim().slice(0, 12)}" cannot be read here.`)
     if (m[1] != null) tokens.push({ t: 'num', v: m[1], suffix: m[2] })
     else if (m[3] != null) tokens.push({ t: 'name', v: m[3] })
-    else tokens.push({ t: 'op', v: m[4] })
+    else if (m[4] != null) tokens.push({ t: 'str', v: m[4] })
+    else tokens.push({ t: 'op', v: m[5] })
     i = re.lastIndex
   }
   return tokens
@@ -258,23 +296,38 @@ function parse(tokens) {
       p += 1
       return { k: 'num', v: tk.v, suffix: tk.suffix }
     }
+    if (tk.t === 'str') {
+      p += 1
+      return { k: 'str', v: tk.v }
+    }
     if (tk.t === 'name') {
       p += 1
-      if (isOp('(')) {
+      let node = { k: 'name', v: tk.v }
+      if (isOp('(')) node = { k: 'call', name: tk.v, args: args() }
+      // A method on what came before: ?.Count() (or .Count()).
+      while (isOp('?.') || isOp('.')) {
+        const safe = peek().v === '?.'
         p += 1
-        const args = []
-        if (!isOp(')'))
-          for (;;) {
-            args.push(sum())
-            if (isOp(',')) p += 1
-            else break
-          }
-        take(')')
-        return { k: 'call', name: tk.v, args }
+        const m = peek()
+        if (m?.t !== 'name') throw new Error(`A name expected after "${safe ? '?.' : '.'}".`)
+        p += 1
+        node = { k: 'method', of: node, name: m.v, safe, args: isOp('(') ? args() : null }
       }
-      return { k: 'name', v: tk.v }
+      return node
     }
     throw new Error(`"${tk.v}" cannot stand here.`)
+  }
+  const args = () => {
+    take('(')
+    const list = []
+    if (!isOp(')'))
+      for (;;) {
+        list.push(sum())
+        if (isOp(',')) p += 1
+        else break
+      }
+    take(')')
+    return list
   }
   const product = binary(['*', '/'], atom)
   const sum = binary(['+', '-'], product)
@@ -296,8 +349,8 @@ function weighted(node) {
   return { fn: a.call.name, parts: [a, b] }
 }
 
-// Words for a value: a function, a weighted pair, a number.
-function describeValue(node, issues) {
+// Words for a value: a function, a weighted pair, a number. (`counted`: a list function read with its ?.Count().)
+function describeValue(node, issues, opts = {}) {
   const w = weighted(node)
   if (w) {
     w.parts.forEach((x) => checkCall(x.call, issues))
@@ -305,14 +358,29 @@ function describeValue(node, issues) {
     const days = w.parts.map((x) => `${x.w.v} x the last ${x.call.args[0]?.v ?? '?'} days`).join(' + ')
     return `weighted ${f ? f.label : w.fn} (${days})`
   }
+  if (node.k === 'method') {
+    // A list counted: GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count().
+    const f = node.of.k === 'call' ? segmentFunction(node.of.name) : null
+    if (f?.then && node.name === f.then.method) {
+      checkCall(node.of, issues)
+      if (!node.safe) issues.push({ level: 'warn', text: `${node.of.name}: the example writes ?.${f.then.method}() - with "?".` })
+      return describeValue(node.of, issues, { counted: true })
+    }
+    if (f?.then) issues.push({ level: 'warn', text: `${node.of.name}: the app knows ?.${f.then.method}() on it only, not .${node.name}().`, code: 'unknown-function' })
+    else issues.push({ level: 'warn', text: `.${node.name}() is not known to the app yet: teach it in chat.`, code: 'unknown-function' })
+    return `${describeValue(node.of, issues)}.${node.name}() [not known to the app yet]`
+  }
   if (node.k === 'call') {
     checkCall(node, issues)
     const f = segmentFunction(node.name)
     if (!f) return `${node.name}(...) [not known to the app yet]`
-    const id = f.args[0]?.kind === 'eventId' ? ` in event ${String(node.args[0]?.v ?? '?')}` : f.args[0]?.kind === 'days' ? ` over the last ${node.args[0]?.v ?? '?'} days` : ''
+    if (f.then && !opts.counted) issues.push({ level: 'error', text: `${node.name} gives a list: count it with ?.${f.then.method}(), as ${f.example.replace(/^\(|\)$/g, '')}.`, code: 'form' })
+    const first = node.args[0]
+    const id = f.args[0]?.kind === 'eventId' ? ` in event ${String(first?.v ?? '?')}` : f.args[0]?.kind === 'days' ? ` over the last ${first?.v ?? '?'} days` : f.args[0]?.kind === 'cohortId' ? ` ${String(first?.v ?? '?')}` : ''
     return `${f.label}${id}`
   }
   if (node.k === 'num') return numText(node)
+  if (node.k === 'str') return `"${node.v}"`
   if (node.k === 'name') {
     const f = segmentFunction(node.v)
     if (f?.form === 'value') return f.label
@@ -341,6 +409,10 @@ function checkCall(node, issues) {
     if (a.kind === 'eventId' && !(arg.k === 'num' && /^\d+$/.test(arg.v) && arg.suffix === 'U')) issues.push({ level: 'error', text: `${node.name}: the event id is digits written with U, like 57634U.`, code: 'event-id' })
     if (a.kind === 'days' && !(arg.k === 'num' && /^\d+$/.test(arg.v) && !arg.suffix)) issues.push({ level: 'error', text: `${node.name}: the days are a whole number, like 3.` })
     if (a.kind === 'weights' && !(arg.k === 'num' && arg.suffix === 'm')) issues.push({ level: 'warn', text: `${node.name}: the mode weights are written like 1m,2m,4m,8m.` })
+    if (a.kind === 'cohortId' && !(arg.k === 'num' && /^\d+$/.test(arg.v))) issues.push({ level: 'error', text: `${node.name}: the cohort id is digits, like 1234.`, code: 'cohort-id' })
+    if (a.kind === 'cohortId' && arg.k === 'num' && arg.suffix) issues.push({ level: 'warn', text: `${node.name}: the example writes the cohort id with no ${arg.suffix} - PjCohorts.ContainsCohort(1234).`, code: 'cohort-id' })
+    if (a.kind === 'string' && arg.k !== 'str') issues.push({ level: 'error', text: `${node.name}: "${a.value}" is written in quotes.` })
+    else if (a.kind === 'string' && arg.v !== a.value) issues.push({ level: 'warn', text: `${node.name}: the app knows "${a.value}" only, not "${arg.v}".`, code: 'unknown-function' })
   })
 }
 
@@ -353,12 +425,14 @@ function describe(node, issues) {
   if (node.k === 'cmp') {
     const left = describeValue(node.left, issues)
     const right = describeValue(node.right, issues)
-    const leftFn = node.left.k === 'call' ? segmentFunction(node.left.name) : node.left.k === 'name' ? segmentFunction(node.left.v) : null
-    const unit = leftFn?.unit === '%' ? '%' : leftFn?.unit === 'allowance' ? ' allowance' : ''
+    const leftFn = node.left.k === 'call' ? segmentFunction(node.left.name) : node.left.k === 'name' ? segmentFunction(node.left.v) : node.left.k === 'method' && node.left.of.k === 'call' ? segmentFunction(node.left.of.name) : null
+    const unit = leftFn?.unit === '%' ? '%' : leftFn?.unit === 'allowance' ? ' allowance' : leftFn?.unit === 'dishes' ? ' dishes' : ''
     // A share in words is a % too: 0.9 (90%).
     const share = leftFn?.unit === 'share' && node.right.k === 'num' ? ` (${Math.round(Number(node.right.v) * 1000) / 10}%)` : ''
     return `${left} is ${OP_WORDS[node.op]} ${right}${unit}${share}`
   }
+  // A function that is true or false (in a cohort) stands alone.
+  if (node.k === 'call' && segmentFunction(node.name)?.unit === 'yes/no') return describeValue(node, issues)
   issues.push({ level: 'warn', text: 'A part with no comparison: it does not say who is in.' })
   return describeValue(node, issues)
 }

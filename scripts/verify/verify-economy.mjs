@@ -289,7 +289,20 @@ check('the Chef live segments follow the same naming', LIVE_SEGMENT_SET.filter((
 
 section('8a. The functions segments are made of (segmentFunctions.js)')
 {
-  eq('the functions taught: Brut Wins, the mode multiplier, balance, level, win rate, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 CoinsInAllowance CurrentLevel fn_Avg_winrate fn_DiamondMine_Progression fn_Merge_Progression')
+  eq('the functions taught: Brut Wins, the mode multiplier, balance, level, win rate, cohort, Chef dishes, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 CoinsInAllowance CurrentLevel fn_Avg_winrate PjCohorts.ContainsCohort GetMTXEventDataListAsStr fn_DiamondMine_Progression fn_Merge_Progression')
+  // The cohort (economist: "it just gives true or false if the user is in the cohort", PjCohorts.ContainsCohort(####)).
+  const co = readCondition('PjCohorts.ContainsCohort(1234)')
+  check(`a cohort stands alone, true or false, a dot in its name (${co.clauses[0]})`, co.ok && !co.issues.length && co.clauses[0] === 'In cohort 1234')
+  eq('...written by the flow with its id and no U, as the example', partCondition({ kind: 'cohort', cohortId: '1109' }).text, 'PjCohorts.ContainsCohort(1109)')
+  check('...a cohort id that is not digits must be fixed', /digits only/.test(partCondition({ kind: 'cohort', cohortId: '11a' }).problems[0]) && /Type the cohort id/.test(partCondition({ kind: 'cohort' }).problems[0]))
+  // Chef dishes finished (economist: "(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10) ... returns how many dishes the user finished in the chef feature").
+  const chef = readCondition('(GetMTXEventDataListAsStr(53524U, “CompletedItems”)?.Count() > 10)')
+  check(`the Chef example, its curly quotes as a chat writes them, in words (${chef.clauses[0]})`, chef.ok && !chef.issues.length && chef.clauses[0] === 'Chef dishes finished in event 53524 is above 10 dishes')
+  eq('...written by the flow as the example, in its brackets, plain quotes', partCondition({ kind: 'chef-dishes', eventId: '53524', op: '>', value: 10 }).text, '(GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10)')
+  check('...without ?.Count() it must be fixed; an event id without U too; another list than "CompletedItems" is named', readCondition('GetMTXEventDataListAsStr(53524U, "CompletedItems") > 10').issues.some((i) => i.code === 'form') && readCondition('(GetMTXEventDataListAsStr(53524, "CompletedItems")?.Count() > 10)').issues.some((i) => i.code === 'event-id') && readCondition('(GetMTXEventDataListAsStr(53524U, "Other")?.Count() > 10)').issues.some((i) => /"CompletedItems" only/.test(i.text)))
+  check('...a number of dishes is whole', /whole number/.test(partCondition({ kind: 'chef-dishes', eventId: '1', op: '>', value: 2.5 }).problems[0]))
+  const all = readCondition('PjCohorts.ContainsCohort(1234) && (GetMTXEventDataListAsStr(53524U, "CompletedItems")?.Count() > 10) && CurrentLevel > 519')
+  check(`a cohort, Chef dishes and a level in one condition, part by part (${all.clauses.join(' | ')})`, all.ok && all.clauses.length === 3)
   eq('the modes and their multipliers (economist: "mode 1 - 1, mode 2 - 2, mode 3 - 4, mode 4 - 8") - the 1m,2m,4m,8m', MODE_MULTIPLIERS.map((m) => `${m.mode}:x${m.multiplier}`).join(' '), '1:x1 2:x2 3:x4 4:x8')
   check('...so the Brut Wins functions have nothing left unconfirmed, their mode inputs named by mode', ['fn_DailyBrutWins_m4', 'fn_DailyAvgModeMultiplier_m4'].every((n) => { const f = SEGMENT_FUNCTIONS.find((x) => x.name === n); return !f.open && f.args.slice(1).map((a) => `${a.mode}=${a.name}`).join(' ') === '1=1m 2=2m 3=4m 4=8m' }))
   const ooc = readCondition('CoinsInAllowance < 2 && CurrentLevel > 519')
