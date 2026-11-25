@@ -8255,3 +8255,15 @@ important is the event Id". A dictionary of functions in the project
 (`segmentFunctions.js`, with Brut Wins and the mode multiplier from the rules
 of 24 Nov), a progression writer and a reader of any condition on the
 Segments tab. verify-economy 246, economy-page 81.
+
+Then, answered: progression is "another fucntions they are added up with &&";
+the 1m,2m,4m,8m are "the multiplier on the mode. each net win is a level
+win, each brut win is the net win * mode multiplier" - mode 1 x1, mode 2 x2,
+mode 3 x4, mode 4 x8 (the "not confirmed" on Brut Wins is gone). Taught:
+`CoinsInAllowance` (the balance in allowance; OOC, out of coins - "logic is
+mostly when we will use the balance to get a segment of users with low
+balance") and `CurrentLevel`, names without brackets; their example
+`CoinsInAllowance < 2 && CurrentLevel > 519`. The progression card became
+"Build a condition": parts (progression, balance, level) joined with &&. The
+reader says when a name is written with brackets or a function without.
+verify-economy 254, economy-page 83.

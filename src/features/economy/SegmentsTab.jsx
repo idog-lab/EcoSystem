@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import Card from '../../components/ui/Card'
 import { STANDARD_WEIGHTS, bandsFromCuts, buildSegments, checkBands } from '../../lib/economy/segments'
-import { COMPARISONS, PROGRESSION_FEATURES, SEGMENT_FUNCTIONS, progressionCondition, readCondition } from '../../lib/economy/segmentFunctions'
-import { CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
+import { Trash2 } from 'lucide-react'
+import { COMPARISONS, CONDITION_PARTS, MODE_MULTIPLIERS, SEGMENT_FUNCTIONS, buildCondition, conditionPart, partCondition, readCondition } from '../../lib/economy/segmentFunctions'
+import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
 
 const LABEL = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500'
 
@@ -26,7 +27,7 @@ function FunctionsCard() {
                   <span className="font-medium text-slate-800">{f.label}</span>
                   <TaughtMark taught={f} />
                   <div className={`${MONO} text-slate-500`}>
-                    {f.name}({f.args.map((a) => (a.kind === 'eventId' ? '<event id>U' : a.kind === 'days' ? '<days>' : a.name)).join(',')})
+                    {f.form === 'value' ? f.name : `${f.name}(${f.args.map((a) => (a.kind === 'eventId' ? '<event id>U' : a.kind === 'days' ? '<days>' : a.name)).join(',')})`}
                   </div>
                 </td>
                 <td className={`${TD} text-slate-700`}>
@@ -39,65 +40,93 @@ function FunctionsCard() {
           </tbody>
         </table>
       </div>
+      <p className="mt-2 text-xs text-slate-500" data-testid="economy-seg-modes" data-note>
+        The modes and their multipliers (the 1m,2m,4m,8m of Brut Wins): {MODE_MULTIPLIERS.map((m) => `mode ${m.mode} x${m.multiplier}`).join(', ')}. A Net Win is a level won; a Brut Win is a Net Win x the multiplier of its mode.
+      </p>
     </Card>
   )
 }
 
-// A PROGRESSION CONDITION: a player's progression in a Diamond Mine or Merge event, by the event's id.
-function ProgressionCard() {
-  const [feature, setFeature] = useState('diamond-mine')
-  const [eventId, setEventId] = useState('')
-  const [op, setOp] = useState('>')
-  const [percent, setPercent] = useState(95)
-  const { condition, problems } = progressionCondition({ feature, eventId, op, percent })
-  const words = condition ? readCondition(condition).clauses[0] : ''
+// BUILD A CONDITION: parts - progression in an event, balance, level - joined with && (economist: "they are
+// added up with &&"). Each part: what it checks, the event id when it needs one, a comparison and a number.
+const DEFAULT_VALUE = { 'dm-progression': 95, 'merge-progression': 95, balance: 2, level: 519 }
+const DEFAULT_OP = { 'dm-progression': '>', 'merge-progression': '>', balance: '<', level: '>' }
+const newPart = (kind = 'balance') => ({ kind, eventId: '', op: DEFAULT_OP[kind], value: DEFAULT_VALUE[kind] })
+
+function ConditionCard() {
+  const [parts, setParts] = useState([newPart('dm-progression')])
+  const set = (i, patch) => setParts((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
+  const { condition } = buildCondition(parts)
+  const words = condition ? readCondition(condition).clauses : []
   return (
-    <Card title="Progression in an event" subtitle="Players by how far they got in a Diamond Mine or Merge event, in %. What matters is the event's id.">
-      <div className="flex flex-col gap-3" data-testid="economy-seg-progression">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={LABEL}>
-            Feature
-            <select value={feature} onChange={(e) => setFeature(e.target.value)} className={`${INPUT} w-40`} data-testid="economy-prog-feature">
-              {PROGRESSION_FEATURES.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={LABEL}>
-            Event id
-            <input value={eventId} onChange={(e) => setEventId(e.target.value.trim())} placeholder="57634" inputMode="numeric" className={`${INPUT} w-32 font-mono`} data-testid="economy-prog-event" />
-          </label>
-          <label className={LABEL}>
-            Progression
-            <select value={op} onChange={(e) => setOp(e.target.value)} className={`${INPUT} w-28`} data-testid="economy-prog-op">
-              {COMPARISONS.map((c) => (
-                <option key={c.op} value={c.op}>
-                  {c.words}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={LABEL}>
-            %
-            <Num aria-label="Progression %" value={percent} allowEmpty max={100} onCommit={setPercent} className="w-20" data-testid="economy-prog-percent" />
-          </label>
-        </div>
-        {condition ? (
+    <Card title="Build a condition" subtitle="Progression in an event, balance, level: each part is checked, and the parts are joined with &&.">
+      <div className="flex flex-col gap-3" data-testid="economy-seg-builder">
+        {parts.map((p, i) => {
+          const def = conditionPart(p.kind)
+          const { problems } = partCondition(p)
+          return (
+            <div key={i} className="flex flex-col gap-1 border-b border-slate-100 pb-2" data-part={i}>
+              <div className="flex flex-wrap items-end gap-2">
+                <button type="button" aria-label={`Remove part ${i + 1}`} title="Remove this part" disabled={parts.length === 1} className="mb-0.5 grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30" onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}>
+                  <Trash2 size={14} />
+                </button>
+                <span className="mb-1.5 w-5 font-mono text-xs font-semibold text-slate-500">{i > 0 ? '&&' : ''}</span>
+                <label className={LABEL}>
+                  Checks
+                  <select value={p.kind} onChange={(e) => set(i, newPart(e.target.value))} className={`${INPUT} w-52`} data-testid={`economy-part-kind-${i}`}>
+                    {CONDITION_PARTS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {def?.needsEvent && (
+                  <label className={LABEL}>
+                    Event id
+                    <input value={p.eventId} onChange={(e) => set(i, { eventId: e.target.value.trim() })} placeholder="57634" inputMode="numeric" className={`${INPUT} w-28 font-mono`} data-testid={`economy-part-event-${i}`} />
+                  </label>
+                )}
+                <label className={LABEL}>
+                  Is
+                  <select value={p.op} onChange={(e) => set(i, { op: e.target.value })} className={`${INPUT} w-28`} data-testid={`economy-part-op-${i}`}>
+                    {COMPARISONS.map((c) => (
+                      <option key={c.op} value={c.op}>
+                        {c.words}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={LABEL}>
+                  {def?.unit === '%' ? '%' : def?.unit === 'level' ? 'Level' : 'Allowance'}
+                  <Num aria-label={`Part ${i + 1}: ${def?.unit}`} value={p.value} allowEmpty max={def?.max ?? Infinity} integer={!!def?.whole} onCommit={(v) => set(i, { value: v })} className="w-24" data-testid={`economy-part-value-${i}`} />
+                </label>
+              </div>
+              {problems.length > 0 && (
+                <p className="text-xs text-slate-500" data-part-problems={i}>
+                  {problems.join(' ')}
+                </p>
+              )}
+            </div>
+          )
+        })}
+        <button type="button" className={`${BUTTON} self-start`} onClick={() => setParts((ps) => [...ps, newPart('balance')])} data-testid="economy-part-add">
+          Add a part (&amp;&amp;)
+        </button>
+        {condition && (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <code className={`${MONO} rounded-lg bg-slate-50 px-2 py-1 text-slate-800`} data-testid="economy-prog-condition">
+              <code className={`${MONO} rounded-lg bg-slate-50 px-2 py-1 text-slate-800`} data-testid="economy-built-condition">
                 {condition}
               </code>
-              <CopyButton text={condition} label="Copy" data-testid="economy-prog-copy" />
+              <CopyButton text={condition} label="Copy" data-testid="economy-built-copy" />
             </div>
-            <span className="text-sm text-slate-600">{words}</span>
+            <ul className="list-disc pl-5 text-sm text-slate-600" data-testid="economy-built-words">
+              {words.map((w, j) => (
+                <li key={j}>{w}</li>
+              ))}
+            </ul>
           </div>
-        ) : (
-          <p className="text-sm text-slate-500" data-testid="economy-prog-problems">
-            {problems.join(' ')}
-          </p>
         )}
       </div>
     </Card>
@@ -206,7 +235,7 @@ export default function SegmentsTab() {
         </div>
       </Card>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
-        <ProgressionCard />
+        <ConditionCard />
         <ReadCard />
       </div>
       <FunctionsCard />

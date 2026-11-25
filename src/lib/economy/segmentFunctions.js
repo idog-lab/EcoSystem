@@ -6,40 +6,78 @@
 // A function is never invented: one that is not here is named by the reader as "not known to the app yet", never
 // guessed at. What is not confirmed about a function is said in `open`.
 //
-// An entry: { name, label, returns, unit, args: [{ name, kind }], said, on, by, example, open? }
-//   kind: 'days' (a whole number of days), 'weights' (the mode weights, 1m,2m,4m,8m), 'eventId' (an event's id,
-//   digits written with U: 57634U).
+// An entry: { name, form, label, returns, unit, args: [{ name, kind }], said, on, by, example, open? }
+//   form: 'call' (written with brackets, fn_X(...)) or 'value' (a name alone: CurrentLevel).
+//   kind: 'days' (a whole number of days), 'weights' (the multiplier of a mode: 1m,2m,4m,8m), 'eventId' (an
+//   event's id, digits written with U: 57634U).
+// Parts of a condition are joined with && (economist: "its another fucntions they are added up with &&").
 
 const RULES = 'Economy Rules & Reward Syntax (given in chat), section 4'
+const MODES_SAID = '#m is the multiplier on the mode. each net win is a level win, each brut win is the net win * mode multiplier. and those are the multipleirs on the mode. mode 1 - 1, mode 2 - 2, mode 3 - 4, mode 4 - 8'
 const PROGRESSION_SAID = 'those fucntions return the progression in % of the user. and example can be fn_DiamondMine_Progression(57634U) > 95 - as for the segment will check if the user progression is bigger than 95%. the only thing important is the event Id which is the ####'
+const BALANCE_LEVEL_SAID = 'another function we will learn is the balance and current level. CoinsInAllowance < 2, CurrentLevel > 519 - example of a ? that checks if the user has less than 2 allowance in their balance and if their level is above 519. OOC - out of coins. logic is mostly when we will use the balance to get a segment of users with low balance'
+
+// The four modes and their multipliers (economist, 25 Nov 2026) - the 1m,2m,4m,8m of the Brut Wins functions.
+export const MODE_MULTIPLIERS = [
+  { mode: 1, multiplier: 1 },
+  { mode: 2, multiplier: 2 },
+  { mode: 3, multiplier: 4 },
+  { mode: 4, multiplier: 8 },
+]
+const MODE_ARGS = MODE_MULTIPLIERS.map((m) => ({ name: `${m.multiplier}m`, kind: 'weights', mode: m.mode }))
 
 export const SEGMENT_FUNCTIONS = [
   {
     name: 'fn_DailyBrutWins_m4',
+    form: 'call',
     label: 'Daily Brut Wins',
-    returns: "the player's daily average of Brut Wins over the last given days",
+    returns: "the player's daily average of Brut Wins over the last given days - a Net Win is a level won, a Brut Win is a Net Win x the multiplier of the mode it was won in (mode 1 x1, mode 2 x2, mode 3 x4, mode 4 x8)",
     unit: 'Brut Wins a day',
-    args: [{ name: 'days', kind: 'days' }, ...['1m', '2m', '4m', '8m'].map((w) => ({ name: w, kind: 'weights' }))],
-    said: `${RULES}: Weighted Brut Wins = (fn_DailyBrutWins_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyBrutWins_m4(14,1m,2m,4m,8m)*0.3m); "the BW and avg mode are very very important"`,
-    on: '2026-11-24',
+    args: [{ name: 'days', kind: 'days' }, ...MODE_ARGS],
+    said: `${RULES}: Weighted Brut Wins = (fn_DailyBrutWins_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyBrutWins_m4(14,1m,2m,4m,8m)*0.3m); "the BW and avg mode are very very important"; ${MODES_SAID}`,
+    on: '2026-11-25',
     by: 'economist',
     example: '(fn_DailyBrutWins_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyBrutWins_m4(14,1m,2m,4m,8m)*0.3m) > 9',
-    open: 'What 1m,2m,4m,8m stand for (the game modes x1, x2, x4, x8?) is not confirmed.',
   },
   {
     name: 'fn_DailyAvgModeMultiplier_m4',
+    form: 'call',
     label: 'Average mode multiplier',
-    returns: "the player's average game-mode multiplier over the last given days",
+    returns: "the player's average mode multiplier over the last given days (mode 1 x1, mode 2 x2, mode 3 x4, mode 4 x8)",
     unit: 'x',
-    args: [{ name: 'days', kind: 'days' }, ...['1m', '2m', '4m', '8m'].map((w) => ({ name: w, kind: 'weights' }))],
-    said: `${RULES}: the mode version uses fn_DailyAvgModeMultiplier_m4, && (MODE < 3m) / && (MODE >= 3m); "the BW and avg mode are very very important"`,
-    on: '2026-11-24',
+    args: [{ name: 'days', kind: 'days' }, ...MODE_ARGS],
+    said: `${RULES}: the mode version uses fn_DailyAvgModeMultiplier_m4, && (MODE < 3m) / && (MODE >= 3m); "the BW and avg mode are very very important"; ${MODES_SAID}`,
+    on: '2026-11-25',
     by: 'economist',
     example: '(fn_DailyAvgModeMultiplier_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyAvgModeMultiplier_m4(14,1m,2m,4m,8m)*0.3m) < 3m',
-    open: 'What 1m,2m,4m,8m stand for is not confirmed.',
+  },
+  {
+    name: 'CoinsInAllowance',
+    form: 'value',
+    label: 'Balance',
+    returns: "the player's coin balance, in allowance - mostly for a segment of players low on coins (OOC, out of coins)",
+    unit: 'allowance',
+    args: [],
+    said: BALANCE_LEVEL_SAID,
+    on: '2026-11-25',
+    by: 'economist',
+    example: 'CoinsInAllowance < 2',
+  },
+  {
+    name: 'CurrentLevel',
+    form: 'value',
+    label: 'Current level',
+    returns: "the player's current level",
+    unit: 'level',
+    args: [],
+    said: BALANCE_LEVEL_SAID,
+    on: '2026-11-25',
+    by: 'economist',
+    example: 'CurrentLevel > 519',
   },
   {
     name: 'fn_DiamondMine_Progression',
+    form: 'call',
     label: 'Diamond Mine progression',
     returns: "the player's progression in that Diamond Mine event",
     unit: '%',
@@ -51,6 +89,7 @@ export const SEGMENT_FUNCTIONS = [
   },
   {
     name: 'fn_Merge_Progression',
+    form: 'call',
     label: 'Merge progression',
     returns: "the player's progression in that Merge event",
     unit: '%',
@@ -76,21 +115,51 @@ export const COMPARISONS = [
   { op: '<', words: 'below' },
   { op: '<=', words: 'at most' },
 ]
-// fn_DiamondMine_Progression(57634U) > 95. An event id is digits; a % from 0 to 100, decimals written with m.
-// Returns { condition, problems } - no condition while something is missing or wrong.
-export function progressionCondition({ feature = 'diamond-mine', eventId = '', op = '>', percent = null } = {}) {
+// A number in a condition: whole numbers bare, decimals with m (rules, section 4).
+const literal = (n) => (Number.isInteger(Number(n)) ? String(Number(n)) : `${Number(n)}m`)
+
+// The parts a condition can be built of, one function each (the Brut Wins bands are written by the bands table).
+//   needsEvent: an event id goes in the brackets; range: what the number may be; whole: a whole number only.
+export const CONDITION_PARTS = [
+  { id: 'dm-progression', fn: 'fn_DiamondMine_Progression', label: 'Diamond Mine progression', needsEvent: true, unit: '%', min: 0, max: 100 },
+  { id: 'merge-progression', fn: 'fn_Merge_Progression', label: 'Merge progression', needsEvent: true, unit: '%', min: 0, max: 100 },
+  { id: 'balance', fn: 'CoinsInAllowance', label: 'Balance in allowance', unit: 'allowance', min: 0 },
+  { id: 'level', fn: 'CurrentLevel', label: 'Current level', unit: 'level', min: 0, whole: true },
+]
+export const conditionPart = (id) => CONDITION_PARTS.find((p) => p.id === id) ?? null
+
+// One part: fn_DiamondMine_Progression(57634U) > 95, CoinsInAllowance < 2, CurrentLevel > 519.
+// Returns { text, problems } - no text while something is missing or wrong.
+export function partCondition({ kind, eventId = '', op = '>', value = null } = {}) {
+  const part = conditionPart(kind)
   const problems = []
-  const f = PROGRESSION_FEATURES.find((x) => x.id === feature)
-  if (!f) problems.push('Pick Diamond Mine or Merge.')
+  if (!part) return { text: '', problems: ['Pick what this part checks.'] }
   const id = String(eventId ?? '').trim().replace(/U$/i, '')
-  if (!id) problems.push('Type the event id.')
-  else if (!/^\d+$/.test(id)) problems.push(`"${eventId}" is not an event id: digits only.`)
+  if (part.needsEvent) {
+    if (!id) problems.push('Type the event id.')
+    else if (!/^\d+$/.test(id)) problems.push(`"${eventId}" is not an event id: digits only.`)
+  }
   if (!COMPARISONS.some((c) => c.op === op)) problems.push('Pick a comparison.')
-  if (percent == null || percent === '') problems.push('Type the %.')
-  else if (!(Number(percent) >= 0 && Number(percent) <= 100)) problems.push('A % from 0 to 100.')
-  if (problems.length) return { condition: '', problems }
-  const n = Number(percent)
-  return { condition: `${f.fn}(${id}U) ${op} ${Number.isInteger(n) ? n : `${n}m`}`, problems }
+  const n = Number(value)
+  if (value == null || value === '') problems.push(`Type the ${part.unit === '%' ? '%' : part.unit === 'level' ? 'level' : 'amount'}.`)
+  else if (!Number.isFinite(n) || n < part.min || (part.max != null && n > part.max)) problems.push(part.max != null ? `A ${part.unit} from ${part.min} to ${part.max}.` : `At least ${part.min}.`)
+  else if (part.whole && !Number.isInteger(n)) problems.push('A level is a whole number.')
+  if (problems.length) return { text: '', problems }
+  return { text: `${part.needsEvent ? `${part.fn}(${id}U)` : part.fn} ${op} ${literal(n)}`, problems }
+}
+
+// The parts, joined with && (economist: "they are added up with &&"). Returns { condition, problems: [{ index,
+// problems }] } - the condition only when every part is complete.
+export function buildCondition(parts) {
+  const written = (parts ?? []).map((p) => partCondition(p))
+  const problems = written.map((w, index) => ({ index, problems: w.problems })).filter((x) => x.problems.length)
+  return { condition: problems.length || !written.length ? '' : written.map((w) => w.text).join(' && '), problems }
+}
+
+// fn_DiamondMine_Progression(57634U) > 95 (kept for one progression part).
+export function progressionCondition({ feature = 'diamond-mine', eventId = '', op = '>', percent = null } = {}) {
+  const { text, problems } = partCondition({ kind: feature === 'merge' ? 'merge-progression' : 'dm-progression', eventId, op, value: percent })
+  return { condition: text, problems }
 }
 
 // --- Reading a condition ----------------------------------------------------------
@@ -228,8 +297,11 @@ function describeValue(node, issues) {
   }
   if (node.k === 'num') return numText(node)
   if (node.k === 'name') {
-    issues.push({ level: 'warn', text: `"${node.v}" is a name the app does not know.` })
-    return node.v
+    const f = segmentFunction(node.v)
+    if (f?.form === 'value') return f.label
+    if (f) issues.push({ level: 'error', text: `${node.v} is written with brackets: ${f.example.split(' ')[0]}.`, code: 'form' })
+    else issues.push({ level: 'warn', text: `${node.v} is not known to the app yet: teach it in chat.`, code: 'unknown-function' })
+    return f ? f.label : `${node.v} [not known to the app yet]`
   }
   if (node.k === 'math') return `(${describeValue(node.left, issues)} ${node.op} ${describeValue(node.right, issues)})`
   return '?'
@@ -239,6 +311,10 @@ function checkCall(node, issues) {
   const f = segmentFunction(node.name)
   if (!f) {
     issues.push({ level: 'warn', text: `${node.name} is not known to the app yet: teach it in chat.`, code: 'unknown-function' })
+    return
+  }
+  if (f.form === 'value') {
+    issues.push({ level: 'error', text: `${node.name} is written without brackets: ${f.example.split(' ')[0]}.`, code: 'form' })
     return
   }
   if (node.args.length !== f.args.length) issues.push({ level: 'error', text: `${node.name} takes ${f.args.length} input${f.args.length === 1 ? '' : 's'} (${f.args.map((a) => a.name).join(', ')}); it has ${node.args.length} here.` })
@@ -260,7 +336,8 @@ function describe(node, issues) {
   if (node.k === 'cmp') {
     const left = describeValue(node.left, issues)
     const right = describeValue(node.right, issues)
-    const unit = node.left.k === 'call' && segmentFunction(node.left.name)?.unit === '%' ? '%' : ''
+    const leftFn = node.left.k === 'call' ? segmentFunction(node.left.name) : node.left.k === 'name' ? segmentFunction(node.left.v) : null
+    const unit = leftFn?.unit === '%' ? '%' : leftFn?.unit === 'allowance' ? ' allowance' : ''
     return `${left} is ${OP_WORDS[node.op]} ${right}${unit}`
   }
   issues.push({ level: 'warn', text: 'A part with no comparison: it does not say who is in.' })
@@ -285,6 +362,7 @@ export function readCondition(text) {
   const walk = (n) => {
     if (!n || typeof n !== 'object') return
     if (n.k === 'call' && !functions.includes(n.name)) functions.push(n.name)
+    if (n.k === 'name' && !functions.includes(n.v)) functions.push(n.v)
     for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(walk)
     else if (v && typeof v === 'object') walk(v)
   }

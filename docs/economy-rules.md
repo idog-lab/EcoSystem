@@ -198,7 +198,18 @@ was explained in, an example, and what is not confirmed - never invented:
   the player's progression in that event, in % ("the only thing important is
   the event Id"); `fn_DiamondMine_Progression(57634U) > 95` = above 95%
   (`progressionCondition`; a decimal % takes m).
-The Segments tab writes a progression condition, lists the functions, and
+- **The modes and their multipliers** - the 1m,2m,4m,8m of Brut Wins
+  ("#m is the multiplier on the mode. each net win is a level win, each brut
+  win is the net win * mode multiplier"): mode 1 x1, mode 2 x2, mode 3 x4,
+  mode 4 x8 (`MODE_MULTIPLIERS`).
+- `CoinsInAllowance` (the balance, in allowance - "mostly when we will use the
+  balance to get a segment of users with low balance", OOC = out of coins) and
+  `CurrentLevel`: names alone, no brackets. Their example:
+  `CoinsInAllowance < 2 && CurrentLevel > 519`.
+- **Parts are joined with `&&`** ("its another fucntions they are added up
+  with &&"): progression is a part like any other.
+The Segments tab builds a condition of parts (progression by event id,
+balance, level; `buildCondition`), lists the functions, and
 **reads any condition** (`readCondition`): in words, part by part; an event id
 without U, a wrong number of inputs or a bracket left open must be fixed; a
 function not in the dictionary is named "not known to the app yet", never
