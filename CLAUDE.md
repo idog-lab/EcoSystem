@@ -37,8 +37,12 @@ When this file and the history disagree, this file wins.
   urself" - it replaces "Pull request, you approve"): when a piece of work is
   done and its checks pass, commit, push the branch, open the pull request,
   wait for GitHub's "Build and lint" check and merge it - then say what went
-  live. Never merge with a failing check, and never merge the coworker's
-  branches (theirs are theirs to merge). Pull requests are opened and merged
+  live. Never merge with a failing check. **A coworker's branch is merged
+  only when the economist asks** (25 Nov 2026, `architecture/foundation`:
+  "we got 1 of my cororker that we need to push"): tested first on a copy -
+  today's master merged in, built, opened as GitHub Pages serves it, the
+  checks run - then on a branch of its own (`merge/<their branch>`), their
+  branch left as it is. Pull requests are opened and merged
   with GitHub's `gh` tool, signed in by the economist; never read a token out
   of git's saved logins. **A merge into master publishes the site by itself**
   (`.github/workflows/deploy.yml`: lint, build, write `gh-pages`); nobody
