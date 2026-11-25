@@ -8241,3 +8241,80 @@ wooden, silver,golden purple" - asked, written by the name alone ("here is an
 example chest:wooden(...") and "Only the four": taught (taught.js), pink-chest
 and yellow-chest off the list and off a saved one (economy version 5).
 verify-economy 235, economy-page 75.
+
+## Segments: the functions they are made of
+
+25 Nov 2026: "the next thing i want us to do is to learn the logic of as many
+functions as we can that with them we create segments. when building segments
+we will need to create the best flow to create them with different logics";
+"the BW and ang mode are very very important. ill try to teach u as many as i
+can". First taught: `fn_DiamondMine_Progression(####U)` and
+`fn_Merge_Progression(####U)` - "those fucntions return the progression in %
+of the user", e.g. `fn_DiamondMine_Progression(57634U) > 95`, "the only thing
+important is the event Id". A dictionary of functions in the project
+(`segmentFunctions.js`, with Brut Wins and the mode multiplier from the rules
+of 24 Nov), a progression writer and a reader of any condition on the
+Segments tab. verify-economy 246, economy-page 81.
+
+Then, answered: progression is "another fucntions they are added up with &&";
+the 1m,2m,4m,8m are "the multiplier on the mode. each net win is a level
+win, each brut win is the net win * mode multiplier" - mode 1 x1, mode 2 x2,
+mode 3 x4, mode 4 x8 (the "not confirmed" on Brut Wins is gone). Taught:
+`CoinsInAllowance` (the balance in allowance; OOC, out of coins - "logic is
+mostly when we will use the balance to get a segment of users with low
+balance") and `CurrentLevel`, names without brackets; their example
+`CoinsInAllowance < 2 && CurrentLevel > 519`. The progression card became
+"Build a condition": parts (progression, balance, level) joined with &&. The
+reader says when a name is written with brackets or a function without.
+verify-economy 254, economy-page 83.
+
+Then the flow: "the brut wins bands are pretty nicelly built ... we just need
+to be able to add more logics for the segments. we need first to let the user
+give the feature name, then ... we pick the number of segments then we give
+the rule for each segment. we need to let the model be able to know the base
+of the segment. then specific, or duplication. a specific will just be added
+to the specific segments that the user picks. duplications will be used for
+now with the average modes ... lets say we give the base of the segments the
+BW splits, then we say we want that the 3 first segmetns to get avg mode split
+so 3 new segmnets will be added". Asked how a specific is named: "A tag I type
+is added". Asked what to do with the players a specific leaves out: the answer
+came through empty - the flow says it, adds nothing; open. The Segments tab is
+four steps now (`segmentFlow.js`): the feature and the base, specifics, mode
+splits, the segments; the "Split each band by mode" box and the separate
+"Build a condition" card are folded into them. verify-economy 265,
+economy-page 88.
+
+Answered: "it shouldnt add a segments for the rest, but it should warn when
+there are holes i nthe segments" - the warning now says "A hole in
+<segment>". Taught: "another function to know is win rate function.
+fn_Avg_winrate(7) > 0.9 - here is an example of in the last 7 days if the win
+rate is more than 90%" - in the dictionary and as a part of the flow (last
+days, a share 0 to 1), written as the example, 0.9 with no m (asked whether
+that is so, as other decimals take m). verify-economy 268, economy-page 90.
+
+Asked whether the win rate is written `0.9` with no m (other decimals take m):
+"0.9 without m is right" - confirmed, nothing changed in what the app writes.
+
+Then: "the base is not 100% of the time will be brutwins. a rule should be
+toggalable as base or not, then we can go to specifics and then the
+duplicators." Asked: a base other than Brut Wins makes "Bands, like Brut
+Wins", one rule at a time; its segments are named by "Fixed codes per rule" -
+"Use these codes": BW, Mode, Balance, Level, WinRate, DMProg, MergeProg. Step 1
+picks the base rule (`BASE_RULES`, `withBaseRule`); a plan saved before is a
+Brut Wins base, as it was. verify-economy 278, economy-page 94.
+
+Taught: "a cohort function ... it just gives true or false if the user is in
+the cohort. example PjCohorts.ContainsCohort(####)"; and "(GetMTXEventDataListAsStr(53524U,
+"CompletedItems")?.Count() > 10) - this one is a chef function, the number
+with the U is the event number ... returns how many dishes the user finished
+in the chef feature". The reader learned names with a dot, text in quotes
+(curly ones from the chat read the same) and ?.Count(); both are parts of a
+specific (a cohort asks for its id only). Asked: whether Chef dishes should
+be a base rule, and whether "not in a cohort" (!) is used. verify-economy 286,
+economy-page 97.
+
+Answered: "no namds for the chef. put someting looks good in the naming" -
+Chef dishes is a base rule, code `ChefDishes` (this app's own), each
+comparison in brackets as the example; "yes as for the cohort" - a cohort part
+is "in" or "not in" (`!PjCohorts.ContainsCohort(1234)`). verify-economy 289,
+economy-page 99.
