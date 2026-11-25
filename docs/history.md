@@ -8123,3 +8123,18 @@ rows only Recompletion reaches (merge tiers 13 and 14,
 `tuneRecompletionTopRows`), made from Recompletion's own amounts - it takes
 only a reward whose Recompletion amount is above 0 (the 23 Nov backup:
 charms 200 there). Said so; nothing changed.
+
+## All my data, as one file
+
+25 Nov 2026, after the move to the work repo: "we got memory in the last
+repo. can we take it back ? we had some saved merge features there". The old
+site's data is still in the economist's browser, under idoggk.github.io; the
+new site cannot read it (a browser keeps each site apart). What existed moved
+it badly: saved events one at a time, Chef by its own file, the Economy page
+and Diamond Mine not at all. Asked, the economist chose "One-file move": the
+home screen has "Your data in this browser" - Download all my data (every key
+of the app in one file) and Restore all my data (shows what the file holds
+first; adds the saved events, puts in what this browser has none of, replaces
+a part only when ticked; downloads what is here first). This version is
+published once to the old site too (idoggk/Merge, built for /Merge/), so the
+old data can be downloaded there. verify-browser-data 11, browser-data 10.

@@ -953,6 +953,20 @@ right there; rename, delete and download stay in Saved events. The browser gives
 when it is full, saving says so and nothing is overwritten. Held by
 `scripts/e2e/saved-events.mjs`.
 
+**All my data, as one file** (economist, when the site moved to the work
+repo: "we got memory in the last repo. can we take it back?"; chose "One-file
+move"). A browser keeps each site's data apart, so the home screen has "Your
+data in this browser" (`BrowserDataPanel.jsx`, `src/lib/browserData.js`):
+**Download all my data** writes every key of the app (`merge-mania*`,
+`superplay-*`, `economy-*` - saved events, the open Merge project with its
+builds and effort shape, Chef, Diamond Mine, the Economy page) to one file;
+**Restore all my data** shows what the file holds before anything changes,
+then ADDS its saved events to the list (one already here, by id, is left as it
+is), puts in every part this browser has none of, and replaces a part this
+browser has its own of only when that part is ticked. What is here is
+downloaded first; a browser without room changes nothing. Held by
+`verify-browser-data.mjs` and `scripts/e2e/browser-data.mjs`.
+
 ## Open questions (do not resolve silently)
 
 - Production Ops mapping for reward keys and the Endless pages; where Ops
