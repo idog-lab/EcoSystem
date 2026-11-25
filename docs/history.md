@@ -8294,3 +8294,11 @@ that is so, as other decimals take m). verify-economy 268, economy-page 90.
 
 Asked whether the win rate is written `0.9` with no m (other decimals take m):
 "0.9 without m is right" - confirmed, nothing changed in what the app writes.
+
+Then: "the base is not 100% of the time will be brutwins. a rule should be
+toggalable as base or not, then we can go to specifics and then the
+duplicators." Asked: a base other than Brut Wins makes "Bands, like Brut
+Wins", one rule at a time; its segments are named by "Fixed codes per rule" -
+"Use these codes": BW, Mode, Balance, Level, WinRate, DMProg, MergeProg. Step 1
+picks the base rule (`BASE_RULES`, `withBaseRule`); a plan saved before is a
+Brut Wins base, as it was. verify-economy 278, economy-page 94.
