@@ -72,7 +72,7 @@ const num = (text) => Number(String(text).replace(/[^0-9.-]/g, ''))
 
   // It survives a reload.
   await page.reload({ waitUntil: 'networkidle' })
-  await page.getByText('Merge Mania', { exact: false }).first().click()
+  // (A reload stays on the tool's own page: /models/<name>.)
   await page.waitForTimeout(400)
   await step(page, 'setup').click()
   await phase(page, 'Recompletion')

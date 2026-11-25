@@ -18,7 +18,7 @@ await page.setViewportSize({ width: 1500, height: 800 })
 
 async function openChef() {
   await page.goto(BASE, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: /Chef/ }).first().click()
+  await page.getByRole('link', { name: /Chef/ }).first().click()
   await page.getByTestId('chef-header').waitFor()
   await page.waitForTimeout(200)
 }

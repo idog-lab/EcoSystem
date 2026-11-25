@@ -1,0 +1,223 @@
+// The central database of the Economy design toolkit (PostgreSQL).
+// Architecture and rules: docs/architecture.md.
+//
+// User, Session, Account and Verification are the tables better-auth reads and
+// writes (sign-in). Everything else belongs to a Workspace, and every request
+// that touches it is checked against Membership on the server.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../server/db/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- sign-in
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions            Session[]
+  accounts            Account[]
+  memberships         Membership[]
+  documentRevisions   DocumentRevision[]
+  assumptionRevisions AssumptionRevision[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------- workspaces
+
+model Workspace {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships    Membership[]
+  folders        Folder[]
+  placements     ModelPlacement[]
+  documents      ModelDocument[]
+  assumptionSets AssumptionSet[]
+}
+
+// Every member can read and edit everything in the workspace: there are no
+// private documents and no roles yet.
+model Membership {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------- organization
+
+// A flat, shared folder. `nameKey` is the trimmed, lower-cased name: two
+// folders of a workspace may not differ only in case.
+model Folder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  nameKey     String
+  revision    Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  placements ModelPlacement[]
+
+  @@unique([workspaceId, nameKey])
+  @@index([workspaceId])
+}
+
+// Where a model sits in a workspace. No row (or folderId null) = Unfiled.
+// modelId is a registry id (src/platform/registry/catalog.ts), never a
+// foreign key: models are code, not data. Moving a model changes only this
+// row - never its URL, module or documents. A trigger in the migration keeps
+// folderId inside the same workspace.
+model ModelPlacement {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  modelId     String
+  folderId    String?
+  folder      Folder?   @relation(fields: [folderId], references: [id], onDelete: Restrict)
+  revision    Int       @default(1)
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, modelId])
+  @@index([folderId])
+}
+
+// ---------------------------------------------------------------- documents
+
+// A model's saved work. The payload is validated by the model's own schema on
+// the server; a model without one cannot save yet.
+model ModelDocument {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  modelId       String
+  title         String
+  schemaVersion Int
+  payload       Json
+  revision      Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  revisions DocumentRevision[]
+
+  @@index([workspaceId, modelId])
+}
+
+// Immutable: one row per saved revision (a trigger refuses UPDATE and DELETE).
+model DocumentRevision {
+  id            String        @id @default(cuid())
+  documentId    String
+  document      ModelDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  revision      Int
+  title         String
+  schemaVersion Int
+  payload       Json
+  actorId       String
+  actor         User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt     DateTime      @default(now())
+
+  @@unique([documentId, revision])
+}
+
+// ---------------------------------------------------------------- shared assumptions
+
+// Shared inputs several models may read (an economy value table, ...). Same
+// revision rules as documents; a saved run will reference an exact
+// AssumptionRevision. Dependencies between models are never inferred from
+// sheet names.
+model AssumptionSet {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key           String
+  schemaVersion Int
+  payload       Json
+  revision      Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  revisions AssumptionRevision[]
+
+  @@unique([workspaceId, key])
+}
+
+model AssumptionRevision {
+  id              String        @id @default(cuid())
+  assumptionSetId String
+  assumptionSet   AssumptionSet @relation(fields: [assumptionSetId], references: [id], onDelete: Restrict)
+  revision        Int
+  schemaVersion   Int
+  payload         Json
+  actorId         String
+  actor           User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@unique([assumptionSetId, revision])
+}

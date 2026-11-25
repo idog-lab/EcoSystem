@@ -8318,3 +8318,22 @@ Chef dishes is a base rule, code `ChefDishes` (this app's own), each
 comparison in brackets as the example; "yes as for the cohort" - a cohort part
 is "in" or "not in" (`!PjCohorts.ContainsCohort(1234)`). verify-economy 289,
 economy-page 99.
+
+## The coworker's platform merged
+
+25 Nov 2026: "i want us to look at the active branches. we got 3 live ones,
+and we got 1 of my cororker that we need to push". On GitHub: the coworker's
+`architecture/foundation` (their Claude, two commits: the platform - a new
+home page with search and folders, a catalog of 22 models, 15 of them "not
+migrated yet", the app in TypeScript, a toolkit server with PostgreSQL and
+Google sign-in) and two branches already merged (`feature/move-all-data`,
+`setup/auto-deploy`). Tested on a copy before anything: today's 16 merges of
+master went in with no conflict; lint, typecheck and build passed; the built
+site opened as GitHub Pages serves it, with no server - the home page says
+"Shared folders are off", Merge Mania, Chef, Economy and Diamond Mine open,
+a direct link to a model opens. One step of economy-page (added on master
+that day) clicked the old home page's button: fixed, 99/99 on the merged
+build. Asked, the economist chose to merge it now and delete the two
+finished branches. The rule "never merge the coworker's branches" became
+"only when the economist asks, tested first". The server half needs a host
+and a database: until then the live site runs without folders.

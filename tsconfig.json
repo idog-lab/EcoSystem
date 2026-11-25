@@ -1,0 +1,23 @@
+{
+  // Type-checks the TypeScript parts: the platform (src/platform, src/models),
+  // the server, the tests and the configs. The older JavaScript features are
+  // imported as they are (allowJs) but not type-checked (checkJs: false).
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src/platform", "src/models", "server", "tests", "prisma.config.ts", "vitest.config.ts", "src/main.tsx"]
+}

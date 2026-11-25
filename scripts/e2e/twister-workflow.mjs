@@ -198,7 +198,7 @@ ok('Save stores the design inputs (checkpoint, target) as plan data', saved.segm
 ok('Save stores the RC list\'s own cost and ladder separately', saved.segments[0].recompletionBoards[0].twisterSpinCost === rcSug && saved.segments[0].recompletionBoards[0].rewardChainConfig.twister[3].prizeAmount === 40 && saved.segments[0].twisterPlan.rc.checkpointPct === 60)
 ok('Twister is in no starting tile or blocked queue of any saved board', saved.segments.every((s) => [...s.boards, ...s.recompletionBoards].every((b) => !boardHasTwisterUnderTiles(b))))
 await page.reload({ waitUntil: 'networkidle' })
-await page.getByText('Merge Mania', { exact: false }).first().click()
+// (A reload stays on the tool's own page: /models/<name>.)
 await tab(page, 'Twister').click()
 await page.waitForTimeout(300)
 ok('after reload the costs, ladder, drop and inputs are all still there', numberIn(await cellText(0, 'applied')) === sug0 && numberIn(await cellText(1, 'applied')) === sug1 && (await page.getByTestId('twister-value-3').inputValue()) === '12' && (await page.getByTestId('twister-target-spins').inputValue()) === '5' && (await page.locator('[data-odds-rank="7"] [data-odds-chance]').innerText()) === '30%')

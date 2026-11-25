@@ -19,7 +19,7 @@ const set = async (locator, value) => {
 }
 const openEconomy = async () => {
   await page.goto(BASE, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: /Economy/ }).first().click()
+  await page.getByRole('link', { name: /Economy/ }).first().click()
   await page.getByTestId('economy-header').waitFor()
 }
 const goTab = async (id) => {
@@ -63,7 +63,7 @@ await set(page.getByTestId('economy-new-currency'), 'dr-test-gem')
 await page.getByTestId('economy-add-currency').click()
 await set(page.locator('[data-currency="dr-test-gem"] input[aria-label$="game play worth"]'), 0.2)
 await page.reload({ waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Economy/ }).first().click()
+// (A reload stays on the tool's own page: /models/<name>.)
 await page.getByTestId('economy-header').waitFor()
 ok('a worth typed is kept in this browser at once (dr-test-gem at 0.2 after a reload)', (await page.locator('[data-currency="dr-test-gem"] input[aria-label$="game play worth"]').inputValue()) === '0.2')
 ok(`...and listed as typed in this browser only (${await text(page.getByTestId('economy-not-taught'))})`, (await page.locator('[data-not-taught="dr-test-gem"]').count()) === 1 && /worth 0\.2/.test(await text(page.locator('[data-not-taught="dr-test-gem"]'))) && /added here/.test(await text(page.locator('[data-not-taught="dr-test-gem"]'))))
@@ -257,9 +257,7 @@ await page.waitForTimeout(150)
 // (Windows' clipboard writes line ends as \r\n.)
 const table = (await page.evaluate(() => navigator.clipboard.readText()).catch(() => '')).replace(/\r\n/g, '\n')
 ok(`4. "Copy as a table": a row a segment, name, key and condition (${table.split('\n').length - 1} rows)`, table.split('\n').length - 1 === (await page.locator('[data-segment]').count()) && table.startsWith('Name\tKey\tCondition\nDisco_BW_0_9_OOC_Mode_0_3\tdef_Disco_BW_0_9_OOC_Mode_0_3\t'))
-await page.reload({ waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Economy/ }).first().click()
-await page.getByTestId('economy-header').waitFor()
+await openEconomy()
 await goTab('segments')
 ok('the flow is kept in this browser between visits', (await page.locator('[data-segment="Disco_BW_240_Plus_DM"]').count()) === 1 && (await page.locator('[data-segment="Disco_BW_0_9_OOC_Mode_0_3"]').count()) === 1)
 // The base is one rule, toggled (economist: "the base is not 100% of the time will be brutwins").
@@ -337,7 +335,7 @@ ok('...said once: the next visit has nothing to say', (await page.getByTestId('e
 
 console.log('--- 8. Chef reads the value table ---')
 await page.goto(BASE, { waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Chef/ }).first().click()
+await page.getByRole('link', { name: /Chef/ }).first().click()
 await page.getByTestId('chef-header').waitFor()
 await page.locator('[data-chef-step="dishes"]').click()
 await page.waitForTimeout(250)

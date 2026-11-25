@@ -9,7 +9,7 @@ page.on('dialog', (d) => d.accept())
 const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim()
 
 await page.goto(BASE, { waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Chef/ }).first().click()
+await page.getByRole('link', { name: /Chef/ }).first().click()
 await page.getByTestId('chef-header').waitFor()
 await page.getByTestId('chef-more').click()
 await page.getByTestId('chef-more-panel').getByRole('menuitem', { name: 'New chef: a synthetic example (made up)' }).click()
