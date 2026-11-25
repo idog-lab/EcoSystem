@@ -206,6 +206,16 @@ was explained in, an example, and what is not confirmed - never invented:
   balance to get a segment of users with low balance", OOC = out of coins) and
   `CurrentLevel`: names alone, no brackets. Their example:
   `CoinsInAllowance < 2 && CurrentLevel > 519`.
+- `PjCohorts.ContainsCohort(<cohort id>)`: "it just gives true or false if
+  the user is in the cohort" - it stands alone, no comparison; the id written
+  with no U, as the example. Read as "In cohort 1234".
+- `(GetMTXEventDataListAsStr(<event id>U, "CompletedItems")?.Count() > 10)`:
+  "a chef function ... returns how many dishes the user finished in the chef
+  feature"; the event id with U. Written as the example, in its brackets,
+  plain quotes (the chat's curly ones are read the same). Without ?.Count()
+  it must be fixed; another list than "CompletedItems" is named, not known.
+  Both are parts of a specific; neither is a base rule yet (open: whether
+  Chef dishes should be, and its code).
 - **Parts are joined with `&&`** ("its another fucntions they are added up
   with &&"): progression is a part like any other.
 **The flow of building segments** (`segmentFlow.js`; economist, 25 Nov 2026:

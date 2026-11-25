@@ -8302,3 +8302,13 @@ Wins", one rule at a time; its segments are named by "Fixed codes per rule" -
 "Use these codes": BW, Mode, Balance, Level, WinRate, DMProg, MergeProg. Step 1
 picks the base rule (`BASE_RULES`, `withBaseRule`); a plan saved before is a
 Brut Wins base, as it was. verify-economy 278, economy-page 94.
+
+Taught: "a cohort function ... it just gives true or false if the user is in
+the cohort. example PjCohorts.ContainsCohort(####)"; and "(GetMTXEventDataListAsStr(53524U,
+"CompletedItems")?.Count() > 10) - this one is a chef function, the number
+with the U is the event number ... returns how many dishes the user finished
+in the chef feature". The reader learned names with a dot, text in quotes
+(curly ones from the chat read the same) and ?.Count(); both are parts of a
+specific (a cohort asks for its id only). Asked: whether Chef dishes should
+be a base rule, and whether "not in a cohort" (!) is used. verify-economy 286,
+economy-page 97.
