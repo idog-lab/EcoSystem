@@ -8337,3 +8337,9 @@ build. Asked, the economist chose to merge it now and delete the two
 finished branches. The rule "never merge the coworker's branches" became
 "only when the economist asks, tested first". The server half needs a host
 and a database: until then the live site runs without folders.
+
+After the merge, an `npm install` in the project folder (for the platform's
+new packages) removed Playwright: it had been installed on the side, never
+listed, and npm removes what is not listed. It is a devDependency now, pinned
+to 1.64.1 - the version whose Chromium (1248) is installed here; 1.65 asks
+for a new browser. economy-page 99/99 and browser-data 10/10 with it.
