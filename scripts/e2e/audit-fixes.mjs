@@ -93,7 +93,7 @@ await page.waitForTimeout(500)
   const decoded = code ? decodeStage(code) : null
   ok('a link is made for the built normal event', !!decoded && decoded.boards.length === 2 && decoded.boards.every((b) => b.blockedQueue.length > 0))
   // A chat app ends a link at a "-" or "_", so the link has none after the address.
-  ok(`the link is letters and digits only after the address - nothing a chat app can break it at (${link.length} characters, "${link.slice(0, 52)}...")`, /^https:\/\/idoggk\.github\.io\/Merge\/\?s=[0-9A-Za-z]+$/.test(link))
+  ok(`the link is letters and digits only after the address - nothing a chat app can break it at (${link.length} characters, "${link.slice(0, 52)}...")`, /^https:\/\/idog-lab\.github\.io\/EcoSystem\/\?s=[0-9A-Za-z]+$/.test(link))
   ok(`...and short: ${link.length} characters with the address, for two built boards (under 260)`, link.length > 40 && link.length < 260)
   // The link, opened as the person it is sent to opens it: a fresh browser, nothing stored. (The link itself
   // points at the deployed site; here the same code is opened on this server.)

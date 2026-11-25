@@ -41,7 +41,9 @@ import { createSmallRewardsBankConfig, createSmallRewardWeightsConfig } from './
 
 // "Share stage" always targets this, never window.location.href - see
 // handleShare's comment for why.
-const PRODUCTION_ORIGIN = 'https://idoggk.github.io/Merge/'
+// (The work repo's site since 25 Nov 2026. Links made before point at
+// https://idoggk.github.io/Merge/ and open there as long as that site stays.)
+const PRODUCTION_ORIGIN = 'https://idog-lab.github.io/EcoSystem/'
 
 // "Build event" is the guided workflow and the place to start; every tab
 // after it is an advanced tool that edits the same canonical configuration

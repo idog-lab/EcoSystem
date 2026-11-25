@@ -142,9 +142,13 @@ docs/economy-rules.md   the economy's rules, where they apply, what is open
 Dev: `npm run dev` (port 5173, `strictPort` - localStorage is per origin
 including port, so never let it drift). `npm run build`, `npm run lint`
 (oxlint), `npm run deploy` (gh-pages, only when asked).
-Hosting: `https://idoggk.github.io/Merge/`, `base: '/Merge/'` in
+Hosting: `https://idog-lab.github.io/EcoSystem/` - the work repo
+(`origin` = idog-lab/EcoSystem since 25 Nov 2026; the old repo is the remote
+`personal`, idoggk/Merge, pushed to only when asked). `base: '/EcoSystem/'` in
 `vite.config.js` must match the repo name; `PRODUCTION_ORIGIN` in `App.jsx`
-is what every share link points at.
+is what every share link points at. Links made before the move point at
+`https://idoggk.github.io/Merge/` and open there for as long as that site is
+up. The dev server is `http://localhost:5173/EcoSystem/`.
 
 ## Domain model
 

@@ -6,7 +6,8 @@
 // public identifier, not a secret, safe to embed in client code; the actual
 // security boundary is the Authorized JavaScript Origins configured on it
 // in Google Cloud Console (localhost:5173 for dev, idoggk.github.io for the
-// deployed site) - a token request from any other origin is rejected by
+// old site - idog-lab.github.io has to be added there for the work repo's
+// site, 25 Nov 2026) - a token request from any other origin is rejected by
 // Google regardless of anyone having read this file.
 const GOOGLE_CLIENT_ID = '940778818307-cvvtd93lrcfkkt60545mhb35p5fsgt5v.apps.googleusercontent.com'
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'

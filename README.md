@@ -10,7 +10,7 @@ hosts two smaller tools: Diamond Mine and Chef.
 
 ```
 npm install
-npm run dev       # http://localhost:5173/Merge/
+npm run dev       # http://localhost:5173/EcoSystem/
 npm run build
 npm run lint
 npm run verify    # engine checks

@@ -13,7 +13,7 @@ import { chromium } from 'playwright'
 import { createBoard } from '../../src/features/merge/lib/core/board.js'
 import { placeItems } from '../../src/features/merge/lib/core/placement.js'
 
-export const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/Merge/'
+export const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/EcoSystem/'
 export const SAVE_KEY = 'merge-mania-board-simulator'
 
 export function createChecker() {

@@ -4,7 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/Merge/',
+  // The site lives at https://idog-lab.github.io/EcoSystem/ (the work repo,
+  // since 25 Nov 2026; it was idoggk.github.io/Merge/): base = the repo name.
+  base: '/EcoSystem/',
   plugins: [react(), tailwindcss()],
   // Pin the dev server to 5173 and fail loudly (strictPort) instead of
   // silently falling back to 5174+ when 5173 is already occupied by a

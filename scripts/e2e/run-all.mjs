@@ -7,7 +7,7 @@ import path from 'node:path'
 import { chromium } from 'playwright'
 
 // (The same address helpers.mjs uses; that file needs vite-node, this one runs on plain node.)
-const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/Merge/'
+const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:5173/EcoSystem/'
 
 const here = import.meta.dirname
 // art-gallery.mjs only takes pictures; helpers.mjs is shared code.
