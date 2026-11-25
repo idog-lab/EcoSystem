@@ -103,7 +103,7 @@ console.log('--- 1. Syntax: the normal list and Recompletion in the same sheets 
   // Only the economist's pages and the endless ones; none named V2 (economist: "remove the reward chain,
   // drop groups, twister, and economy" and "remove the naming of V2").
   const pageNames = await page.getByTestId('syntax-view').locator('option').allInnerTexts()
-  ok(`the Syntax tab lists only the economist's pages and the endless ones, none named V2 (${pageNames.join(', ')})`, pageNames.join('|') === 'Normal|CC|Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless')
+  ok(`the Syntax tab lists only the economist's pages (the CC sheets of Small Rewards asked for on 25 Nov 2026 among them) and the endless ones, none named V2 (${pageNames.join(', ')})`, pageNames.join('|') === 'Normal|CC|Event Data|Multipliers|Board Layouts|Recompletion Board Layouts|Generator Weights|Blocked Queue|Item Ladder|Small Rewards|Small Rewards Bank|Small Reward Weights|CC Small Rewards Bank|CC Small Reward Weights|Endless Small Rewards Bank|Endless Small Reward Weights|Endless')
   ok('Small Rewards carries the asset of each reward', ['coin', 'dr', 'puzzle', 'charm'].every((key) => /merge-config-/.test(values.find((r) => r[0] === `${key}-r1`)?.[2] ?? '')))
   await view('Normal')
   const normalText = await page.locator('pre').first().innerText()

@@ -23,7 +23,9 @@ import {
   buildAllSheetsAsValueRows,
   buildAllSegmentsWorkbook,
   buildAllSegmentsSheetsAsValueRows,
+  buildCcWorkbook,
 } from '../../lib/export/eventSheets'
+import { buildCcBankSheet, buildCcWeightsSheet, ccOptions } from '../../lib/export/smallRewardsCc'
 import { createGoogleSheet } from '../../lib/export/googleSheetsExport'
 import { rewardTextIssues, REWARD_TYPE_LABELS } from '../../lib/rewards/rewardChain'
 import { economyTextFindings } from '../../lib/export/economyCheck'
@@ -47,6 +49,9 @@ const VIEWS = [
   { id: 'small-rewards', label: 'Small Rewards' },
   { id: 'small-rewards-bank', label: 'Small Rewards Bank' },
   { id: 'small-reward-weights', label: 'Small Reward Weights' },
+  // (Not in the Ops reference: the same two sheets for a player who cannot get some of the items - economist, 25 Nov 2026.)
+  { id: 'cc-small-rewards-bank', label: 'CC Small Rewards Bank' },
+  { id: 'cc-small-reward-weights', label: 'CC Small Reward Weights' },
   { id: 'endless-small-rewards-bank', label: 'Endless Small Rewards Bank' },
   { id: 'endless-small-reward-weights', label: 'Endless Small Reward Weights' },
   // Only the pages of the economist's example, plus endless mode's three
@@ -79,6 +84,10 @@ const DESCRIPTIONS = {
     'The Ops "Small Rewards Bank" sheet — the containers a merge can drop in the normal event, followed by any container only the rank 13 and 14 merges drop. Each container is one drop the model built and plays (Build event), named ContA, ContB, ... and written in the Small Rewards keys above (coin-r1+dr-r1 = a coin rank 1 and a merge energy rank 1 dropping together). Every container is a different drop.',
   'small-reward-weights':
     'The Ops "Small Reward Weights" sheet — the weight of each container per merge tier (the rank the merge makes), plus NoDrop, exactly as the model plays them. One table for the normal event and Recompletion (the game has one): tiers 2 to 12 drop the same in both, and tiers 13 and 14 - which can only be made in Recompletion - are the two rows the build sets for it. A tier below the drop start rank can never drop, so it is NoDrop only.',
+  'cc-small-rewards-bank':
+    'Not in the Ops reference - the Small Rewards Bank for a player who can no longer get some of the items (a CC, one for each combination of Twister, puzzles and charms). The same keys; a puzzle or charm the player cannot get is a coin item of the same rank instead (puzzle-r2 -> coin-r2). A Twister item is simply not given, except in a container of three items, where a rank-1 merge energy (dr-r1) takes its place; a container that held only a Twister item drops nothing and is left out. Highlighted: the containers this CC changes. "Download the CC sheets" writes all seven, with an index of what each CC is.',
+  'cc-small-reward-weights':
+    'Not in the Ops reference - the Small Reward Weights for that CC: every weight as in the normal sheet, except that with no Twister a container that held only a Twister item drops nothing, so its weights go to NoDrop - merge tier 5 among them (its one rank-1 Twister item was the only thing it dropped; the other small rewards start at rank 6). Highlighted: the tiers this CC changes.',
   'endless-small-rewards-bank':
     'The containers endless mode drops (after rank 14), in the same shape as Small Rewards Bank. Worked out from the Recompletion containers: one rank lower, more per drop, mostly coins and merge energy. Not in the Ops reference.',
   'endless-small-reward-weights':
@@ -102,6 +111,11 @@ const SHEET_BUILDERS = {
   'small-rewards': (boards, rc) => buildSmallRewardsSheet(boards, rc ?? []),
   'small-rewards-bank': (boards, rc) => buildSmallRewardsBankSheet(boards, { recompletionBoards: rc ?? [] }),
   'small-reward-weights': (boards, rc) => buildSmallRewardWeightsSheet(boards, { recompletionBoards: rc ?? [] }),
+}
+// The CC sheets take the CC chosen (smallRewardsCc.js).
+const CC_SHEET_BUILDERS = {
+  'cc-small-rewards-bank': (boards, rc, missing) => buildCcBankSheet(boards, rc ?? [], missing),
+  'cc-small-reward-weights': (boards, rc, missing) => buildCcWeightsSheet(boards, rc ?? [], missing),
 }
 
 const TILE_CODE_STYLE = {
@@ -161,6 +175,10 @@ export default function SyntaxPage({
   const economyFindings = economyTextFindings(boards?.[0]?.rewardChainConfig, economy)
   const economyErrors = economyFindings.filter((f) => f.issues.some((i) => i.level === 'error')).length
   const [view, setView] = useState('normal')
+  // Which CC the CC sheets show (CC1 = No Twister ...).
+  const [ccId, setCcId] = useState('cc1')
+  const ccChoice = ccOptions().find((o) => o.id === ccId) ?? ccOptions()[0]
+  const ccView = !!CC_SHEET_BUILDERS[view]
   // What a download holds: the segment shown, or every segment in one file.
   const [scope, setScope] = useState('segment')
   const all = scope === 'all'
@@ -179,7 +197,9 @@ export default function SyntaxPage({
         ? buildEndlessWeightsSheet(boards, recompletionBoards)
         : view === 'endless'
           ? buildV2EndlessSheet(boards, recompletionBoards)
-          : (SHEET_BUILDERS[view]?.(boards, recompletionBoards) ?? null)
+          : CC_SHEET_BUILDERS[view]
+            ? CC_SHEET_BUILDERS[view](boards, recompletionBoards, ccChoice.missing)
+            : (SHEET_BUILDERS[view]?.(boards, recompletionBoards) ?? null)
   const boardLayouts =
     view === 'board-layouts'
       ? buildBoardLayoutsSheet(boards)
@@ -201,6 +221,19 @@ export default function SyntaxPage({
   // placeholder export and stay out of this workbook. exceljs's own file
   // writer is Node-only, so the browser download is triggered the same
   // Blob + temporary-anchor way App.jsx's backup export does.
+  async function handleDownloadCcWorkbook() {
+    const workbook = buildCcWorkbook(boards, recompletionBoards)
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const range = computeEventDateRange(eventStartDate, eventDurationDays)
+    a.download = range ? `merge-mania-small-rewards-cc_${range.start}_to_${range.end}.xlsx` : 'merge-mania-small-rewards-cc.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleDownloadWorkbook() {
     const workbook = buildWorkbook(boards, recompletionBoards, [], twisterOptions)
     const buffer = await workbook.xlsx.writeBuffer()
@@ -297,6 +330,23 @@ export default function SyntaxPage({
               ))}
             </select>
           </label>
+          {ccView && (
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap">
+              For a player with
+              <select value={ccId} onChange={(e) => setCcId(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800" data-testid="syntax-cc">
+                {ccOptions().map((o) => (
+                  <option key={o.id} value={o.id}>
+                    CC{o.n}: {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {ccView && (
+            <Button variant="secondary" size="sm" icon={Download} onClick={handleDownloadCcWorkbook} disabled={!canExportAll} data-testid="syntax-cc-download" title="All seven CCs in one file: an index (CC1 = No Twister ...), then each CC's bank and weights">
+              Download the CC sheets
+            </Button>
+          )}
           <Button variant="secondary" size="sm" icon={copied ? Check : Copy} onClick={handleCopy} disabled={!canExportSegment} title="Copies the sheet shown, tab-separated">
             {copied ? 'Copied' : 'Copy as TSV'}
           </Button>

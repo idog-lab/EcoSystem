@@ -8070,3 +8070,37 @@ round((target - worthWithoutDR) / DR_value). Built as `balance.js` and the
 "Balance tiers" tab: tiers typed or pasted from a sheet, each valued by the
 checker, X typed (the rules do not give it; 10 to start). verify-economy 201,
 economy-page 53.
+
+## Merge: Small Rewards CC
+
+25 Nov 2026. The economist: "i need us to create small rewards bank and
+weights for a CC on those. i need a CC for each option for when the player
+doesnt have anymore in its game the items that drop. when the user doesnt have
+a twister, when doesnt have a puzzle, no charms. all the options." Asked: a
+missing item becomes a coin item of the same rank; the player can be missing
+everything but merge energy (Twister, puzzles, charms: 7 CCs); with no Twister,
+merge tier 5 drops nothing. Built `smallRewardsCc.js` on the event's own
+containers (tiers 2-14): the same keys and weights, missing items as coins,
+tier 5 to NoDrop when the Twister is missing; two sheets on the Syntax tab with
+the CC picked and the changed rows highlighted, and a workbook of all seven
+with an index - the main workbook unchanged. Checked on the economist's own
+backup (read only): every tier still adds to 1000, 13 tiers as the normal
+sheet. A container can now name the same coin twice (coin-r1+coin-r1) - asked
+whether the game reads that. verify-small-rewards-cc 11, small-rewards-cc 8,
+real-play 40, twister-workflow 71, text-layout 10, guided-flow 84,
+verify-containers 162.
+
+Before it was published, the economist changed the Twister's part: "if a
+containter has a twister and it dies we can just not give drops from it
+anymore, when the container is a container that has to give 3 rewads, u can
+enter a rank 1 energy into it". So a missing Twister item is no longer a coin:
+it is dropped from its container, and in a three-item container a rank-1
+merge energy (`dr-r1`) takes its place, so the container still gives three. A
+container left with nothing (one that held only a Twister item - tier 5's,
+and the Twister-only containers of the tiers above) leaves the CC sheets and
+its weights go to NoDrop; tier 5's "Nothing" is now a case of that rule.
+Puzzles and charms still become coins of the same rank.
+verify-small-rewards-cc 14, small-rewards-cc 9, text-layout 10.
+
+The question about a container naming the same coin twice (coin-r1+coin-r1)
+was answered: "yes the game reads it well".

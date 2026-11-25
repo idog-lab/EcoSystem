@@ -787,7 +787,24 @@ rules; it was "V2 Endless"). The combined all-segment export has the same,
 behind a **Segments** page (S1 = the segment's name; kept, the economist
 asked), each segment with its own "S{n} Board Layouts / Blocked Queue / RC
 Board Layouts / Item Ladder / Small Rewards" (the values are per segment;
-Bank and Weights are one table for all). **Removed: V2 Reward Chain, V2 Drop
+Bank and Weights are one table for all). **Small Rewards CC** (economist, 25
+Nov 2026: "a CC for each option for when the player doesnt have anymore in its
+game the items that drop"; `lib/export/smallRewardsCc.js`): two more sheets on
+the Syntax tab, "CC Small Rewards Bank" and "CC Small Reward Weights", with
+the CC picked - one for each combination of Twister, puzzles and charms (7;
+"he can be missing all except of the merge"). A puzzle or charm the player
+cannot get becomes a coin item of the same rank ("A coin item of the same
+rank"). **A Twister item is not given** ("if a containter has a twister and it
+dies we can just not give drops from it anymore") - **except in a container
+of three items, where a rank-1 merge energy (`dr-r1`) takes its place** ("u
+can enter a rank 1 energy into it"). A container that held only a Twister
+item drops nothing: it leaves the CC sheets and its weights go to NoDrop -
+merge tier 5 among them ("Nothing"). The other containers keep their keys and
+weights; the rows a CC changes are highlighted. "Download the CC sheets" writes all seven in a
+workbook of their own (an index "CC": CC1 = No Twister ...; then "CC{n} Small
+Rewards Bank" / "CC{n} Small Reward Weights"); the main workbook is not
+changed. With no puzzles or charms a container may name the same coin key
+twice (coin-r1+coin-r1: two items) - economist: "the game reads it well". **Removed: V2 Reward Chain, V2 Drop
 Groups, V2 Economy, V2 Twister** - so **the price of a twist is not in the
 output** (it was only on "V2 Twister"; it is on screen and travels in a stage
 link). The assets are on Small Rewards (economist: "in the small rewards page

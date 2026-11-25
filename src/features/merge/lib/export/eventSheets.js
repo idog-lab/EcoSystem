@@ -5,6 +5,7 @@ import { MIN_RANK, MAX_RANK, RC_MAX_RANK } from '../core/ranks'
 import { REWARD_TYPES, ALL_REWARD_TYPES, TWISTER_TYPE, REWARD_TYPE_LABELS, REWARD_MAX_RANK, smallRewardKey, decodeReward, twisterSyntaxFor, syntaxForValue, DEFAULT_LEFTOVER_POLICY } from '../rewards/rewardChain'
 import { targetSpinsForSegment } from '../rewards/twisterEconomy'
 import { containersOfBoards, containersOfEvent, modelContainers } from '../rewards/containers'
+import { ccWorkbookSheets } from './smallRewardsCc'
 import { endlessOfDesign, ENDLESS_DROP_RANK_SHIFT, ENDLESS_DROP_VALUE_MULTIPLIER, ENDLESS_COIN_ENERGY_SHARE } from '../rewards/endlessMode'
 
 // Board 1's own configured tier unlock ranks (economist-editable now, see
@@ -892,6 +893,17 @@ function addBoardLayoutsSheet(workbook, name, { maxCols, sections }) {
 // external Ops/targeting decision outside this app's own scope. Optional
 // (defaults to an empty array) so every existing caller that only ever knew
 // about one RC variant keeps working unchanged.
+// THE SMALL REWARDS CC SHEETS, in a workbook of their own (smallRewardsCc.js):
+// an index - CC1 = No Twister, ... - then each CC's bank and weights. Kept out
+// of the main workbook, which holds only the economist's pages.
+export function buildCcWorkbook(boards, recompletionBoards) {
+  const workbook = new ExcelJS.Workbook()
+  for (const sheet of ccWorkbookSheets(boards, recompletionBoards ?? [])) {
+    addFlatSheet(workbook, sheet.name, sheet, sheet.columns.map((c, i) => (i === 0 ? 14 : sheet.name === 'CC' || /Bank$/.test(sheet.name) ? 48 : 10)))
+  }
+  return workbook
+}
+
 export function buildWorkbook(boards, recompletionBoards, _recompletionBoards2 = [], _twisterOptions = {}) {
   const workbook = new ExcelJS.Workbook()
   const queueFills = { 1: WORKBOOK_COLOR.entryNumberFill, 2: WORKBOOK_COLOR.poolNumberFill }
