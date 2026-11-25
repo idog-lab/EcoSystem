@@ -1,0 +1,1 @@
+import{r as e}from"./index-CePBt121.js";import{EditorApp as t}from"./App-DTp_Lwlv.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
