@@ -111,10 +111,13 @@ always be in the game ... puzzle, merge, picks, pet. those should be in a
 different table, that also holds the dates that the value is relevant to";
 `CORE_CURRENCIES`): **dr-puzzle** a value for each day, **dr-pet** a value
 for each week it is live (7 days "From the day I type"), **dr-merge** and
-**dr-pickaxe** (merge and picks, "like we got in the table now") a value
-"From date to date". Each holds `periods` - `{ from, to, value }`, both days
-included, never two on one day - and is worth only what they say: a worth
-without dates is not used (the page says so when an older save has one).
+**dr-pickaxe** (merge and picks, "like we got in the table now") **one fixed
+worth** ("as for the picks and merge, we can give a fixed value for now" -
+first they had a value "From date to date"). The puzzle and the pet hold
+`periods` - `{ from, to, value }`, both days included, never two on one day -
+and are worth only what they say: a worth without dates is not used (the page
+says so when an older save has one). Merge and picks are their one worth on
+every date; dates typed for them before are not used (said too).
 They are always on the page, in a table of their own on the Worth tab, never
 removed and never on the drop list. The puzzle's values saved in the dated
 writing (`2026-11-30=0.0376875|...`) become one day each; that writing is

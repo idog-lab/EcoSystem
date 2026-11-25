@@ -60,16 +60,20 @@ export function createCurrency({ name = '', feature = '', valueGameplay = null, 
 // puzzle, merge, picks, pet. those should be in a different table, that also holds the dates that the value is
 // relevant to. the puzzle should have different value for each day, and the pet should have different values for
 // each week he is live"). Asked: merge and picks are dr-merge and dr-pickaxe ("like we got in the table now"),
-// with a value "From date to date"; a pet week runs 7 days "From the day I type". Their worth is only what their
-// dates say: a date with no value reads unknown ("Unknown"), never the nearest one.
-//   step: 'day' (one value a day), 'week' (7 days from the day typed), 'range' (from a date to a date).
+// first with a value "From date to date", then (same day): "as for the picks and merge, we can give a fixed value
+// for now" - one worth, the same every day. A pet week runs 7 days "From the day I type". The puzzle and the pet
+// are worth only what their dates say: a date with no value reads unknown ("Unknown"), never the nearest one.
+//   step: 'day' (one value a day), 'week' (7 days from the day typed), 'range' (from a date to a date - none
+//   uses it now), 'fixed' (one worth, no dates).
 export const CORE_CURRENCIES = [
   { name: 'dr-puzzle', label: 'Puzzle', step: 'day' },
-  { name: 'dr-merge', label: 'Merge', step: 'range' },
-  { name: 'dr-pickaxe', label: 'Picks', step: 'range' },
+  { name: 'dr-merge', label: 'Merge', step: 'fixed' },
+  { name: 'dr-pickaxe', label: 'Picks', step: 'fixed' },
   { name: 'dr-pet', label: 'Pet', step: 'week' },
 ]
 export const coreCurrency = (name) => CORE_CURRENCIES.find((c) => c.name === name) ?? null
+// Is a currency always in the game worth what its dates say (puzzle, pet), rather than one fixed worth?
+export const isDatedCore = (name) => !!coreCurrency(name) && coreCurrency(name).step !== 'fixed'
 
 // --- Periods (the dates a value holds for) ----------------------------------
 
@@ -283,11 +287,13 @@ export function notTaught(economy) {
   const out = []
   for (const c of economy?.currencies ?? []) {
     const t = TAUGHT_CURRENCY_BY_NAME.get(c.name)
-    const core = !!coreCurrency(c.name)
-    // (A currency always in the game is worth only what its dates say: a worth without dates is not used.)
-    const value = isTaught(t, 'valueGameplay') || core ? null : c.valueGameplay
+    const dated = isDatedCore(c.name)
+    const fixed = coreCurrency(c.name)?.step === 'fixed'
+    // (The puzzle and the pet are worth only what their dates say: a worth without dates is not used. Merge and
+    // picks are one fixed worth: dates are not used.)
+    const value = isTaught(t, 'valueGameplay') || dated ? null : c.valueGameplay
     const daily = isTaught(t, 'daily') ? '' : c.daily
-    const periods = isTaught(t, 'periods') ? '' : formatPeriods(c.periods ?? [])
+    const periods = isTaught(t, 'periods') || fixed ? '' : formatPeriods(c.periods ?? [])
     const added = !t && !SEED_CURRENCY_NAMES.has(c.name)
     if (added || !blank(value) || !blank(daily) || periods) out.push({ kind: 'currency', name: c.name, value: blank(value) ? null : Number(value), daily: daily || periods || '', added })
   }
@@ -391,18 +397,20 @@ export function parseDailyValues(text) {
 export const formatDailyValues = (entries) => entries.map((e) => `${e.date}=${e.value}`).join('|')
 
 // Does a currency have values by date (periods, or the dated writing)?
-export const hasDatedValues = (currency) => !!(currency?.periods?.length || parseDailyValues(currency?.daily).entries.length)
+export const hasDatedValues = (currency) => coreCurrency(currency?.name)?.step !== 'fixed' && !!(currency?.periods?.length || parseDailyValues(currency?.daily).entries.length)
 
 // A currency's worth of one unit (game play), on a date. null when nothing is known - and a date with no value
 // given is unknown, never the nearest date's (economist, 25 Nov 2026, asked: "Unknown").
-// - A currency always in the game (CORE_CURRENCIES) is worth what the period holding the date says; nothing else.
+// - The puzzle and the pet (dated CORE_CURRENCIES) are worth what the period holding the date says; nothing else.
+// - Merge and picks are one fixed worth, whatever the date (dates typed for them before are not used).
 // - Another one with values by date: a date between two reads the last one before it; before the first or after
 //   the last, nothing.
 // With no date chosen, the first date's value is read, and said (`noDate`).
 export function currencyValue(currency, { date = null } = {}) {
   if (!currency) return null
-  const periods = currency.periods ?? []
-  if (periods.length || coreCurrency(currency.name)) {
+  const fixed = coreCurrency(currency.name)?.step === 'fixed'
+  const periods = fixed ? [] : (currency.periods ?? [])
+  if (periods.length || isDatedCore(currency.name)) {
     if (!periods.length) return null
     if (!date) return { value: periods[0].value, date: periods[0].from, to: periods[0].to, dated: true, noDate: true }
     const hit = periods.find((p) => p.from <= date && date <= p.to)

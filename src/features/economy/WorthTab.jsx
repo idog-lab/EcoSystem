@@ -6,7 +6,7 @@ import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark, TaughtValue }
 import DailyValues from './DailyValues'
 import PeriodValues from './PeriodValues'
 
-const STEP_TEXT = { day: 'A value for each day', week: 'A value for each week it is live (7 days from the day typed)', range: 'A value from a date to a date' }
+const STEP_TEXT = { day: 'A value for each day', week: 'A value for each week it is live (7 days from the day typed)', range: 'A value from a date to a date', fixed: 'One worth, the same every day (for now)' }
 const UNIT = { day: ['day', 'days'], week: ['week', 'weeks'], range: ['period', 'periods'] }
 
 const DR_NAME = /^dr-[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -114,13 +114,13 @@ export default function WorthTab({ economy, onChange }) {
         </Card>
       </div>
 
-      <Card title="Always in the game" subtitle="Currencies every event can give. Their worth is only what their dates say: a date with no value reads unknown.">
+      <Card title="Always in the game" subtitle="Currencies every event can give. The puzzle and the pet are worth what their dates say - a date with no value reads unknown; merge and picks have one worth for now.">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse" data-dense data-testid="economy-core-currencies">
             <thead>
               <tr className="border-b border-slate-200">
                 <th className={TH}>Currency</th>
-                <th className={TH}>Values and their dates</th>
+                <th className={TH}>Worth</th>
               </tr>
             </thead>
             <tbody>
@@ -132,6 +132,27 @@ export default function WorthTab({ economy, onChange }) {
                 const open = openDaily === c.name
                 const taught = taughtCurrency(c.name)
                 const taughtDates = isTaught(taught, 'periods')
+                if (core.step === 'fixed')
+                  return (
+                    <tr key={core.name} className="border-b border-slate-100 text-sm" data-core-currency={core.name} data-currency={core.name}>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <span className="font-medium text-slate-800">{core.label}</span> <span className={`${MONO} text-slate-500`}>{core.name}</span>
+                        <div className="text-[11px] text-slate-500">{STEP_TEXT.fixed}</div>
+                      </td>
+                      <td className={TD}>
+                        {isTaught(taught, 'valueGameplay') ? (
+                          <TaughtValue value={c.valueGameplay} taught={taught} label={`${c.name}: worth`} />
+                        ) : (
+                          <Num aria-label={`${c.name}: worth`} value={c.valueGameplay} allowEmpty onCommit={(v) => setCurrency(i, { valueGameplay: v })} className="w-24" placeholder="not set" />
+                        )}
+                        {periods.length > 0 && (
+                          <div className="mt-0.5 text-[11px] text-amber-800" data-cell="unused-dates">
+                            Values by date were typed before ({periods.length}): they are not used now - its worth is the one above.
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
                 const [one, many] = UNIT[core.step]
                 return (
                   <Fragment key={core.name}>

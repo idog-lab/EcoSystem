@@ -8226,3 +8226,9 @@ economy-page 72.
 Then: "there is no need in the notes of the DRs" - the note column is gone
 from both currency tables (a note already saved stays in the data, unseen).
 economy-page 73.
+
+Then: "as for the picks and merge, we can give a fixed value for now" - merge
+and picks are one worth each, the same on every date (step `fixed`); the
+puzzle and the pet keep their dates. Dates typed for merge or picks before are
+kept in the data, not used, and the page says so. verify-economy 230,
+economy-page 73.
