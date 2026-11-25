@@ -212,8 +212,17 @@ was explained in, an example, and what is not confirmed - never invented:
 "we need first to let the user give the feature name ... we pick the number of
 segments then we give the rule for each segment. we need to let the model be
 able to know the base of the segment. then specific, or duplication"):
-1. the feature's name; 2. **the base**: the Brut Wins bands ("pretty nicelly
-built"), one segment a band, numbered; 3. **specifics**: a condition of parts
+1. the feature's name; 2. **the base**: the bands of one rule, one segment a
+band, numbered - Brut Wins most of the time ("pretty nicelly built"), but
+**any rule can be toggled as the base** ("the base is not 100% of the time
+will be brutwins. a rule should be toggalable as base or not"; asked: one rule
+at a time, "Bands, like Brut Wins", "Fixed codes per rule" - "Use these
+codes"): Brut Wins `BW`, average mode `Mode`, balance `Balance`, level
+`Level`, win rate `WinRate` (its days; shares with no m), Diamond Mine
+progression `DMProg`, Merge progression `MergeProg` (their event id) -
+`Disco_Level_100_300` (`BASE_RULES`). A band end must fit its rule (a whole
+level, a win rate below 1, a progression below 100); the band ends typed for
+each rule are kept while another is the base; 3. **specifics**: a condition of parts
 added with && to the segments picked - its tag, typed, goes into their names
 (asked: "A tag I type is added": Disco_BW_0_9_OOC); 4. **duplications**, the
 average mode for now: the segments picked are split at the values typed - one

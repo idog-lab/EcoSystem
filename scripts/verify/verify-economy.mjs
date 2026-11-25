@@ -14,7 +14,7 @@ import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES }
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
-import { buildPlan, createPlan, modeRanges, parseSplitValues } from '../../src/lib/economy/segmentFlow.js'
+import { BASE_RULES, buildPlan, createPlan, modeRanges, parseSplitValues, withBaseRule } from '../../src/lib/economy/segmentFlow.js'
 import { SEGMENT_FUNCTIONS, MODE_MULTIPLIERS, buildCondition, partCondition, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
 import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
@@ -342,6 +342,22 @@ section('8c. The flow of building segments (segmentFlow.js)')
   const wrong = buildPlan({ ...plan, feature: '', specifics: [{ tag: '', parts: [{ kind: 'dm-progression', eventId: '', op: '>', value: 95 }], segments: [] }], splits: [{ values: 'x', segments: [0] }, { values: '3', segments: [0] }] })
   check(`what must be fixed is said: no feature, a specific without a tag or event id, a segment in two mode splits, a split value that is not one (${wrong.errors.length})`, ['feature\'s name', 'type its tag', 'event id', 'two mode splits', 'not a split value'].every((w) => wrong.errors.some((e) => e.includes(w))) && wrong.warnings.some((w) => /added to no segment/.test(w)))
   check('two specifics with one tag clash', buildPlan({ ...plan, specifics: [1, 2].map(() => ({ tag: 'X', parts: [{ kind: 'level', op: '>', value: 5 }], segments: [0] })) }).errors.some((e) => /given to two specifics/.test(e)))
+  // The base is one rule, toggled (economist: "the base is not 100% of the time will be brutwins"), in bands, named
+  // by its fixed code.
+  eq('the rules that can be the base and their codes', BASE_RULES.map((r) => r.code).join(' '), 'BW Mode Balance Level WinRate DMProg MergeProg')
+  check('a plan saved before the base could change is a Brut Wins base, as it was', buildPlan({ feature: 'Disco', cuts: '9, 18', weights: '1m,2m,4m,8m', specifics: [], splits: [] }).segments.map((s) => s.name).join(' ') === 'Disco_BW_0_9 Disco_BW_9_18 Disco_BW_18_Plus')
+  const level = buildPlan(withBaseRule(plan, 'level'))
+  check(`a level base: bands of the current level, named Disco_Level_ (${level.segments.map((s) => `${s.name}: ${s.condition}`).join(' | ')})`, level.errors.length === 0 && level.segments.map((s) => s.name).join(' ') === 'Disco_Level_0_100 Disco_Level_100_300 Disco_Level_300_519 Disco_Level_519_Plus' && level.segments[1].condition === 'CurrentLevel > 100 && CurrentLevel <= 300' && level.segments[3].condition === 'CurrentLevel > 519')
+  const wrBase = buildPlan({ ...withBaseRule(plan, 'winrate'), baseDays: 14 })
+  check(`a win-rate base: its days, its shares with no m (${wrBase.segments.map((s) => s.name).join(', ')})`, wrBase.segments[1].name === 'Disco_WinRate_0.5_0.9' && wrBase.segments[1].condition === 'fn_Avg_winrate(14) > 0.5 && fn_Avg_winrate(14) <= 0.9')
+  const dm = buildPlan({ ...withBaseRule(plan, 'dm-progression'), baseEventId: '57634' })
+  check('a progression base: the event id written with U, named DMProg', dm.segments[2].name === 'Disco_DMProg_95_Plus' && dm.segments[2].condition === 'fn_DiamondMine_Progression(57634U) > 95' && buildPlan(withBaseRule(plan, 'dm-progression')).errors.some((e) => /type the event id/.test(e)))
+  check('a mode base: written with m, like the mode split', buildPlan(withBaseRule(plan, 'mode')).segments[1].condition.endsWith('> 2m && (fn_DailyAvgModeMultiplier_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyAvgModeMultiplier_m4(14,1m,2m,4m,8m)*0.3m) <= 4m'))
+  check('band ends that do not fit the rule must be fixed: a level of 5.5, a win rate of 1 or more, a progression of 100 or more', buildPlan({ ...withBaseRule(plan, 'level'), cuts: '5.5' }).errors.some((e) => /whole numbers/.test(e)) && buildPlan({ ...withBaseRule(plan, 'winrate'), cuts: '0.5, 1.2' }).errors.some((e) => /below 1/.test(e)) && buildPlan({ ...withBaseRule(plan, 'merge-progression'), baseEventId: '1', cuts: '100' }).errors.some((e) => /below 100/.test(e)))
+  const back = withBaseRule({ ...withBaseRule(plan, 'level'), cuts: '50, 150' }, 'bw')
+  check('switching the base and back keeps what was typed for each rule', back.cuts === plan.cuts && withBaseRule(back, 'level').cuts === '50, 150')
+  check('specifics and mode splits work on any base: a level base, OOC on the first, the last split', (() => { const p = buildPlan({ ...withBaseRule(plan, 'level'), specifics: [{ tag: 'OOC', parts: [{ kind: 'balance', op: '<', value: 2 }], segments: [0] }], splits: [{ values: '3', segments: [3] }] }); return p.errors.length === 0 && p.segments.map((s) => s.name).join(' ') === 'Disco_Level_0_100_OOC Disco_Level_100_300 Disco_Level_300_519 Disco_Level_519_Plus_Mode_0_3 Disco_Level_519_Plus_Mode_3_plus' })())
+  check('every base writes conditions that read with nothing to fix', BASE_RULES.every((r) => buildPlan({ ...withBaseRule(plan, r.id), baseEventId: '57634' }).segments.every((s) => readCondition(s.condition).ok && !readCondition(s.condition).issues.length)))
   eq('split values read: "2, 4" and junk', JSON.stringify(parseSplitValues('4, 2, x, 0')), JSON.stringify({ values: [2, 4], bad: ['x', '0'] }))
   eq('mode ranges of one split: the rules\' names', modeRanges([3]).map((r) => r.name).join(' '), 'Mode_0_3 Mode_3_plus')
 }

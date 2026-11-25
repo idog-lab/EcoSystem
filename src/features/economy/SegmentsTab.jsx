@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import Card from '../../components/ui/Card'
 import { COMPARISONS, CONDITION_PARTS, MODE_MULTIPLIERS, SEGMENT_FUNCTIONS, conditionPart, partCondition, readCondition } from '../../lib/economy/segmentFunctions'
-import { baseSegments, buildPlan, createPlan, createSplit, createSpecific, planTable } from '../../lib/economy/segmentFlow'
+import { BASE_RULES, baseRule, baseSegments, buildPlan, createPlan, createSplit, createSpecific, planTable, withBaseRule } from '../../lib/economy/segmentFlow'
 import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
 
 const LABEL = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500'
@@ -34,30 +34,57 @@ export default function SegmentsTab() {
   const patch = (p) => setPlan((x) => ({ ...x, ...p }))
   const result = buildPlan(plan)
   const base = baseSegments(plan)
+  const rule = baseRule(plan.baseRule)
   const setSpecific = (i, p) => patch({ specifics: plan.specifics.map((s, j) => (j === i ? { ...s, ...p } : s)) })
   const setSplit = (i, p) => patch({ splits: plan.splits.map((s, j) => (j === i ? { ...s, ...p } : s)) })
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
-        <Card title={<StepTitle n={1} text="The feature and the base" />} subtitle="The base is the Brut Wins bands: weighted Brut Wins, 0.7 x the last 3 days + 0.3 x the last 14. A band is above its start and at most its end.">
+        <Card title={<StepTitle n={1} text="The feature and the base" />} subtitle="The base cuts the players into segments by one rule, in bands: a band is above its start and at most its end. Brut Wins is weighted: 0.7 x the last 3 days + 0.3 x the last 14.">
           <div className="flex flex-col gap-3">
+            <label className={`${LABEL} self-start`}>
+              Feature
+              <input value={plan.feature} onChange={(e) => patch({ feature: e.target.value })} className={`${INPUT} w-36`} data-testid="economy-seg-feature" />
+            </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">The base rule</span>
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="The base rule" data-testid="economy-base-rules">
+                {BASE_RULES.map((r) => (
+                  <button key={r.id} type="button" role="radio" aria-checked={rule.id === r.id} onClick={() => setPlan((x) => withBaseRule(x, r.id))} data-base-rule={r.id} title={`Names: ${plan.feature || 'Feature'}_${r.code}_...`} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 transition-colors ${rule.id === r.id ? 'bg-purple-600 text-white ring-purple-600' : 'bg-white text-slate-600 ring-slate-200 hover:text-purple-700'}`}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-wrap items-end gap-3">
-              <label className={LABEL}>
-                Feature
-                <input value={plan.feature} onChange={(e) => patch({ feature: e.target.value })} className={`${INPUT} w-36`} data-testid="economy-seg-feature" />
-              </label>
               <label className={LABEL}>
                 Band ends
                 <input value={plan.cuts} onChange={(e) => patch({ cuts: e.target.value })} className={`${INPUT} w-72`} data-testid="economy-seg-cuts" />
               </label>
-              <label className={LABEL} title="The multipliers of the modes inside the functions: mode 1 x1, mode 2 x2, mode 3 x4, mode 4 x8.">
-                Mode multipliers
-                <input value={plan.weights} onChange={(e) => patch({ weights: e.target.value })} className={`${INPUT} w-36 font-mono`} data-testid="economy-seg-weights" />
-              </label>
+              {rule.weighted && (
+                <label className={LABEL} title="The multipliers of the modes inside the functions: mode 1 x1, mode 2 x2, mode 3 x4, mode 4 x8.">
+                  Mode multipliers
+                  <input value={plan.weights} onChange={(e) => patch({ weights: e.target.value })} className={`${INPUT} w-36 font-mono`} data-testid="economy-seg-weights" />
+                </label>
+              )}
+              {rule.needsDays && (
+                <label className={LABEL}>
+                  Last days
+                  <Num aria-label="The base's days" value={plan.baseDays ?? 7} allowEmpty min={1} integer onCommit={(v) => patch({ baseDays: v })} className="w-16" data-testid="economy-base-days" />
+                </label>
+              )}
+              {rule.needsEvent && (
+                <label className={LABEL}>
+                  Event id
+                  <input value={plan.baseEventId ?? ''} onChange={(e) => patch({ baseEventId: e.target.value.trim() })} placeholder="57634" inputMode="numeric" className={`${INPUT} w-28 font-mono`} data-testid="economy-base-event" />
+                </label>
+              )}
             </div>
             <p className="text-sm text-slate-700" data-testid="economy-seg-base">
-              <span className="font-semibold">{base.length} segments in the base:</span> {base.map((b) => `${b.index + 1}. ${b.min}-${b.max ?? 'Plus'}`).join(' · ')}
+              <span className="font-semibold">
+                {base.length} segments in the base, by {rule.label}:
+              </span> {base.map((b) => `${b.index + 1}. ${b.min}-${b.max ?? 'Plus'}`).join(' · ')}
             </p>
           </div>
         </Card>

@@ -184,7 +184,7 @@ console.log('--- 5. Segments ---')
 await goTab('segments')
 // The flow: the feature and the base, specifics, mode splits, the segments.
 const segNames = () => page.locator('[data-segment]').evaluateAll((els) => els.map((e) => e.getAttribute('data-segment')))
-ok(`1. the base: the band ends give one segment a band, numbered (${await text(page.getByTestId('economy-seg-base'))})`.slice(0, 200), (await page.locator('[data-segment]').count()) === 8 && /8 segments in the base: 1\. 0-9 · 2\. 9-18/.test(await text(page.getByTestId('economy-seg-base'))))
+ok(`1. the base: the band ends give one segment a band, numbered (${await text(page.getByTestId('economy-seg-base'))})`.slice(0, 200), (await page.locator('[data-segment]').count()) === 8 && /8 segments in the base, by Brut Wins: 1\. 0-9 · 2\. 9-18/.test(await text(page.getByTestId('economy-seg-base'))))
 const BW = '(fn_DailyBrutWins_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyBrutWins_m4(14,1m,2m,4m,8m)*0.3m)'
 const MODE = '(fn_DailyAvgModeMultiplier_m4(3,1m,2m,4m,8m)*0.7m+fn_DailyAvgModeMultiplier_m4(14,1m,2m,4m,8m)*0.3m)'
 // 3. The economist's example: the first three segments get a mode split - three segments more.
@@ -244,6 +244,18 @@ await page.getByRole('button', { name: /Economy/ }).first().click()
 await page.getByTestId('economy-header').waitFor()
 await goTab('segments')
 ok('the flow is kept in this browser between visits', (await page.locator('[data-segment="Disco_BW_240_Plus_DM"]').count()) === 1 && (await page.locator('[data-segment="Disco_BW_0_9_OOC_Mode_0_3"]').count()) === 1)
+// The base is one rule, toggled (economist: "the base is not 100% of the time will be brutwins").
+await page.locator('[data-base-rule="level"]').click()
+await page.waitForTimeout(150)
+const lv = await segNames()
+ok(`the base switched to the current level: its bands, named Disco_Level_, specifics and splits kept on the segments that exist (${lv.slice(0, 3).join(', ')}, ...)`, lv[0] === 'Disco_Level_0_100_OOC_Mode_0_3' && lv.includes('Disco_Level_519_Plus_WR') && /4 segments in the base, by Current level: 1. 0-100/.test(await text(page.getByTestId('economy-seg-base'))) && (await text(page.locator('[data-segment="Disco_Level_300_519_Mode_0_3"] td').nth(2))).startsWith('CurrentLevel > 300 && CurrentLevel <= 519 && ('))
+ok('...a specific whose segment is gone says so', (await page.locator('[data-plan-warning]').allInnerTexts()).some((w) => /"DM" is added to no segment/.test(w)))
+await page.locator('[data-base-rule="dm-progression"]').click()
+await page.waitForTimeout(150)
+ok('a progression base needs its event id, and says so', (await page.locator('[data-plan-error]').allInnerTexts()).some((e) => /Diamond Mine progression \(%\): type the event id/.test(e)))
+await page.locator('[data-base-rule="bw"]').click()
+await page.waitForTimeout(150)
+ok('back to Brut Wins: its band ends as they were typed, the names as before', (await page.getByTestId('economy-seg-cuts').inputValue()) === '9, 18, 40, 60, 100, 150, 240' && (await segNames())[0] === 'Disco_BW_0_9_OOC_Mode_0_3' && (await page.locator('[data-segment="Disco_BW_240_Plus_DM"]').count()) === 1)
 ok(`the functions the app knows are listed, each taught (${await page.locator('[data-seg-function]').count()})`, (await page.locator('[data-seg-function]').count()) === 7 && (await page.locator('[data-seg-function] [data-taught]').count()) === 7 && /mode 3 x4, mode 4 x8/.test(await text(page.getByTestId('economy-seg-modes'))))
 await set(page.getByTestId('economy-seg-read-input'), `${BW} > 9 && ${BW} <= 18 && (${MODE} < 3m) && fn_DiamondMine_Progression(57634U) > 95`)
 const words = await page.getByTestId('economy-seg-read-words').locator('li').allInnerTexts()
