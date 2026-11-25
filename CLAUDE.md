@@ -124,6 +124,12 @@ of their own; **a date with no value is unknown**, never the nearest one, for
 every dated currency. Other currencies are added from a
 drop list (`GAME_CURRENCIES`: the economist's list of the game's currencies,
 copied as given; dr-basket-counter on it is never offered - removed by them).
+**Segments are being taught function by function** (economist, 25 Nov 2026;
+"the BW and avg mode are very very important"): `segmentFunctions.js` is the
+dictionary (Brut Wins, the mode multiplier, Diamond Mine and Merge
+progression by event id), with their words; the Segments tab reads any
+condition in words and names a function it does not know. Add a function only
+as explained in chat; the flow that combines the logics comes after.
 **These rules are for prizes on a feature's tiers only** (economist: "all the
 rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the

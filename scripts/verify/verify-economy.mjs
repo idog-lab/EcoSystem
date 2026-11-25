@@ -14,6 +14,7 @@ import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES }
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
+import { SEGMENT_FUNCTIONS, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
 import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
 import { DEFAULT_REWARD_VALUES } from '../../src/features/chef/lib/chefModel.js'
@@ -284,6 +285,25 @@ check('an overlap is found', checkBands([{ min: 0, max: 10 }, { min: 9, max: nul
 check('a last band with an end is found', checkBands([{ min: 0, max: 10 }]).some((s) => /nothing covers/i.test(s)))
 eq('split by mode: two segments a band', buildSegments('Disco', bands, { splitByMode: true }).length, 8)
 check('the Chef live segments follow the same naming', LIVE_SEGMENT_SET.filter((s) => s.min != null).every((s) => s.name === segmentName('Chef', { min: s.min, max: s.max })))
+
+section('8a. The functions segments are made of (segmentFunctions.js)')
+{
+  eq('the functions taught: Brut Wins, the mode multiplier, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 fn_DiamondMine_Progression fn_Merge_Progression')
+  check('each says who explained it, when and in what words, with an example that reads with nothing to fix', SEGMENT_FUNCTIONS.every((f) => f.said && /^\d{4}-\d{2}-\d{2}$/.test(f.on) && f.by && readCondition(f.example).ok && !readCondition(f.example).issues.length))
+  eq('a progression condition, the economist\'s example to the character', progressionCondition({ feature: 'diamond-mine', eventId: '57634', op: '>', percent: 95 }).condition, 'fn_DiamondMine_Progression(57634U) > 95')
+  eq('...Merge, an id typed with its U, a decimal % with m', progressionCondition({ feature: 'merge', eventId: '61200U', op: '<=', percent: 50.5 }).condition, 'fn_Merge_Progression(61200U) <= 50.5m')
+  const bad = progressionCondition({ feature: 'merge', eventId: '57a', percent: 120 })
+  check(`...nothing written while the id is not digits or the % is not 0 to 100 (${bad.problems.join(' ')})`, bad.condition === '' && bad.problems.length === 2)
+  const r = readCondition('fn_DiamondMine_Progression(57634U) > 95')
+  eq('read in words: "Diamond Mine progression in event 57634 is above 95%"', r.clauses.join(' | '), 'Diamond Mine progression in event 57634 is above 95%')
+  const band = readCondition(`${segmentCondition({ min: 9, max: 18, mode: 'low' })} && fn_Merge_Progression(61200U) >= 50`)
+  check(`a Brut Wins band split by mode, with a progression: four parts in words (${band.clauses.join(' | ')})`, band.ok && band.clauses.length === 4 && /weighted Daily Brut Wins \(0\.7 x the last 3 days \+ 0\.3 x the last 14 days\) is above 9/.test(band.clauses[0]) && /Average mode multiplier .* is below 3/.test(band.clauses[2]) && /Merge progression in event 61200 is at least 50%/.test(band.clauses[3]))
+  check('an event id without its U must be fixed', !readCondition('fn_DiamondMine_Progression(57634) > 95').ok && readCondition('fn_DiamondMine_Progression(57634) > 95').issues.some((i) => i.code === 'event-id'))
+  const unknown = readCondition('fn_Something_New(3) > 2')
+  check('a function the app does not know is named, never guessed at - a warning, the rest still read', unknown.ok && unknown.issues.some((i) => i.code === 'unknown-function' && /fn_Something_New/.test(i.text)))
+  check('a condition that cannot be read says why (a bracket left open, an "&&" with nothing after)', /expected/.test(readCondition('(fn_Merge_Progression(1U) > 95').issues[0].text) && /ends too soon/.test(readCondition('fn_Merge_Progression(1U) > 95 &&').issues[0].text))
+  check('every segment the Segments tab writes reads with nothing to fix', buildSegments('Disco', bands, { splitByMode: true }).every((s) => readCondition(s.condition).ok && !readCondition(s.condition).issues.length))
+}
 
 section('8b. The game keys (given 24 Nov 2026)')
 eq('608 sticker packs, every one worth 0 (economist: "0 for every pack")', `${economy.keys.packs.length} ${economy.keys.packs.every((k) => k.value === 0)}`, '608 true')

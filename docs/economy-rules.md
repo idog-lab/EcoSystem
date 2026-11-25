@@ -184,6 +184,25 @@ end: first `BW <= max`, middle `BW > min && BW <= max`, last `BW > min`;
 optional `&& (MODE < 3m)` / `&& (MODE >= 3m)`. Name
 `<Feature>_BW_<min>_<max|Plus>[_Mode_0_3|_Mode_3_plus]`, key `def_<name>`.
 Bands must be contiguous, not overlap, and cover 0 to no end (`checkBands`).
+
+**The functions segments are made of** (economist, 25 Nov 2026: "the next
+thing i want us to do is to learn the logic of as many functions as we can
+that with them we create segments ... when building segments we will need
+to create the best flow to create them with different logics"; "the BW and
+avg mode are very very important"). A dictionary in the project,
+`segmentFunctions.js` (`SEGMENT_FUNCTIONS`), each function with the words it
+was explained in, an example, and what is not confirmed - never invented:
+- `fn_DailyBrutWins_m4(days,1m,2m,4m,8m)`, `fn_DailyAvgModeMultiplier_m4(...)`
+  (section 4 above; what 1m,2m,4m,8m stand for is not confirmed).
+- `fn_DiamondMine_Progression(<event id>U)`, `fn_Merge_Progression(<event id>U)`:
+  the player's progression in that event, in % ("the only thing important is
+  the event Id"); `fn_DiamondMine_Progression(57634U) > 95` = above 95%
+  (`progressionCondition`; a decimal % takes m).
+The Segments tab writes a progression condition, lists the functions, and
+**reads any condition** (`readCondition`): in words, part by part; an event id
+without U, a wrong number of inputs or a bracket left open must be fixed; a
+function not in the dictionary is named "not known to the app yet", never
+guessed at. How the logics combine into a flow is the next step.
 Chef's live segments already follow this. Segment economics (multiplier,
 burnout, effective multiplier, Total DR, target points) are given but not yet
 built into a shared calculation.

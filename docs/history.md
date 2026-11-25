@@ -8241,3 +8241,17 @@ wooden, silver,golden purple" - asked, written by the name alone ("here is an
 example chest:wooden(...") and "Only the four": taught (taught.js), pink-chest
 and yellow-chest off the list and off a saved one (economy version 5).
 verify-economy 235, economy-page 75.
+
+## Segments: the functions they are made of
+
+25 Nov 2026: "the next thing i want us to do is to learn the logic of as many
+functions as we can that with them we create segments. when building segments
+we will need to create the best flow to create them with different logics";
+"the BW and ang mode are very very important. ill try to teach u as many as i
+can". First taught: `fn_DiamondMine_Progression(####U)` and
+`fn_Merge_Progression(####U)` - "those fucntions return the progression in %
+of the user", e.g. `fn_DiamondMine_Progression(57634U) > 95`, "the only thing
+important is the event Id". A dictionary of functions in the project
+(`segmentFunctions.js`, with Brut Wins and the mode multiplier from the rules
+of 24 Nov), a progression writer and a reader of any condition on the
+Segments tab. verify-economy 246, economy-page 81.
