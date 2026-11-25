@@ -14,7 +14,7 @@ import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES }
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
-import { SEGMENT_FUNCTIONS, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
+import { SEGMENT_FUNCTIONS, MODE_MULTIPLIERS, buildCondition, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
 import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
 import { DEFAULT_REWARD_VALUES } from '../../src/features/chef/lib/chefModel.js'
@@ -288,7 +288,17 @@ check('the Chef live segments follow the same naming', LIVE_SEGMENT_SET.filter((
 
 section('8a. The functions segments are made of (segmentFunctions.js)')
 {
-  eq('the functions taught: Brut Wins, the mode multiplier, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 fn_DiamondMine_Progression fn_Merge_Progression')
+  eq('the functions taught: Brut Wins, the mode multiplier, balance, level, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 CoinsInAllowance CurrentLevel fn_DiamondMine_Progression fn_Merge_Progression')
+  eq('the modes and their multipliers (economist: "mode 1 - 1, mode 2 - 2, mode 3 - 4, mode 4 - 8") - the 1m,2m,4m,8m', MODE_MULTIPLIERS.map((m) => `${m.mode}:x${m.multiplier}`).join(' '), '1:x1 2:x2 3:x4 4:x8')
+  check('...so the Brut Wins functions have nothing left unconfirmed, their mode inputs named by mode', ['fn_DailyBrutWins_m4', 'fn_DailyAvgModeMultiplier_m4'].every((n) => { const f = SEGMENT_FUNCTIONS.find((x) => x.name === n); return !f.open && f.args.slice(1).map((a) => `${a.mode}=${a.name}`).join(' ') === '1=1m 2=2m 3=4m 4=8m' }))
+  const ooc = readCondition('CoinsInAllowance < 2 && CurrentLevel > 519')
+  eq('the economist\'s balance and level example, in words', ooc.clauses.join(' | '), 'Balance is below 2 allowance | Current level is above 519')
+  check('a name written alone is called with brackets by mistake, or a function without them: must be fixed', readCondition('CurrentLevel() > 5').issues.some((i) => i.code === 'form') && readCondition('fn_Merge_Progression > 5').issues.some((i) => i.code === 'form'))
+  check('a name the app does not know is named, never guessed at (PayerTier)', readCondition('PayerTier > 2').ok && readCondition('PayerTier > 2').issues.some((i) => i.code === 'unknown-function' && /PayerTier/.test(i.text)))
+  eq('parts joined with && (economist: "they are added up with &&"): the balance and level example to the character', buildCondition([{ kind: 'balance', op: '<', value: 2 }, { kind: 'level', op: '>', value: 519 }]).condition, 'CoinsInAllowance < 2 && CurrentLevel > 519')
+  eq('...a progression, a balance with decimals (m)', buildCondition([{ kind: 'dm-progression', eventId: '57634', op: '>', value: 95 }, { kind: 'balance', op: '<', value: 2.5 }]).condition, 'fn_DiamondMine_Progression(57634U) > 95 && CoinsInAllowance < 2.5m')
+  const half = buildCondition([{ kind: 'balance', op: '<', value: 2 }, { kind: 'level', op: '>', value: 5.5 }])
+  check(`...nothing written while a part is wrong, and which part says why (${JSON.stringify(half.problems)})`, half.condition === '' && half.problems.length === 1 && half.problems[0].index === 1 && /whole number/.test(half.problems[0].problems[0]))
   check('each says who explained it, when and in what words, with an example that reads with nothing to fix', SEGMENT_FUNCTIONS.every((f) => f.said && /^\d{4}-\d{2}-\d{2}$/.test(f.on) && f.by && readCondition(f.example).ok && !readCondition(f.example).issues.length))
   eq('a progression condition, the economist\'s example to the character', progressionCondition({ feature: 'diamond-mine', eventId: '57634', op: '>', percent: 95 }).condition, 'fn_DiamondMine_Progression(57634U) > 95')
   eq('...Merge, an id typed with its U, a decimal % with m', progressionCondition({ feature: 'merge', eventId: '61200U', op: '<=', percent: 50.5 }).condition, 'fn_Merge_Progression(61200U) <= 50.5m')
