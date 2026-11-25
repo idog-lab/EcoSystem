@@ -1,26 +1,31 @@
 import { useMemo, useState } from 'react'
 import Card from '../../components/ui/Card'
-import { checkReward, rewardWorth } from '../../lib/economy/parse'
+import { PRIZE_MODES, checkReward, rewardWorth } from '../../lib/economy/parse'
 import { REAL_EXAMPLES } from '../../lib/economy/examples'
-import { BUTTON, Findings, INPUT, WorthBreakdown } from './economyUi'
+import { BUTTON, Findings, INPUT, Num, WorthBreakdown } from './economyUi'
 
 
-// CHECK A REWARD: paste any reward text; see whether the game can read it,
-// what is not on the lists, and what it is worth.
+// CHECK A REWARD: paste any reward text; see whether the game can read it -
+// by the economist's validator's rules (Reward Scanner Pro) - what is not on
+// the lists, how many prizes it gives and what it is worth.
 export default function CheckTab({ economy }) {
   const [text, setText] = useState('')
   const [date, setDate] = useState('')
   const [where, setWhere] = useState('tier')
+  // The validator's run options: the prize limits, upper case triggers.
+  const [prizeMode, setPrizeMode] = useState('normal')
+  const [prizeLimit, setPrizeLimit] = useState(5)
+  const [allowUppercaseTrigger, setAllowUppercase] = useState(false)
   // Several texts at once: one a line.
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   const results = useMemo(
     () =>
       lines.map((line) => {
-        const check = checkReward(line, { economy, coinDecimals: where === 'small' ? 3 : 2 })
+        const check = checkReward(line, { economy, coinDecimals: where === 'small' ? 3 : 2, prizeMode, prizeLimit, allowUppercaseTrigger })
         return { line, check, worth: check.node ? rewardWorth(check.node, economy, { date: date || null }) : null }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, economy, date, where],
+    [text, economy, date, where, prizeMode, prizeLimit, allowUppercaseTrigger],
   )
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
@@ -40,6 +45,26 @@ export default function CheckTab({ economy }) {
               </select>
             </label>
           </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2" title="The validator's prize limits. Triggers and hidden counters (dr-hidden, dr-mission-N-hidden, dr-pack-counter, dr-basket-counter) are not prizes.">
+              Prizes
+              <select value={prizeMode} onChange={(e) => setPrizeMode(e.target.value)} className={INPUT} data-testid="economy-check-prize-mode">
+                {PRIZE_MODES.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {prizeMode === 'custom' && <Num aria-label="My prize limit" value={prizeLimit} min={0} integer onCommit={setPrizeLimit} className="w-16" data-testid="economy-check-prize-limit" />}
+            <label className="flex items-center gap-2" title="The validator takes lower case triggers only, unless this is ticked.">
+              <input type="checkbox" checked={allowUppercaseTrigger} onChange={(e) => setAllowUppercase(e.target.checked)} data-testid="economy-check-uppercase" />
+              Allow upper case triggers
+            </label>
+          </div>
+          <p className="text-xs text-slate-500" data-note>
+            Checked by the rules of the economist&apos;s validator (Reward Scanner Pro): a dynamic(...) in brackets, a [ ] group starting with dynamic or a pack, no preset in brackets, whole currency amounts, unknown keys to fix.
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-500">The economist&apos;s examples:</span>
             {REAL_EXAMPLES.map((ex, i) => (
@@ -69,6 +94,12 @@ export default function CheckTab({ economy }) {
                 <p className={`text-sm font-semibold ${errors ? 'text-rose-700' : warnings ? 'text-amber-800' : 'text-emerald-700'}`} data-testid="economy-check-verdict">
                   {errors ? `The game cannot read it as it is: ${errors} to fix` : warnings ? `Readable, ${warnings} thing${warnings === 1 ? '' : 's'} to look at` : 'Readable, and every key is on the lists'}
                 </p>
+                {check.node && (
+                  <p className="text-sm text-slate-600" data-testid="economy-check-prizes">
+                    {check.prizes} {check.prizes === 1 ? 'prize' : 'prizes'}
+                    <span className="text-xs text-slate-400"> - triggers and hidden counters are not counted</span>
+                  </p>
+                )}
                 <Findings issues={check.issues} />
                 {check.ok && <WorthBreakdown result={worth} />}
               </div>

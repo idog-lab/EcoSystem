@@ -88,9 +88,48 @@ another order, so **the checker never calls an order wrong**; the builders
 write this one.
 
 **Golden rules**: never invent a key (currency, pack, preset, chest, trigger,
-bucket - they come from the Economy page's lists; a key not on a list is a
-warning to check, not made up); empty or invalid input gives an empty string,
-never `dynamic(:0)`, `free_wild:0` or a stray `+` / `|`.
+bucket - they come from the Economy page's lists); empty or invalid input gives
+an empty string, never `dynamic(:0)`, `free_wild:0` or a stray `+` / `|`.
+
+**The validator's rules** (25 Nov 2026: the economist's own checker, "Reward
+Scanner Pro", a Google Apps Script, was given in chat; asked whose rule the
+app follows where the two disagree: "The validator's"). The checker
+(`checkReward`) holds, besides its own rules:
+- a `dynamic(...)` stands in brackets, `[dynamic(...)]` - bare, it must be
+  fixed, in a chest too;
+- a `[ ]` group starts with `dynamic(...)` or `sticker_pack:...`; one alone in
+  brackets is only one of those two; no `preset:` inside brackets; a second
+  `dynamic` goes in a group of its own, at the end
+  (`[dynamic(a)|[dynamic(b)|...]]`); no option twice; no `+` inside an option;
+- a currency amount is a whole number - only coins take decimals;
+- a trigger is lower case letters, digits and `_` (upper case only with "Allow
+  upper case triggers", the validator's option - `trigger:Pity`, on the
+  Economy page's list from the rules text, is to fix by default);
+- **a currency, an allowance bucket or a preset not known is an error** (it was
+  a warning). Known currencies: the Economy page's, the game's list and the
+  validator's own (`VALIDATOR_CURRENCIES`, 13 of them on no other list);
+  buckets: the page's, and `milestone` and `pricing` (the validator's). A pack
+  or a trigger off the list stays a warning - the validator does not check
+  those against a list.
+- **The prize count** (`prizeCount`, `prizeFindings`): every item is a prize but
+  triggers and the hidden counters (`NON_COUNTING_CURRENCIES`: dr-hidden,
+  dr-mission-1..5-hidden, dr-pack-counter, dr-basket-counter); a group is
+  hidden when every option is. Limits, as the validator's run options: normal
+  - more than 10 is worth a look; challenge - 3 or more; tournament - more than
+  3 must be fixed; a limit of your own; 0 prizes is worth a look. The real
+  examples count 5, 4, 1 and 5.
+Where the validator is looser, the app's own rule stays (the validator reads
+whatever the app calls fine): an amount of 0 or less, more than 2 decimals of
+coins (3 on Merge Mania's small rewards) - **asked**. `Missing(...)` and
+`Duplicate(...)` (the rules text) are read with a note that the validator
+reads them only if added there as a key - **asked**. The validator's
+`dr:<key>:<value>` and a bare `coins:N` stay unknown to the app: whether the
+game reads them, the economist is "Not sure" - **open**. Not built: the
+validator's sheet checks (a Syntax column's empty rows, Tier Points numbers,
+CSV user ids, Momentum triggers per tab, the currency-chain summary); not
+given: its preset allow-list and its check of a Segments sheet for forbidden
+functions. The app's builders write what it accepts ("Balance tiers" writes
+`[dynamic(...)]` now).
 
 Builders (`syntax.js`): `rewardSyntax`, `coinsSyntax`, `resourceSyntax`,
 `altReward` (DR_AltReward), `drSyntax` (DR_Syntax_V5), `counterSyntax`,

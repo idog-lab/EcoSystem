@@ -10,7 +10,8 @@
 //            app's own
 // The order of the parts is never a finding.
 
-import { RESOURCE_BY_TOKEN, findCurrency, findKey, isKnownPreset, currencyValue, hasDatedValues, presetValue } from './economyModel'
+import { RESOURCE_BY_TOKEN, findCurrency, findKey, isKnownCurrencyName, isKnownPreset, currencyValue, hasDatedValues, presetValue } from './economyModel'
+import { NON_COUNTING_CURRENCIES, VALIDATOR_BUCKETS } from './gameKeys'
 
 const NUMBER = /^-?\d+(?:\.\d+)?$/
 const DR_NAME = /^dr-[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -154,7 +155,22 @@ export function formatReward(node) {
 
 // --- Checking ------------------------------------------------------------------
 
-// options: { economy, coinDecimals (2; Merge Mania's small rewards 3) }
+// THE VALIDATOR'S RULES (economist, 25 Nov 2026: their "Reward Scanner Pro" was given in chat, and asked whose rule
+// the app follows where the two disagree: "The validator's"). On top of the app's own:
+//   - a dynamic(...) stands in brackets: [dynamic(...)];
+//   - a [ ] group starts with dynamic(...) or sticker_pack:...; one alone in brackets is only one of those two;
+//   - no preset:... inside brackets; a second dynamic(...) goes in a group of its own, at the end:
+//     [dynamic(a)|[dynamic(b)|...]]; no option twice in a group; no "+" inside an option;
+//   - a currency amount is a whole number (only coins take decimals);
+//   - a trigger is lower case letters, digits and "_" (upper case only when asked: allowUppercaseTrigger);
+//   - a currency, an allowance bucket or a preset not known is an ERROR (a pack or a trigger off the list stays a
+//     warning: the validator does not check those against a list).
+// Where the validator is looser - an amount of 0, coins with more decimals - the app's own rule (from the rules
+// text) stays: the validator reads whatever the app calls fine.
+// options: { economy, coinDecimals (2; Merge Mania's small rewards 3), allowUppercaseTrigger }
+const TRIGGER = /^[a-z0-9_]+$/
+const TRIGGER_UPPER = /^[A-Za-z0-9_]+$/
+const BUCKETS = new Set(VALIDATOR_BUCKETS)
 function validate(node, options, add) {
   const economy = options.economy ?? null
   const coinDecimals = options.coinDecimals ?? 2
@@ -164,20 +180,36 @@ function validate(node, options, add) {
     seen.add(message)
     add(level, message, code)
   }
-  const walk = (n) => {
+  const starts = (n) => (n?.type === 'first' ? starts(n.options[0]) : n?.type)
+  // ctx.inGroup: inside [ ] (dynamic may stand there; a preset may not).
+  const walk = (n, ctx = { inGroup: false }) => {
     switch (n.type) {
       case 'all':
-        n.parts.forEach(walk)
+        if (ctx.inGroup) once('error', `"${formatReward(n)}": one item an option - a "+" inside [ ] is not read.`, 'group-plus')
+        n.parts.forEach((x) => walk(x, ctx))
         break
-      case 'first':
-        n.options.forEach(walk)
+      case 'first': {
+        const opts = n.options
+        const text = formatReward(n)
+        const first = opts[0]
+        if (opts.length === 1 && first?.type !== 'dynamic' && first?.type !== 'pack') once('error', `"${text}": only a dynamic(...) or a sticker_pack:... stands alone in brackets.`, 'group-redundant')
+        else if (first?.type === 'preset') once('error', `"${text}": a preset:... is never inside brackets - give it as an item of its own.`, 'group-preset')
+        else if (first?.type !== 'dynamic' && first?.type !== 'pack') once('error', `"${text}": a [ ] group starts with dynamic(...) or sticker_pack:... - here it starts with "${formatReward(first)}".`, 'group-start')
+        opts.forEach((o, i) => {
+          if (i > 0 && o.type === 'dynamic') once('error', `"${text}": a second dynamic(...) goes in a group of its own, at the end - [dynamic(...)|[dynamic(...)|...]].`, 'group-nesting')
+          if (o.type === 'first' && starts(o) === 'dynamic' && i < opts.length - 1) once('error', `"${text}": a group of dynamic(...) inside a group closes at its end.`, 'group-nesting')
+          if (o.type === 'first' && starts(o) !== 'dynamic' && o.options.length === 1) once('error', `"${formatReward(o)}": brackets inside brackets around one item.`, 'group-redundant')
+          if (opts.findIndex((x) => formatReward(x) === formatReward(o)) !== i) once('error', `"${text}": "${formatReward(o)}" is an option twice.`, 'group-duplicate')
+        })
+        opts.forEach((o) => walk(o, { inGroup: true }))
         break
+      }
       case 'chest':
         // (A chest's name is typed by the economist - "let me put the name" - so one off the list is not named. A
         // name with characters a key never has is.)
         if (!n.name) once('error', 'A chest with no name.', 'chest-name')
         else if (!KEY.test(n.name)) once('error', `The chest "${n.name}": a name is letters, digits, "-", "_" or ".".`, 'chest-name')
-        walk(n.inner)
+        walk(n.inner, { inGroup: false })
         break
       case 'allowance': {
         if (!NUMBER.test(n.coins)) once('error', `allowance(coins:${n.coins}): the coins are not a number.`, 'not-a-number')
@@ -188,7 +220,7 @@ function validate(node, options, add) {
         }
         if (n.bucket != null) {
           if (!n.bucket || !KEY.test(n.bucket)) once('error', 'allowance: with no bucket name.', 'bucket-name')
-          else if (economy && !findKey(economy, 'buckets', n.bucket)) once('warning', `The allowance bucket "${n.bucket}" is not on the Economy page's list.`, 'unknown-key')
+          else if (economy && !findKey(economy, 'buckets', n.bucket) && !BUCKETS.has(n.bucket)) once('error', `The allowance bucket "${n.bucket}" is not known: not on the Economy page's list, nor the validator's.`, 'unknown-key')
         }
         break
       }
@@ -200,15 +232,17 @@ function validate(node, options, add) {
         break
       }
       case 'dynamic': {
+        if (!ctx.inGroup) once('error', `dynamic(${n.name}:${n.amount}) stands in brackets: [dynamic(${n.name}:${n.amount})].`, 'dynamic-bare')
         if (!n.name) once('error', `dynamic(:${n.amount}): no currency name.`, 'dr-name')
         else if (!DR_NAME.test(n.name)) once('error', `"${n.name}": a currency name starts with "dr-" and is written in lower case with "-".`, 'dr-name')
         else if (economy) {
           const c = findCurrency(economy, n.name)
-          if (!c) once('warning', `The currency "${n.name}" is not on the Economy page's list.`, 'unknown-key')
-          else if (c.ownName) once('warning', `"${n.name}" is this app's own name - not confirmed as the game's.`, 'own-name')
+          if (!c && !isKnownCurrencyName(n.name)) once('error', `The currency "${n.name}" is not known: not on the Economy page, the game's list or the validator's.`, 'unknown-key')
+          else if (c?.ownName) once('warning', `"${n.name}" is this app's own name - not confirmed as the game's.`, 'own-name')
         }
         if (!NUMBER.test(n.amount)) once('error', `dynamic(${n.name}:${n.amount}): the amount is not a number.`, 'not-a-number')
         else if (Number(n.amount) < 1) once('error', `dynamic(${n.name}:${n.amount}): an amount below 1.`, 'amount-below-1')
+        else if (!Number.isInteger(Number(n.amount))) once('error', `dynamic(${n.name}:${n.amount}): a currency amount is a whole number - only coins take decimals.`, 'not-whole')
         break
       }
       case 'pack':
@@ -216,15 +250,19 @@ function validate(node, options, add) {
         else if (economy && !findKey(economy, 'packs', n.key)) once('warning', `The pack "${n.key}" is not on the Economy page's list.`, 'unknown-key')
         break
       case 'preset':
+        if (ctx.inGroup) once('error', `preset:${n.key} is never inside brackets - give it as an item of its own.`, 'group-preset')
         if (!n.key || !KEY.test(n.key)) once('error', 'preset: with no key.', 'preset-key')
-        else if (economy && !isKnownPreset(economy, n.key)) once('warning', `The preset "${n.key}" is not on the Economy page's list.`, 'unknown-key')
+        else if (economy && !isKnownPreset(economy, n.key)) once('error', `The preset "${n.key}" is not known: not on the Economy page's list.`, 'unknown-key')
         break
       case 'trigger':
-        if (!n.name || !KEY.test(n.name)) once('error', 'trigger: with no name.', 'trigger-name')
+        if (!n.name) once('error', 'trigger: with no name.', 'trigger-name')
+        else if (!(options.allowUppercaseTrigger ? TRIGGER_UPPER : TRIGGER).test(n.name)) once('error', `trigger:${n.name}: a trigger is ${options.allowUppercaseTrigger ? '' : 'lower case '}letters, digits and "_".`, 'trigger-name')
         else if (economy && !findKey(economy, 'triggers', n.name)) once('warning', `The trigger "${n.name}" is not on the Economy page's list.`, 'unknown-key')
         break
       case 'draw':
         if (!n.bucket || !/^\d+$/.test(n.index)) once('error', `${n.fn}(${n.bucket},${n.index}): a draw takes a bucket and a whole number.`, 'draw')
+        // (From the rules text; the validator does not know it unless it was added there as a key.)
+        else once('warning', `${n.fn}(...) is in the rules text, but the validator does not read it unless "${n.fn}" was added there as a key.`, 'draw-validator')
         break
       default:
         if (n.text) once('error', `"${n.text}" is not a kind of item the game reads.`, 'unknown-atom')
@@ -233,12 +271,57 @@ function validate(node, options, add) {
   walk(node)
 }
 
-// Check a text: { ok (no error), issues, node, roundTrip (writing it back gives the same text) }.
+// --- Prize count (the validator's) ----------------------------------------------
+//
+// Every item of a reward is one prize, but triggers and the hidden counters (NON_COUNTING_CURRENCIES); a [ ] group
+// is hidden when every option of it is; a chest, a pack or a preset is one prize.
+const NON_COUNTING = new Set(NON_COUNTING_CURRENCIES)
+function hidden(n) {
+  switch (n?.type) {
+    case 'trigger':
+      return true
+    case 'dynamic':
+      return NON_COUNTING.has(n.name)
+    case 'first':
+      return n.options.every(hidden)
+    case 'all':
+      return n.parts.every(hidden)
+    default:
+      return false
+  }
+}
+export function prizeCount(node) {
+  if (!node) return 0
+  return (node.type === 'all' ? node.parts : [node]).filter((p) => !hidden(p)).length
+}
+
+// The validator's limits: normal - more than 10 is worth a look; challenge - 3 or more; tournament - more than 3
+// is an error; a limit of your own - more than it. 0 prizes is worth a look (only triggers or hidden items).
+export const PRIZE_MODES = [
+  { id: 'normal', label: 'Normal: more than 10 is a lot', limit: 10 },
+  { id: 'challenge', label: 'Challenge: 3 or more is a lot', limit: 3 },
+  { id: 'tournament', label: 'Tournament: more than 3 must be fixed', limit: 3 },
+  { id: 'custom', label: 'My own limit' },
+]
+export function prizeFindings(count, { prizeMode = 'normal', prizeLimit = null } = {}) {
+  if (count === 0) return [{ level: 'warning', message: '0 prizes: only triggers or hidden items.', code: 'no-prizes' }]
+  if (prizeMode === 'custom' && prizeLimit != null && count > prizeLimit) return [{ level: 'warning', message: `${count} prizes - more than your limit of ${prizeLimit}.`, code: 'prize-count' }]
+  if (prizeMode === 'tournament' && count > 3) return [{ level: 'error', message: `${count} prizes - a tournament allows 3 at most.`, code: 'prize-count' }]
+  if (prizeMode === 'challenge' && count >= 3) return [{ level: 'warning', message: `${count} prizes - a challenge has fewer than 3.`, code: 'prize-count' }]
+  if (prizeMode === 'normal' && count > 10) return [{ level: 'warning', message: `${count} prizes - a lot; is it on purpose?`, code: 'prize-count' }]
+  return []
+}
+
+// Check a text: { ok (no error), issues, node, prizes, roundTrip (writing it back gives the same text) }.
+// options: those of validate, and prizeMode / prizeLimit for the prize count (counted only when the text is read).
 export function checkReward(text, options = {}) {
   const { node, issues } = parseReward(text, options)
+  const readable = node && !issues.some((i) => i.level === 'error')
+  const prizes = node ? prizeCount(node) : 0
+  if (readable) issues.push(...prizeFindings(prizes, options))
   const errors = issues.filter((i) => i.level === 'error')
   const compact = String(text ?? '').replace(/\s+/g, '')
-  return { ok: errors.length === 0, issues, node, roundTrip: !node || formatReward(node) === compact }
+  return { ok: errors.length === 0, issues, node, prizes, roundTrip: !node || formatReward(node) === compact }
 }
 
 // --- Worth -------------------------------------------------------------------
