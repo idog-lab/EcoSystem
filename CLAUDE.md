@@ -119,9 +119,9 @@ the page and not taught stays in that browser, listed on the Worth tab with
 "Copy as a message". When they explain a value in chat, write it there - never
 invent one. **Four currencies are always in the game** (`CORE_CURRENCIES`,
 economist): dr-puzzle a value a day, dr-pet a value a live week (7 days from
-the day typed), dr-merge and dr-pickaxe from a date to a date - a table of
-their own with dates (`periods`); **a date with no value is unknown**, never
-the nearest one, for every dated currency. Other currencies are added from a
+the day typed), dr-merge and dr-pickaxe one fixed worth "for now" - a table
+of their own; **a date with no value is unknown**, never the nearest one, for
+every dated currency. Other currencies are added from a
 drop list (`GAME_CURRENCIES`: the economist's list of the game's currencies,
 copied as given; dr-basket-counter on it is never offered - removed by them).
 **These rules are for prizes on a feature's tiers only** (economist: "all the
