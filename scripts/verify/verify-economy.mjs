@@ -222,6 +222,16 @@ check('a date before the first or after the last has no value: unknown, never th
   check('an event currency\'s dates: between two reads the one before; outside them unknown', currencyValue(ev, { date: '2026-12-03' }).value === 2 && currencyValue(ev, { date: '2026-12-05' }).value === 1 && currencyValue(ev, { date: '2026-11-30' }) === null && currencyValue(ev, { date: '2026-12-06' }) === null)
 }
 
+section('7a. The chests')
+{
+  eq('the chests are the four the economist gave, by name alone (chest:wooden(...))', economy.keys.chests.map((k) => k.key).join(' '), 'wooden silver golden purple')
+  check('...each one taught, with the economist\'s words', ['wooden', 'silver', 'golden', 'purple'].every((k) => TAUGHT_KEYS.chests.some((t) => t.key === k && /wooden, silver,golden purple/.test(t.said))))
+  const saved = normalizeEconomy({ version: 4, keys: { ...economy.keys, chests: [createKey({ key: 'pink-chest' }), createKey({ key: 'yellow-chest' }), createKey({ key: 'my-chest' })] } })
+  eq('a list saved before gives up pink-chest and yellow-chest ("Only the four"), gets the four, keeps a chest of its own', saved.keys.chests.map((k) => k.key).join(' '), 'my-chest wooden silver golden purple')
+  check('chest:wooden(...) reads with nothing to fix, worth what is in it', checkReward('chest:wooden(allowance(coins:3)+free_wild:1)', { economy }).issues.length === 0 && rewardWorth('chest:wooden(allowance(coins:3)+free_wild:1)', economy).worth === 5.5)
+  eq('...and is built so', chestSyntax('allowance(coins:3)', 'golden'), 'chest:golden(allowance(coins:3))')
+}
+
 section('7b. The currencies always in the game')
 {
   eq('puzzle, merge, picks and pet: a day, one fixed worth, one fixed worth, a week (economist: "as for the picks and merge, we can give a fixed value for now")', CORE_CURRENCIES.map((c) => `${c.name}:${c.step}`).join(' '), 'dr-puzzle:day dr-merge:fixed dr-pickaxe:fixed dr-pet:week')

@@ -16,7 +16,7 @@
 import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF } from './gameKeys'
 import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from './taught'
 
-export const ECONOMY_VERSION = 4
+export const ECONOMY_VERSION = 5
 
 // The resources of the value table, with their syntax tokens and the names
 // the sheets use for them.
@@ -170,7 +170,9 @@ const EXAMPLE_PRESETS = ['mini_game_5_gameplay_es', 'mini_game_40_gameplay_es', 
 const SEED_KEYS = {
   presets: [...GAME_PRESETS, ...GAME_PRESETS_CHEF, ...EXAMPLE_PRESETS].map((key) => createKey({ key })),
   packs: GAME_PACKS.map((key) => createKey({ key, value: 0 })),
-  chests: ['pink-chest', 'yellow-chest'].map((key) => createKey({ key })),
+  // The four chests (taught.js); pink-chest and yellow-chest, once taken from the reward examples, are gone ("Only
+  // the four").
+  chests: ['wooden', 'silver', 'golden', 'purple'].map((key) => createKey({ key })),
   triggers: ['Pity', 'dailyreward_lowhabit', '_diamond_mine_tier_3', 'sugar_rush_tier_gp'].map((key) => createKey({ key })),
   buckets: ['milestone', 'store_allowance'].map((key) => createKey({ key })),
 }
@@ -349,14 +351,19 @@ function asCore(c) {
 
 // Version 4: the game's keys (gameKeys.js) are added to a saved economy's lists - what it holds stays, a key
 // typed there keeps its worth - and a pack with no worth gets 0.
+// Version 5 (25 Nov 2026): the chests are the four the economist gave ("Only the four"): pink-chest and
+// yellow-chest come off a saved list (the four themselves are taught, so every list gets them).
+const DROPPED_CHESTS = new Set(['pink-chest', 'yellow-chest'])
 function upgradeKeys(keys, version) {
-  if (!keys || version >= 4) return keys
+  if (!keys || version >= 5) return keys
   const out = { ...keys }
-  for (const list of KEY_LISTS) {
-    const have = new Map((keys[list.id] ?? []).map((k) => [k.key, k]))
-    for (const k of SEED_KEYS[list.id] ?? []) if (!have.has(k.key)) have.set(k.key, k)
-    out[list.id] = [...have.values()].map((k) => (list.id === 'packs' && (k.value == null || k.value === '') ? { ...k, value: 0 } : k))
-  }
+  if (version < 4)
+    for (const list of KEY_LISTS) {
+      const have = new Map((keys[list.id] ?? []).map((k) => [k.key, k]))
+      for (const k of SEED_KEYS[list.id] ?? []) if (!have.has(k.key)) have.set(k.key, k)
+      out[list.id] = [...have.values()].map((k) => (list.id === 'packs' && (k.value == null || k.value === '') ? { ...k, value: 0 } : k))
+    }
+  if (out.chests) out.chests = out.chests.filter((k) => !DROPPED_CHESTS.has(k.key))
   return out
 }
 

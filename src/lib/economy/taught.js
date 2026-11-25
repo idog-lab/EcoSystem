@@ -42,12 +42,21 @@ export const TAUGHT_CURRENCIES = [
   { name: 'dr-hidden', valueGameplay: 0, said: `${RULES_TEXT}: dr-hidden is worth 0`, on: '2026-11-24', by: 'economist' },
 ]
 
+const CHESTS_SAID = 'also what about the chests? wooden, silver,golden purple - here is an example chest:wooden(...'
+
 // Keys of the game, by list (presets, packs, chests, triggers, buckets). Each: { key, value?, note?, said, on, by }.
 // A key here is added to its list if a browser does not have it; `value` is its worth in allowance (presets, packs).
 export const TAUGHT_KEYS = {
   presets: [],
   packs: [],
-  chests: [],
+  // The four chests, written by their name alone ("here is an example chest:wooden(..."); "Only the four" - the
+  // pink-chest and yellow-chest the list held before (from the reward examples) are taken off (economyModel).
+  chests: [
+    { key: 'wooden', said: CHESTS_SAID, on: '2026-11-25', by: 'economist' },
+    { key: 'silver', said: CHESTS_SAID, on: '2026-11-25', by: 'economist' },
+    { key: 'golden', said: CHESTS_SAID, on: '2026-11-25', by: 'economist' },
+    { key: 'purple', said: CHESTS_SAID, on: '2026-11-25', by: 'economist' },
+  ],
   triggers: [],
   buckets: [],
 }
