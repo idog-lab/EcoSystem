@@ -104,7 +104,8 @@ app follows where the two disagree: "The validator's"). The checker
 - a currency amount is a whole number - only coins take decimals;
 - a trigger is lower case letters, digits and `_` (upper case only with "Allow
   upper case triggers", the validator's option - `trigger:Pity`, on the
-  Economy page's list from the rules text, is to fix by default);
+  Economy page's list from the rules text, is to fix by default - asked, the
+  economist: "leave the pity", so it stays on the list as it is);
 - **a currency, an allowance bucket or a preset not known is an error** (it was
   a warning). Known currencies: the Economy page's, the game's list and the
   validator's own (`VALIDATOR_CURRENCIES`, 13 of them on no other list);
@@ -120,9 +121,10 @@ app follows where the two disagree: "The validator's"). The checker
   examples count 5, 4, 1 and 5.
 Where the validator is looser, the app's own rule stays (the validator reads
 whatever the app calls fine): an amount of 0 or less, more than 2 decimals of
-coins (3 on Merge Mania's small rewards) - **asked**. `Missing(...)` and
-`Duplicate(...)` (the rules text) are read with a note that the validator
-reads them only if added there as a key - **asked**. The validator's
+coins (3 on Merge Mania's small rewards) - asked, the economist: "keep both".
+`Missing(...)` and `Duplicate(...)` (the rules text) are read with a note that
+the validator reads them only if added there as a key - asked: "keep that for
+now". The validator's
 `dr:<key>:<value>` and a bare `coins:N` stay unknown to the app: whether the
 game reads them, the economist is "Not sure" - **open**. Not built: the
 validator's sheet checks (a Syntax column's empty rows, Tier Points numbers,
