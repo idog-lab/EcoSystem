@@ -173,7 +173,7 @@ export const conditionPart = (id) => CONDITION_PARTS.find((p) => p.id === id) ??
 
 // One part: fn_DiamondMine_Progression(57634U) > 95, CoinsInAllowance < 2, CurrentLevel > 519.
 // Returns { text, problems } - no text while something is missing or wrong.
-export function partCondition({ kind, eventId = '', cohortId = '', days = 7, op = '>', value = null } = {}) {
+export function partCondition({ kind, eventId = '', cohortId = '', negate = false, days = 7, op = '>', value = null } = {}) {
   const part = conditionPart(kind)
   const problems = []
   if (!part) return { text: '', problems: ['Pick what this part checks.'] }
@@ -181,7 +181,8 @@ export function partCondition({ kind, eventId = '', cohortId = '', days = 7, op 
     const cohort = String(cohortId ?? '').trim()
     if (!cohort) return { text: '', problems: ['Type the cohort id.'] }
     if (!/^\d+$/.test(cohort)) return { text: '', problems: [`"${cohortId}" is not a cohort id: digits only.`] }
-    return { text: `${part.fn}(${cohort})`, problems: [] }
+    // In or not in (economist, asked whether "not in a cohort" is used: "yes"): !PjCohorts.ContainsCohort(1234).
+    return { text: `${negate ? '!' : ''}${part.fn}(${cohort})`, problems: [] }
   }
   const id = String(eventId ?? '').trim().replace(/U$/i, '')
   if (part.needsEvent) {
@@ -421,6 +422,8 @@ const OP_WORDS = { '>': 'above', '>=': 'at least', '<': 'below', '<=': 'at most'
 function describe(node, issues) {
   if (node.k === 'and') return node.parts.map((x) => describe(x, issues)).join(' and ')
   if (node.k === 'or') return `(${node.parts.map((x) => describe(x, issues)).join(' or ')})`
+  // Not in a cohort: "Not in cohort 1234".
+  if (node.k === 'not' && node.of.k === 'call' && segmentFunction(node.of.name)?.unit === 'yes/no') return `Not ${describeValue(node.of, issues).replace(/^In /, 'in ')}`
   if (node.k === 'not') return `not (${describe(node.of, issues)})`
   if (node.k === 'cmp') {
     const left = describeValue(node.left, issues)

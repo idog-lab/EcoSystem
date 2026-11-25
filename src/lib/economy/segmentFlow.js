@@ -75,6 +75,9 @@ export const BASE_RULES = [
   { id: 'winrate', code: 'WinRate', label: 'Average win rate', literal: bare, cuts: '0.5, 0.9', max: 1, needsDays: true },
   { id: 'dm-progression', code: 'DMProg', label: 'Diamond Mine progression (%)', literal: thresholdLiteral, cuts: '50, 95', max: 100, needsEvent: true },
   { id: 'merge-progression', code: 'MergeProg', label: 'Merge progression (%)', literal: thresholdLiteral, cuts: '50, 95', max: 100, needsEvent: true },
+  // Chef dishes finished in an event. Its code is this app's own (economist: "no namds for the chef. put someting
+  // looks good in the naming"); each comparison in brackets, as their example: (...?.Count() > 10).
+  { id: 'chef-dishes', code: 'ChefDishes', label: 'Chef dishes finished', literal: thresholdLiteral, cuts: '10, 30', whole: true, needsEvent: true, wrap: true },
 ]
 export const baseRule = (id) => BASE_RULES.find((r) => r.id === id) ?? BASE_RULES[0]
 
@@ -97,6 +100,8 @@ function baseExpression(rule, plan) {
       return `fn_DiamondMine_Progression(${id}U)`
     case 'merge-progression':
       return `fn_Merge_Progression(${id}U)`
+    case 'chef-dishes':
+      return `GetMTXEventDataListAsStr(${id}U, "CompletedItems")?.Count()`
     default:
       return ''
   }
@@ -107,7 +112,7 @@ function bandCondition(expr, rule, { min, max }) {
   const parts = []
   if (Number(min ?? 0) > 0) parts.push(`${expr} > ${rule.literal(min)}`)
   if (max != null && max !== '') parts.push(`${expr} <= ${rule.literal(max)}`)
-  return parts.join(' && ')
+  return parts.map((x) => (rule.wrap ? `(${x})` : x)).join(' && ')
 }
 
 // The base segments: one a band of the base rule. [{ index, min, max, name, condition }]
