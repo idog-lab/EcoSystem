@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import Card from '../../components/ui/Card'
 import { CHEF_BASKET_TIERS, CORE_CURRENCIES, RESOURCES, coreCurrency, createCurrency, currencyChoices, isTaught, notTaught, notTaughtMessage, parseDailyValues, taughtChefBasket, taughtCurrency, taughtResource } from '../../lib/economy/economyModel'
-import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark, TaughtValue, Text } from './economyUi'
+import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark, TaughtValue } from './economyUi'
 import DailyValues from './DailyValues'
 import PeriodValues from './PeriodValues'
 
@@ -121,7 +121,6 @@ export default function WorthTab({ economy, onChange }) {
               <tr className="border-b border-slate-200">
                 <th className={TH}>Currency</th>
                 <th className={TH}>Values and their dates</th>
-                <th className={TH}>Note</th>
               </tr>
             </thead>
             <tbody>
@@ -160,13 +159,10 @@ export default function WorthTab({ economy, onChange }) {
                           </div>
                         )}
                       </td>
-                      <td className={TD}>
-                        {isTaught(taught, 'note') ? <span className="text-[12px] text-slate-600">{c.note}</span> : <Text aria-label={`${c.name}: note`} value={c.note} onCommit={(v) => setCurrency(i, { note: v })} className="w-56" />}
-                      </td>
                     </tr>
                     {open && (
                       <tr className="border-b border-slate-100 bg-slate-50/60" data-periods-editor={c.name}>
-                        <td colSpan={3} className="px-3 py-2">
+                        <td colSpan={2} className="px-3 py-2">
                           <PeriodValues name={c.name} step={core.step} periods={periods} onChange={(next) => setCurrency(i, { periods: next })} />
                         </td>
                       </tr>
@@ -193,7 +189,6 @@ export default function WorthTab({ economy, onChange }) {
                   <th className={TH} title="For a currency that loses value day by day: a value for each date, picked on a calendar (or a whole list pasted). A date between two reads the last one before it; before the first date or after the last, the worth is unknown. When it is set it replaces the one worth.">
                     By date
                   </th>
-                  <th className={TH}>Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,13 +239,10 @@ export default function WorthTab({ economy, onChange }) {
                         </span>
                         {daily.bad.length > 0 && <div className="mt-0.5 text-[11px] text-rose-700">Not read, and not used: {daily.bad.slice(0, 2).join(', ')}</div>}
                       </td>
-                      <td className={TD}>
-                        {isTaught(taught, 'note') ? <span className="text-[12px] text-slate-600">{c.note}</span> : <Text aria-label={`${c.name}: note`} value={c.note} onCommit={(v) => setCurrency(i, { note: v })} className="w-56" />}
-                      </td>
                     </tr>
                     {open && (
                       <tr className="border-b border-slate-100 bg-slate-50/60" data-daily-editor={c.name}>
-                        <td colSpan={5} className="px-3 py-2">
+                        <td colSpan={4} className="px-3 py-2">
                           <DailyValues name={c.name} value={c.daily} onChange={(daily) => setCurrency(i, { daily })} />
                         </td>
                       </tr>
