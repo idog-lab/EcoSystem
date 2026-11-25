@@ -8283,3 +8283,11 @@ four steps now (`segmentFlow.js`): the feature and the base, specifics, mode
 splits, the segments; the "Split each band by mode" box and the separate
 "Build a condition" card are folded into them. verify-economy 265,
 economy-page 88.
+
+Answered: "it shouldnt add a segments for the rest, but it should warn when
+there are holes i nthe segments" - the warning now says "A hole in
+<segment>". Taught: "another function to know is win rate function.
+fn_Avg_winrate(7) > 0.9 - here is an example of in the last 7 days if the win
+rate is more than 90%" - in the dictionary and as a part of the flow (last
+days, a share 0 to 1), written as the example, 0.9 with no m (asked whether
+that is so, as other decimals take m). verify-economy 268, economy-page 90.

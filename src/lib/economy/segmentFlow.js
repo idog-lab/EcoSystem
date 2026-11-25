@@ -12,8 +12,9 @@
 //   4. DUPLICATIONS (the average mode, for now): the segments picked are split by mode at the values given - one
 //      split value makes two segments of one, as the rules' _Mode_0_3 / _Mode_3_plus; more values, more.
 // Name: <Feature>_BW_<min>_<max|Plus>[_<tag>...][_Mode_<lo>_<hi|plus>] - a tag before the mode (this app's own
-// order, said on screen). A specific leaves out the players of its segments who do not match it: said, nothing
-// added (the economist's answer to that question did not come through).
+// order, said on screen). A specific leaves out the players of its segments who do not match it - a hole in the
+// segments: warned, nothing added (economist: "it shouldnt add a segments for the rest, but it should warn when
+// there are holes i nthe segments").
 
 import { MODE_FN, STANDARD_WEIGHTS, bandsFromCuts, checkBands, decimalLiteral, segmentCondition, segmentKey, segmentName, weightedExpression } from './segments'
 import { buildCondition, readCondition } from './segmentFunctions'
@@ -113,7 +114,7 @@ export function buildPlan(plan) {
     const condition = [b.condition, ...extra].filter(Boolean).join(' && ')
     if (mine.length) {
       const words = mine.flatMap((s) => (s.condition ? readCondition(s.condition).clauses : [])).join(' and ')
-      if (words) warnings.push(`${tagged}: the players of ${b.name} who are not "${words}" are in no segment.`)
+      if (words) warnings.push(`A hole in ${b.name}: its players who are not "${words}" are in no segment - ${tagged} holds only those who are.`)
     }
     const split = splitOf.get(b.index)
     if (split && split.values.length) {

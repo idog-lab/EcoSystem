@@ -15,7 +15,7 @@ import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/l
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
 import { bandsFromCuts, buildSegments, checkBands, segmentCondition, segmentKey, segmentName, weightedExpression } from '../../src/lib/economy/segments.js'
 import { buildPlan, createPlan, modeRanges, parseSplitValues } from '../../src/lib/economy/segmentFlow.js'
-import { SEGMENT_FUNCTIONS, MODE_MULTIPLIERS, buildCondition, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
+import { SEGMENT_FUNCTIONS, MODE_MULTIPLIERS, buildCondition, partCondition, progressionCondition, readCondition } from '../../src/lib/economy/segmentFunctions.js'
 import { REAL_EXAMPLES } from '../../src/lib/economy/examples.js'
 import { balanceTiers, parseTierRows } from '../../src/lib/economy/balance.js'
 import { DEFAULT_REWARD_VALUES } from '../../src/features/chef/lib/chefModel.js'
@@ -289,13 +289,17 @@ check('the Chef live segments follow the same naming', LIVE_SEGMENT_SET.filter((
 
 section('8a. The functions segments are made of (segmentFunctions.js)')
 {
-  eq('the functions taught: Brut Wins, the mode multiplier, balance, level, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 CoinsInAllowance CurrentLevel fn_DiamondMine_Progression fn_Merge_Progression')
+  eq('the functions taught: Brut Wins, the mode multiplier, balance, level, win rate, Diamond Mine and Merge progression', SEGMENT_FUNCTIONS.map((f) => f.name).join(' '), 'fn_DailyBrutWins_m4 fn_DailyAvgModeMultiplier_m4 CoinsInAllowance CurrentLevel fn_Avg_winrate fn_DiamondMine_Progression fn_Merge_Progression')
   eq('the modes and their multipliers (economist: "mode 1 - 1, mode 2 - 2, mode 3 - 4, mode 4 - 8") - the 1m,2m,4m,8m', MODE_MULTIPLIERS.map((m) => `${m.mode}:x${m.multiplier}`).join(' '), '1:x1 2:x2 3:x4 4:x8')
   check('...so the Brut Wins functions have nothing left unconfirmed, their mode inputs named by mode', ['fn_DailyBrutWins_m4', 'fn_DailyAvgModeMultiplier_m4'].every((n) => { const f = SEGMENT_FUNCTIONS.find((x) => x.name === n); return !f.open && f.args.slice(1).map((a) => `${a.mode}=${a.name}`).join(' ') === '1=1m 2=2m 3=4m 4=8m' }))
   const ooc = readCondition('CoinsInAllowance < 2 && CurrentLevel > 519')
   eq('the economist\'s balance and level example, in words', ooc.clauses.join(' | '), 'Balance is below 2 allowance | Current level is above 519')
   check('a name written alone is called with brackets by mistake, or a function without them: must be fixed', readCondition('CurrentLevel() > 5').issues.some((i) => i.code === 'form') && readCondition('fn_Merge_Progression > 5').issues.some((i) => i.code === 'form'))
   check('a name the app does not know is named, never guessed at (PayerTier)', readCondition('PayerTier > 2').ok && readCondition('PayerTier > 2').issues.some((i) => i.code === 'unknown-function' && /PayerTier/.test(i.text)))
+  const wr = readCondition('fn_Avg_winrate(7) > 0.9')
+  check(`the win rate, the economist's example: "in the last 7 days if the win rate is more than 90%" (${wr.clauses[0]})`, wr.ok && !wr.issues.length && wr.clauses[0] === 'Average win rate over the last 7 days is above 0.9 (90%)')
+  eq('...written by the flow as the example writes it - the share with no m', partCondition({ kind: 'winrate', days: 7, op: '>', value: 0.9 }).text, 'fn_Avg_winrate(7) > 0.9')
+  check('...its days a whole number, its share 0 to 1', /whole number/.test(partCondition({ kind: 'winrate', days: 2.5, op: '>', value: 0.9 }).problems[0]) && /from 0 to 1/.test(partCondition({ kind: 'winrate', days: 7, op: '>', value: 90 }).problems[0]) && readCondition('fn_Avg_winrate(7U) > 0.9').issues.some((i) => /whole number/.test(i.text)))
   eq('parts joined with && (economist: "they are added up with &&"): the balance and level example to the character', buildCondition([{ kind: 'balance', op: '<', value: 2 }, { kind: 'level', op: '>', value: 519 }]).condition, 'CoinsInAllowance < 2 && CurrentLevel > 519')
   eq('...a progression, a balance with decimals (m)', buildCondition([{ kind: 'dm-progression', eventId: '57634', op: '>', value: 95 }, { kind: 'balance', op: '<', value: 2.5 }]).condition, 'fn_DiamondMine_Progression(57634U) > 95 && CoinsInAllowance < 2.5m')
   const half = buildCondition([{ kind: 'balance', op: '<', value: 2 }, { kind: 'level', op: '>', value: 5.5 }])
@@ -333,7 +337,7 @@ section('8c. The flow of building segments (segmentFlow.js)')
   // A specific: a tag and a condition, on the segments picked.
   const ooc = buildPlan({ ...plan, specifics: [{ tag: 'OOC', parts: [{ kind: 'balance', op: '<', value: 2 }], segments: [0, 1] }], splits: [{ values: '3', segments: [0] }] })
   check(`a specific is added with && to its segments only, its tag in their names, before the mode (${ooc.segments.slice(0, 3).map((s) => s.name).join(', ')})`, ooc.segments[0].name === 'Disco_BW_0_9_OOC_Mode_0_3' && ooc.segments[2].name === 'Disco_BW_9_18_OOC' && ooc.segments[2].condition.endsWith('<= 18 && CoinsInAllowance < 2') && ooc.segments[0].condition.includes('<= 9 && CoinsInAllowance < 2 && (') && ooc.segments[3].name === 'Disco_BW_18_40' && !ooc.segments[3].condition.includes('CoinsInAllowance'))
-  check(`...and the players of those bands it leaves out are said (${ooc.warnings[0]})`, ooc.warnings.length === 2 && /Disco_BW_0_9_OOC: the players of Disco_BW_0_9 who are not "Balance is below 2 allowance" are in no segment/.test(ooc.warnings.join(' ')))
+  check(`...and the holes it leaves - the players of those bands it leaves out - are warned, nothing added (economist: "it shouldnt add a segments for the rest, but it should warn when there are holes") (${ooc.warnings[0]})`, ooc.warnings.length === 2 && /A hole in Disco_BW_0_9: its players who are not "Balance is below 2 allowance" are in no segment - Disco_BW_0_9_OOC holds only those who are/.test(ooc.warnings.join(' ')))
   check('every segment of the flow reads with nothing to fix', ooc.segments.every((s) => readCondition(s.condition).ok && !readCondition(s.condition).issues.length))
   const wrong = buildPlan({ ...plan, feature: '', specifics: [{ tag: '', parts: [{ kind: 'dm-progression', eventId: '', op: '>', value: 95 }], segments: [] }], splits: [{ values: 'x', segments: [0] }, { values: '3', segments: [0] }] })
   check(`what must be fixed is said: no feature, a specific without a tag or event id, a segment in two mode splits, a split value that is not one (${wrong.errors.length})`, ['feature\'s name', 'type its tag', 'event id', 'two mode splits', 'not a split value'].every((w) => wrong.errors.some((e) => e.includes(w))) && wrong.warnings.some((w) => /added to no segment/.test(w)))
