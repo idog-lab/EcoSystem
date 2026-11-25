@@ -1124,6 +1124,10 @@ segments, both phases, players the build never saw (an investigation, not a
 check; about 20 minutes). `twister-cadence.mjs` is the first investigation.
 `npm run e2e` warms the dev server up first (it compiles on first use and
 reloads the page it serves, which crashed whichever suite ran first).
+The browser suites need **Playwright, a devDependency pinned to 1.64.1** - the
+version of the Chromium build installed here (1248); a newer one asks for a
+new browser download. (It used to be installed on the side, and an
+`npm install` removed it as not listed, 25 Nov 2026.)
 `npm run e2e` - every browser suite
 (start `npm run dev` first; a suite can time out while the dev server is
 reloading after many file changes - rerun it alone before calling it a
