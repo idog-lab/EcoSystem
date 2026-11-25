@@ -171,7 +171,7 @@ validator, "Reward Scanner Pro"** (economist: where the two disagree, "The
 validator's"): dynamic in brackets, what a [ ] group may hold, whole currency
 amounts, lower case triggers, an unknown currency, bucket or preset an
 error, and its prize count with its limits; where the validator is looser the
-app's stricter rule stays (asked) - docs/economy-rules.md, "The validator's
+app's stricter rule stays (economist: "keep both") - docs/economy-rules.md, "The validator's
 rules". Merge's Syntax tab reads its item text with the checker
 (a reading only). Diamond Mine is not connected. Open questions are listed in
 that file.

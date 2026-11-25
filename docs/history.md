@@ -8361,3 +8361,9 @@ reward: the prize limits, upper case triggers); its currency list became a
 known list too; the app's stricter rules stay where the validator is looser
 (asked again); "Balance tiers" writes [dynamic(...)]. verify-economy 310,
 economy-page 104, chef-worth 10, verify-chef-prize-text 9, CC 15.
+
+Answered: where the validator is looser, the app's stricter rules stay
+("keep both": an amount of 0, more than 2 decimals of coins); Missing(...) and
+Duplicate(...) are still read with the note ("keep that for now");
+trigger:Pity stays on the list as it is ("leave the pity"). Nothing changed in
+what the checker does.
