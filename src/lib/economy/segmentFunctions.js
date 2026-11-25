@@ -137,7 +137,7 @@ export const CONDITION_PARTS = [
   { id: 'merge-progression', fn: 'fn_Merge_Progression', label: 'Merge progression', needsEvent: true, unit: '%', min: 0, max: 100 },
   { id: 'balance', fn: 'CoinsInAllowance', label: 'Balance in allowance', unit: 'allowance', min: 0 },
   { id: 'level', fn: 'CurrentLevel', label: 'Current level', unit: 'level', min: 0, whole: true },
-  // The share is written as the economist's example writes it: fn_Avg_winrate(7) > 0.9, no m.
+  // The share is written with no m: fn_Avg_winrate(7) > 0.9 (economist, asked: "0.9 without m is right").
   { id: 'winrate', fn: 'fn_Avg_winrate', label: 'Average win rate', needsDays: true, unit: 'share', min: 0, max: 1, bareDecimal: true },
 ]
 export const conditionPart = (id) => CONDITION_PARTS.find((p) => p.id === id) ?? null

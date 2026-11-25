@@ -8291,3 +8291,6 @@ fn_Avg_winrate(7) > 0.9 - here is an example of in the last 7 days if the win
 rate is more than 90%" - in the dictionary and as a part of the flow (last
 days, a share 0 to 1), written as the example, 0.9 with no m (asked whether
 that is so, as other decimals take m). verify-economy 268, economy-page 90.
+
+Asked whether the win rate is written `0.9` with no m (other decimals take m):
+"0.9 without m is right" - confirmed, nothing changed in what the app writes.

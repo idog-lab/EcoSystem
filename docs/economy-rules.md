@@ -225,8 +225,8 @@ a hole: **warned, nothing added** (economist: "it shouldnt add a segments for
 the rest, but it should warn when there are holes i nthe segments").
 - `fn_Avg_winrate(days)`: the player's average win rate over the last days,
   a share ("fn_Avg_winrate(7) > 0.9 - in the last 7 days if the win rate is
-  more than 90%"). **Written as the example: `0.9` with no `m`** - unlike the
-  other decimals (0.7m, 3m); the flow writes it so. Read as "Average win rate
+  more than 90%"). **Written `0.9` with no `m`** - unlike the other decimals
+  (0.7m, 3m); asked, the economist confirmed: "0.9 without m is right". Read as "Average win rate
   over the last 7 days is above 0.9 (90%)". The plan is kept in this
 browser (`economy-segment-plan`); "Copy as a table" gives name, key, condition.
 The Segments tab lists the functions, and
