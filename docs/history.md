@@ -8232,3 +8232,12 @@ and picks are one worth each, the same on every date (step `fixed`); the
 puzzle and the pet keep their dates. Dates typed for merge or picks before are
 kept in the data, not used, and the page says so. verify-economy 230,
 economy-page 73.
+
+Asked whether every basket and pack was in: the three lists of 24 Nov were
+compared name by name with gameKeys.js - 608 packs, 81 and 21 presets, none
+missing (the Keys tab shows 12 at a time; Build a prize offers the 17 game-play
+Chef baskets, not the `_pricing_` ones). Then: "also what about the chests?
+wooden, silver,golden purple" - asked, written by the name alone ("here is an
+example chest:wooden(...") and "Only the four": taught (taught.js), pink-chest
+and yellow-chest off the list and off a saved one (economy version 5).
+verify-economy 235, economy-page 75.

@@ -267,8 +267,12 @@ Who reads it:
   the model itself when making a feature - nothing to give ahead.
 - **Allowance buckets and triggers**: left as they are for now; a trigger can
   be added by hand (Keys tab, "Add").
-- **Chests**: the economist types the chest's name (Build a prize: a box with
-  the known names offered; a name off the list is not named). The wrapping is
+- **Chests**: four, taught on 25 Nov 2026 - `wooden`, `silver`, `golden`,
+  `purple`, written by the name alone ("here is an example chest:wooden(...");
+  "Only the four": the pink-chest and yellow-chest taken from the reward
+  examples are off the list, and off a list saved before (economy version 5).
+  The economist types the chest's name (Build a prize: a box with the four
+  offered; a name off the list is not named). The wrapping is
   `chest:<name>(<the whole reward>)` - everything of the tier inside the
   parentheses, `+` parts and `[a|b]` fallbacks included; no name, no wrapper;
   a chest is worth what is in it. Held by verify-economy (3b) and economy-page.
