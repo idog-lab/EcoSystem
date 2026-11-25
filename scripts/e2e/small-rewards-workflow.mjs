@@ -181,7 +181,7 @@ if (semiOption) {
 await page.getByRole('button', { name: 'Save', exact: true }).first().click()
 await page.waitForTimeout(300)
 await page.reload({ waitUntil: 'networkidle' })
-await page.getByText('Merge Mania', { exact: false }).first().click()
+// (A reload stays on the tool's own page: /models/<name>.)
 await page.waitForTimeout(400)
 await tab(page, 'Editor').click() // the app opens on Build event; the reward chips are in the board editor
 await page.waitForTimeout(300)

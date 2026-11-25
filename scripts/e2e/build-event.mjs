@@ -231,7 +231,7 @@ async function build(page) {
   ok('targets, split and factor are saved', saved.segments[0].rewardTargets.main.energy === 150 && saved.segments[0].rewardTargets.main.coins === 1.2 && saved.segments[0].sourceAllocation.main.tileWeight === 0.4 && saved.segments[1].segmentFactor === 1.5)
   ok('no board has a Twister item under a tile', saved.segments.every((s) => s.boards.every((b) => !JSON.stringify([b.blockedQueue, b.semiPlacements, b.rewardQueueItems, b.rewardSemiItems]).includes('twister') && b.blockedQueue.every((v) => v < 1040))))
   await page.reload({ waitUntil: 'networkidle' })
-  await page.getByText('Merge Mania', { exact: false }).first().click()
+  // (A reload stays on the tool's own page: /models/<name>.)
   await page.waitForTimeout(300)
   await step(page, 'rewards').click()
   await page.waitForTimeout(200)

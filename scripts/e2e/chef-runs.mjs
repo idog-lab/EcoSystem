@@ -11,7 +11,7 @@ page.on('dialog', (d) => d.accept())
 const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim()
 const openChef = async () => {
   await page.goto(BASE, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: /Chef/ }).first().click()
+  await page.getByRole('link', { name: /Chef/ }).first().click()
   await page.getByTestId('chef-header').waitFor()
   await page.waitForTimeout(300)
 }
@@ -38,7 +38,7 @@ const identity = await text(page.getByTestId('chef-sim-identity'))
 ok(`a run says it is kept in this browser (${await text(page.getByTestId('chef-sim-kept'))})`, /Kept in this browser/.test(await text(page.getByTestId('chef-sim-kept'))))
 
 await page.reload({ waitUntil: 'networkidle' })
-await page.getByRole('button', { name: /Chef/ }).first().click()
+// (A reload stays on the tool's own page: /models/<name>.)
 await page.getByTestId('chef-header').waitFor()
 await step('simulate')
 ok(`after a reload the run is there, the same one (${await page.locator('[data-testid="chef-sim-summary"] tbody tr').count()} rows)`, (await page.getByTestId('chef-sim-summary').count()) === 1 && (await page.locator('[data-testid="chef-sim-summary"] tbody tr').count()) === rowsBefore && (await text(page.getByTestId('chef-sim-identity'))) === identity)

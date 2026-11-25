@@ -98,6 +98,24 @@ When this file and the history disagree, this file wins.
   and what is not confirmed about the real game is a visible setting, never
   a silent constant.
 
+## The platform (home page, catalog, server)
+
+The home page and everything around the tools is the **platform**
+(`docs/architecture.md`, setup in `docs/setup.md`, the model list and its
+workbook-source uncertainties in `docs/catalog.md`). In short: the catalog is
+`src/platform/registry/catalog.ts` (seven models; add one there plus a loader
+in `modules.ts`, never by editing the home page); every model opens at
+`/models/<slug>` as a lazily loaded module that owns its page; the home page
+searches display names only and filters by shared folders, both kept in the
+URL; folders, placements, model documents and shared assumptions live in
+PostgreSQL behind the toolkit server (`server/`, TypeScript, Hono, Prisma,
+better-auth), checked per workspace membership on the server, with
+optimistic concurrency (`expectedRevision`, 409 on a stale write). No model
+has a server-side document schema yet - the existing tools still keep their
+work in the browser - and none may be invented. Merge Mania's `?s=`, `?play`
+and `?plan` links open as before. The GitHub Pages deploy serves the site
+only: there, the home page works without folders.
+
 ## The economy (shared by every feature)
 
 **Read `docs/economy-rules.md` before touching a prize, a reward text, a value
@@ -137,7 +155,10 @@ that file.
 
 ```
 src/
-  main.jsx, App.jsx, index.css     app entry; App.jsx holds the Merge editor state and routing
+  main.tsx, index.css              app entry (renders src/platform/shell/PlatformApp)
+  App.jsx                          the Merge editor, play link and plan link screens (no routing any more)
+  platform/                        the platform: registry, home page, routing, API client (docs/architecture.md)
+  models/                          platform-owned model pages (Merge Mania wrapper, "not migrated")
   components/                      shared UI (HeroPage, ui/Button, Card, Collapsible, NumberField, Slider, InfoHint)
   lib/gridWidth.js                 shared grid sizing
   lib/economy/                     the economy every feature shares (docs/economy-rules.md)
@@ -162,7 +183,11 @@ src/
     assets/game/     the artwork in use (copied and trimmed from art-source/)
     data/            the demo stage
   features/diamondMine/, features/chef/   other features (Chef: a six-step flow, see docs/chef-overview.md)
+server/            the toolkit server (API, auth, folders, documents, assumptions)
+prisma/            database schema and migrations
+tests/             Vitest: platform logic and the server on a throw-away database (npm test)
 scripts/
+  e2e-platform/    the home page in a browser, two members at once (npm run test:e2e:platform)
   verify/          engine checks (npm run verify)
   e2e/             browser checks against the dev server (npm run e2e; one: npx vite-node <file>)
   art/             prepare the artwork from art-source/
@@ -174,7 +199,7 @@ docs/chef-overview.md   the Chef feature: what it is and how to work on it
 docs/economy-rules.md   the economy's rules, where they apply, what is open
 ```
 
-Dev: `npm run dev` (port 5173, `strictPort` - localStorage is per origin
+Dev: `npm run server` (the API, port 8787; see docs/setup.md) and `npm run dev` (port 5173, `strictPort` - localStorage is per origin
 including port, so never let it drift). `npm run build`, `npm run lint`
 (oxlint). The site is published by GitHub on a merge into master
 (`.github/workflows/deploy.yml`); `npm run deploy` refuses.

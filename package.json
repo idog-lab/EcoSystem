@@ -11,23 +11,46 @@
     "deploy": "node -e \"console.error('The site is published by GitHub when a pull request is merged into master (.github/workflows/deploy.yml). npm run deploy:manual only if that is broken, from an up-to-date master.'); process.exit(1)\"",
     "deploy:manual": "npm run build && gh-pages -d dist",
     "verify": "npx vite-node scripts/verify/verify-event-build.mjs && npx vite-node scripts/verify/verify-containers.mjs && npx vite-node scripts/verify/verify-v2-rewards.mjs && npx vite-node scripts/verify/verify-twister.mjs && npx vite-node scripts/verify/verify-endless.mjs && npx vite-node scripts/verify/verify-real-play.mjs && npx vite-node scripts/verify/verify-twister-cadence.mjs && npx vite-node scripts/verify/verify-board-bank.mjs && npx vite-node scripts/verify/verify-stage-link.mjs && npx vite-node scripts/verify/verify-chef.mjs && npx vite-node scripts/verify/verify-chef-proposal.mjs && npx vite-node scripts/verify/verify-chef-catchup.mjs && npx vite-node scripts/verify/verify-chef-worth.mjs && npx vite-node scripts/verify/verify-chef-events.mjs && npx vite-node scripts/verify/verify-chef-prize-text.mjs && npx vite-node scripts/verify/verify-economy.mjs && npx vite-node scripts/verify/verify-small-rewards-cc.mjs",
-    "e2e": "node scripts/e2e/run-all.mjs"
+    "e2e": "node scripts/e2e/run-all.mjs",
+    "server": "NODE_ENV=development tsx watch server/main.ts",
+    "server:start": "tsx server/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:e2e:platform": "tsx scripts/e2e-platform/home.mjs",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:add-member": "tsx server/cli/add-member.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@hono/node-server": "2.1.6",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
     "@tailwindcss/vite": "^4.3.3",
+    "better-auth": "1.7.18",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
+    "hono": "4.13.17",
     "lucide-react": "^1.28.0",
+    "pg": "8.23.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@types/node": "22.20.7",
+    "@types/pg": "8.23.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "gh-pages": "^6.3.0",
     "oxlint": "^1.75.0",
-    "vite": "^8.2.0"
+    "prisma": "7.10.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vite": "^8.2.0",
+    "vitest": "5.1.0"
   }
 }

@@ -1,4 +1,4 @@
-// "Your data in this browser" on the home screen: download everything from one
+// "Your data in this browser" (its own page, /browser-data, linked from the home page): download everything from one
 // browser, restore it in another that already has data of its own.
 // Run: npx vite-node scripts/e2e/browser-data.mjs
 import fs from 'node:fs'
@@ -7,7 +7,7 @@ import { BASE, createChecker, launch } from './helpers.mjs'
 const { ok, finish } = createChecker()
 const ev = (id, name, startDate) => ({ id, name, startDate, days: 7, savedAt: 1, createdAt: 1, segments: 1, size: 10 })
 async function seed(page, items) {
-  await page.goto(BASE)
+  await page.goto(`${BASE}browser-data`)
   await page.evaluate((entries) => {
     for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v)
   }, items)
@@ -25,7 +25,7 @@ await seed(old.page, {
   'merge-mania-board-simulator': JSON.stringify({ segments: [] }),
   'merge-mania-chef': JSON.stringify({ old: true }),
 })
-ok('the home screen has the panel, with its two buttons', await old.page.getByTestId('data-download').isVisible() && await old.page.getByTestId('data-restore').isVisible())
+ok('the browser-data page has the panel, with its two buttons', await old.page.getByTestId('data-download').isVisible() && await old.page.getByTestId('data-restore').isVisible())
 const [download] = await Promise.all([old.page.waitForEvent('download'), old.page.getByTestId('data-download').click()])
 // (Kept as bytes: the download goes with its browser.)
 const fileBytes = fs.readFileSync(await download.path())
@@ -60,7 +60,7 @@ ok(`restored: the list holds all three events, the project here is kept, Chef ca
 ok(`it says what it did (${await p.getByTestId('data-message').innerText()})`, /2 saved Merge events added/.test(await p.getByTestId('data-message').innerText()) && /Chef/.test(await p.getByTestId('data-message').innerText()))
 
 // The saved events are in the Merge switcher.
-await p.getByRole('button', { name: /Merge Mania/ }).first().click()
+await p.goto(`${BASE}models/merge-mania`)
 await p.getByTestId('more-menu').waitFor()
 await p.getByTestId('more-menu').click()
 await p.getByTestId('saved-events-toggle').click()

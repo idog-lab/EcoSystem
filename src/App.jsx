@@ -11,10 +11,6 @@ import TwisterPage from './features/merge/components/rewards/TwisterPage'
 import BuildEventPage from './features/merge/components/build/BuildEventPage'
 import LegacyRecompletionRecovery from './features/merge/components/build/LegacyRecompletionRecovery'
 import PlayStage from './features/merge/components/play/PlayStage'
-import HeroPage from './components/HeroPage'
-import DiamondMineApp from './features/diamondMine/components/DiamondMineApp'
-import ChefApp from './features/chef/components/ChefApp'
-import EconomyApp from './features/economy/EconomyApp'
 import { loadEconomy, saveEconomy } from './lib/economy/economyStore'
 import { normalizeEconomy } from './lib/economy/economyModel'
 import Button from './components/ui/Button'
@@ -720,7 +716,7 @@ function useSegment(initial) {
 // demo there would look identical to "nothing went wrong," which is exactly
 // what made this bug hard to diagnose from a bug report alone. `linkBroken`
 // surfaces it instead.
-function PlayApp() {
+export function PlayApp() {
   const [{ boards, rcBoards, linkBroken }] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     const stageParam = params.get('s') ?? params.get('stage')
@@ -767,7 +763,7 @@ function PlayApp() {
 // explicitly shared one, so a missing or malformed `plan` param gets its
 // own explicit message instead of silently rendering something that could
 // be mistaken for real data.
-function PlanApp() {
+export function PlanApp() {
   const [{ segments, linkBroken }] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     const planParam = params.get('plan')
@@ -1006,7 +1002,7 @@ function PlanSegmentView({ segment, baseSegment, isBaseSegment }) {
   )
 }
 
-function EditorApp({ onHome }) {
+export function EditorApp({ onHome }) {
   const [initial] = useState(initialState)
   // Fixed SEGMENT_COUNT (8) calls, unconditionally - see useSegment's own
   // comment on why this is safe. `segments[activeSegmentIndex]` is the one
@@ -2325,19 +2321,6 @@ function EditorApp({ onHome }) {
   )
 }
 
-function App() {
-  const params = new URLSearchParams(window.location.search)
-  const isPlayLink = params.has('play') || params.has('s')
-  const isPlanLink = params.has('plan')
-  const [feature, setFeature] = useState(null)
-
-  if (isPlayLink) return <PlayApp />
-  if (isPlanLink) return <PlanApp />
-  if (!feature) return <HeroPage onSelect={setFeature} />
-  if (feature === 'diamond-mine') return <DiamondMineApp onHome={() => setFeature(null)} />
-  if (feature === 'chef') return <ChefApp onHome={() => setFeature(null)} />
-  if (feature === 'economy') return <EconomyApp onHome={() => setFeature(null)} />
-  return <EditorApp onHome={() => setFeature(null)} />
-}
-
-export default App
+// The routing that lived here (play link, plan link, the old home page, one
+// feature at a time) moved to src/platform/shell/PlatformApp.tsx. This file
+// now only exports the Merge Mania screens it always held.
