@@ -103,7 +103,7 @@ When this file and the history disagree, this file wins.
 The home page and everything around the tools is the **platform**
 (`docs/architecture.md`, setup in `docs/setup.md`, the model list and its
 workbook-source uncertainties in `docs/catalog.md`). In short: the catalog is
-`src/platform/registry/catalog.ts` (seven models; add one there plus a loader
+`src/platform/registry/catalog.ts` (22 models, 18 of them not built yet; add one there plus a loader
 in `modules.ts`, never by editing the home page); every model opens at
 `/models/<slug>` as a lazily loaded module that owns its page; the home page
 searches display names only and filters by shared folders, both kept in the

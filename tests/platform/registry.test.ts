@@ -3,11 +3,18 @@ import { MODEL_CATALOG, modelById, modelBySlug } from '../../src/platform/regist
 import { MODEL_MODULES } from '../../src/platform/registry/modules'
 import { ICON_KEYS } from '../../src/platform/registry/types'
 
+const ADDED = [
+  'Trail', 'Race', 'Pet', 'Maleficent', 'Midnight blast', '8Box', 'Progressive Twister', 'Wheel',
+  'Basket Thrill', 'Frenzy', 'Disco', 'Inside Tracks', 'Wicked Trails', 'Disney Moments', 'Sugar Rush',
+]
+const ADDED_IDS = MODEL_CATALOG.filter((m) => (ADDED as string[]).includes(m.displayName)).map((m) => m.id)
+
 describe('the model registry', () => {
-  it('lists exactly the seven models', () => {
-    expect(MODEL_CATALOG.map((m) => m.displayName).sort()).toEqual(
-      ['Challenge', 'Chef', 'Diamond Mine', 'Economy', 'Merge Mania', 'Momentum', 'Puzzle'].sort(),
-    )
+  it('lists exactly the seven first models and the fifteen added ones, in that order', () => {
+    expect(MODEL_CATALOG.map((m) => m.displayName)).toEqual([
+      'Merge Mania', 'Diamond Mine', 'Chef', 'Economy', 'Momentum', 'Challenge', 'Puzzle',
+      ...ADDED,
+    ])
   })
 
   it('ids, slugs and display names are unique; slugs are URL-safe', () => {
@@ -34,7 +41,7 @@ describe('the model registry', () => {
     }
   }, 120_000)
 
-  it('the existing tools stay available; the three new ones say they are not migrated', () => {
+  it('the existing tools stay available; every new one says it is not migrated', () => {
     const status = Object.fromEntries(MODEL_CATALOG.map((m) => [m.id, m.status]))
     expect(status).toEqual({
       'merge-mania': 'available',
@@ -44,11 +51,12 @@ describe('the model registry', () => {
       momentum: 'not-migrated',
       challenge: 'not-migrated',
       puzzle: 'not-migrated',
+      ...Object.fromEntries(ADDED_IDS.map((id) => [id, 'not-migrated'])),
     })
     for (const m of MODEL_CATALOG) expect(m.moduleKey === 'not-migrated').toBe(m.status === 'not-migrated')
   })
 
-  it('records the workbook sources as given, and none for Chef and Economy', () => {
+  it('records the workbook sources as given, and none where none was given', () => {
     const families = Object.fromEntries(MODEL_CATALOG.map((m) => [m.id, m.sources.map((s) => `${s.family}:${s.status}`)]))
     expect(families).toEqual({
       'merge-mania': ['Merge:stated'],
@@ -58,6 +66,7 @@ describe('the model registry', () => {
       'diamond-mine': ['Diamond Mine:name-unverified'],
       chef: [],
       economy: [],
+      ...Object.fromEntries(ADDED_IDS.map((id) => [id, []])),
     })
     expect(modelById('chef')?.sourceNote).toMatch(/No verified/)
     expect(modelById('economy')?.sourceNote).toMatch(/No verified/)

@@ -15,6 +15,7 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const API_PORT = 8799
 const WEB_PORT = 5199
 const BASE = `http://localhost:${WEB_PORT}/EcoSystem/`
+const N = MODEL_CATALOG.length
 
 const results = []
 const ok = (name, cond) => {
@@ -70,9 +71,9 @@ try {
   // ---------------------------------------------------------------- signed out
   const guest = await person(null)
   const names = await cardNames(guest)
-  ok(`the catalog is exactly the seven models (${names.join(', ')})`, names.length === 7 && [...names].sort().join() === MODEL_CATALOG.map((m) => m.displayName).sort().join())
+  ok(`the catalog is exactly the registry's ${N} models (${names.join(', ')})`, names.length === N && [...names].sort().join() === MODEL_CATALOG.map((m) => m.displayName).sort().join())
   const linkTexts = await guest.locator('main ul[aria-label] > li > a').evaluateAll((as) => as.map((a) => a.textContent.trim()))
-  ok('each card is a link holding only the name (and an icon)', linkTexts.every((txt, i) => txt === names[i]) && (await guest.locator('main ul[aria-label] > li > a svg').count()) === 7)
+  ok('each card is a link holding only the name (and an icon)', linkTexts.every((txt, i) => txt === names[i]) && (await guest.locator('main ul[aria-label] > li > a svg').count()) === N)
   ok('three columns on a wide window', (await guest.locator('main ul[aria-label]').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)) === 3)
   ok('signed out: navigation has All models only, and no card can be moved', (await nav(guest).getByRole('link').count()) === 1 && (await guest.getByRole('button', { name: /to a folder/ }).count()) === 0)
   ok('the title is "Economy design toolkit"', (await guest.title()) === 'Economy design toolkit' && (await guest.getByRole('heading', { level: 1 }).innerText()) === 'Economy design toolkit')
@@ -85,15 +86,15 @@ try {
   await search.fill('event')
   ok('search looks at names only (no model is named "event")', (await cardNames(guest)).length === 0 && (await guest.getByText('No models match “event”').isVisible()))
   await guest.getByRole('button', { name: 'Reset search and folder' }).click()
-  ok('Reset brings every model back and clears the URL', (await cardNames(guest)).length === 7 && url(guest).search === '')
+  ok('Reset brings every model back and clears the URL', (await cardNames(guest)).length === N && url(guest).search === '')
   await search.fill('m')
-  await search.fill('mom')
+  await search.fill('momentum')
   await guest.reload({ waitUntil: 'networkidle' })
-  ok('a refresh keeps the search', (await search.inputValue()) === 'mom' && JSON.stringify(await cardNames(guest)) === '["Momentum"]')
+  ok('a refresh keeps the search', (await search.inputValue()) === 'momentum' && JSON.stringify(await cardNames(guest)) === '["Momentum"]')
   await guest.goBack()
-  ok('Back leaves the search in one step (typing does not fill the history)', (await search.inputValue()) === '' && (await cardNames(guest)).length === 7)
+  ok('Back leaves the search in one step (typing does not fill the history)', (await search.inputValue()) === '' && (await cardNames(guest)).length === N)
   await guest.goForward()
-  ok('Forward brings it back', (await search.inputValue()) === 'mom')
+  ok('Forward brings it back', (await search.inputValue()) === 'momentum')
 
   await guest.goto(`${BASE}?folder=unfiled`, { waitUntil: 'networkidle' })
   ok('a folder link while signed out says folders need signing in', await guest.getByRole('heading', { name: 'Folders are not available' }).isVisible())
@@ -109,7 +110,7 @@ try {
   // ---------------------------------------------------------------- two members
   const ana = await person('ana@studio.test')
   const ben = await person('ben@studio.test')
-  ok('signed in: All models, Unfiled; the workspace starts with no folders', (await folderLink(ana, 'Unfiled').innerText()).includes('7') && (await ana.getByText('No folders yet').isVisible()))
+  ok('signed in: All models, Unfiled; the workspace starts with no folders', (await folderLink(ana, 'Unfiled').innerText()).includes(String(N)) && (await ana.getByText('No folders yet').isVisible()))
 
   // Create: blank and case-insensitive duplicates refused.
   await ana.getByRole('button', { name: 'New folder' }).click()
@@ -157,7 +158,7 @@ try {
   await ana.getByRole('searchbox').fill('')
   await ana.getByRole('searchbox').blur()
   await folderLink(ana, 'Unfiled').click()
-  ok('Unfiled lists what is in no folder', (await cardNames(ana)).length === 5 && !(await cardNames(ana)).includes('Chef'))
+  ok('Unfiled lists what is in no folder', (await cardNames(ana)).length === N - 2 && !(await cardNames(ana)).includes('Chef'))
   await ana.goBack()
   ok('Back returns to the folder', url(ana).searchParams.get('folder') === liveOpsId && (await cardNames(ana)).length === 2)
 

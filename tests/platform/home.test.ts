@@ -12,8 +12,8 @@ const all = { kind: 'all' } as const
 describe('search', () => {
   it('trims, ignores case and matches part of the display name', () => {
     expect(names({ q: '  MERGE ', folder: all })).toEqual(['Merge Mania'])
-    expect(names({ q: 'mi', folder: all }).sort()).toEqual(['Diamond Mine'])
-    expect(names({ q: '   ', folder: all })).toHaveLength(7)
+    expect(names({ q: 'mi', folder: all }).sort()).toEqual(['Diamond Mine', 'Midnight blast'])
+    expect(names({ q: '   ', folder: all })).toHaveLength(MODEL_CATALOG.length)
   })
 
   it('matches display names only, not ids, slugs or sources', () => {
@@ -27,8 +27,8 @@ describe('search', () => {
     expect(names({ q: '', folder: { kind: 'folder', id: 'f1' } }, placed).sort()).toEqual(['Chef', 'Puzzle'])
     expect(names({ q: 'puz', folder: { kind: 'folder', id: 'f1' } }, placed)).toEqual(['Puzzle'])
     expect(names({ q: 'puz', folder: { kind: 'folder', id: 'f2' } }, placed)).toEqual([])
-    expect(names({ q: '', folder: { kind: 'unfiled' } }, placed)).toHaveLength(4)
-    expect(names({ q: '', folder: all }, placed)).toHaveLength(7)
+    expect(names({ q: '', folder: { kind: 'unfiled' } }, placed)).toHaveLength(MODEL_CATALOG.length - 3)
+    expect(names({ q: '', folder: all }, placed)).toHaveLength(MODEL_CATALOG.length)
   })
 })
 

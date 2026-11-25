@@ -2,7 +2,30 @@
 // server, so nothing here may import React or browser APIs.
 
 /** Icons the catalog may name. The UI maps each key to a drawing (ModelIcon). */
-export const ICON_KEYS = ['layers', 'gem', 'chef-hat', 'coins', 'gauge', 'trophy', 'puzzle'] as const
+export const ICON_KEYS = [
+  'layers',
+  'gem',
+  'chef-hat',
+  'coins',
+  'gauge',
+  'trophy',
+  'puzzle',
+  'footprints',
+  'flag',
+  'paw-print',
+  'wand-sparkles',
+  'moon-star',
+  'package',
+  'tornado',
+  'ferris-wheel',
+  'shopping-basket',
+  'zap',
+  'disc-3',
+  'train-track',
+  'map',
+  'castle',
+  'candy',
+] as const
 export type IconKey = (typeof ICON_KEYS)[number]
 
 /**

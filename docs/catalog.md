@@ -1,6 +1,6 @@
 # The model catalog
 
-Seven models, from `src/platform/registry/catalog.ts`. A workbook source is
+22 models, from `src/platform/registry/catalog.ts`. A workbook source is
 what the brief said, nothing more: the workbook itself was not opened for this
 work, and nothing about a model's economics is inferred from sheet names.
 
@@ -17,6 +17,29 @@ work, and nothing about a model's economics is inferred from sheet names.
 "Name not checked": the brief says these have corresponding sheet families,
 and the family name is assumed to be the model's name until someone checks it
 against the workbook (`status: 'name-unverified'`).
+
+## Added 25 Nov 2026
+
+Listed on request, not built yet: each opens on "Model not migrated yet". No
+workbook source was given for them, so none is recorded (`sources: []`).
+
+| Model | URL |
+|---|---|
+| Trail | `/models/trail` |
+| Race | `/models/race` |
+| Pet | `/models/pet` |
+| Maleficent | `/models/maleficent` |
+| Midnight blast | `/models/midnight-blast` |
+| 8Box | `/models/8box` |
+| Progressive Twister | `/models/progressive-twister` |
+| Wheel | `/models/wheel` |
+| Basket Thrill | `/models/basket-thrill` |
+| Frenzy | `/models/frenzy` |
+| Disco | `/models/disco` |
+| Inside Tracks | `/models/inside-tracks` |
+| Wicked Trails | `/models/wicked-trails` |
+| Disney Moments | `/models/disney-moments` |
+| Sugar Rush | `/models/sugar-rush` |
 
 The workbook never goes into git (`*.xlsx`, `*.xlsm`, `*.xls` and `reference/`
 are ignored).
