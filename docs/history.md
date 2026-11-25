@@ -8343,3 +8343,21 @@ new packages) removed Playwright: it had been installed on the side, never
 listed, and npm removes what is not listed. It is a devDependency now, pinned
 to 1.64.1 - the version whose Chromium (1248) is installed here; 1.65 asks
 for a new browser. economy-page 99/99 and browser-data 10/10 with it.
+
+## The validator's rules
+
+25 Nov 2026: "the next thing we are going to do is to learn the syntax
+validation. we already got some kind of validator" - the economist's "Reward
+Scanner Pro" (Google Apps Script, sent in two chunks). Compared with the
+app's checker: the four real examples pass both; the validator is stricter on
+brackets (dynamic in brackets, what a group starts with, no preset inside,
+nested fallbacks, no duplicates), whole currency amounts, lower case triggers
+and unknown keys (an error); looser on amounts of 0 and coin decimals; it
+reads dr:key:value and a bare coins:N, not Missing/Duplicate; it counts
+prizes. Asked: where they disagree "The validator's"; the prize count "Yes,
+with its limits"; dr:key:value and bare coins "Not sure". The checker took the
+validator's rules and its prize count (with its run options on Check a
+reward: the prize limits, upper case triggers); its currency list became a
+known list too; the app's stricter rules stay where the validator is looser
+(asked again); "Balance tiers" writes [dynamic(...)]. verify-economy 310,
+economy-page 104, chef-worth 10, verify-chef-prize-text 9, CC 15.

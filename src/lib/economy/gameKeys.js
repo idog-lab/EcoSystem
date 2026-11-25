@@ -838,3 +838,32 @@ export const GAME_CURRENCIES = [
   "dr-secret-lab",
   "dr-cascade",
 ]
+
+// THE CURRENCIES THE ECONOMIST'S VALIDATOR KNOWS ("Reward Scanner Pro", its BASE_KEYS and NON_COUNTING_KEYS, given
+// in chat on 25 Nov 2026), copied as given. Read as known by the reward checker (parse.js) besides
+// GAME_CURRENCIES; 13 of them are on no other list. The validator also keeps keys added in it, not seen here.
+export const VALIDATOR_CURRENCIES = [
+  "dr-booster-x3-scene", "dr-booster-x2-scene", "dr-boost-your-puzzle", "dr-snowflake", "dr-holiday-tree", "dr-gingerbread",
+  "dr-boost-your-chef", "dr-apple-chase", "dr-champions-cup", "dr-blue-gem", "dr-parade-spade", "dr-candy-cane", "dr-six-box-reward",
+  "dr-pack-counter", "dr-album-catcher", "dr-basket-counter", "dr-magical-path-reward", "dr-album-path-reward", "dr-candy", "dr-blue-hat",
+  "dr-chef-catcher", "dr-puzzle-catcher", "dr-joker-catcher",
+  "dr-potion-catcher", "dr-dup-catcher", "dr-parallel-catchers",
+  "dr-lantern-lane", "dr-memory-road", "dr-mission-1-hidden",
+  "dr-mission-2-hidden", "dr-mission-3-hidden", "dr-service-rush-pot",
+  "dr-track-to-glory", "dr-disco-groove", "dr-midnight-blast-heel",
+  "dr-market-ticket", "dr-turbo-shop", "dr-momentum-honey-tree",
+  "dr-momentum-honey-tree-rc", "dr-kings-rainbow-trident",
+  "dr-kings-rainbow-trident-rc", "dr-tea-time-leaves", "dr-potion-drop",
+  "dr-coconut", "dr-coconut-lvl", "dr-album-twister", "dr-chef-twister",
+  "dr-cyber-twister", "dr-olympus-token", "dr-wheel-token", "dr-puzzle",
+  "dr-pickaxe", "dr-craze-raining-gift", "dr-pink-umbrella",
+  "dr-red-umbrella", "dr-golden-umbrella", "dr-hidden",
+  // (NON_COUNTING_KEYS only)
+  "dr-mission-4-hidden", "dr-mission-5-hidden",
+]
+
+// The allowance buckets its BASE_KEYS holds besides "allowance" and "coins": allowance:milestone(...), allowance:pricing(...).
+export const VALIDATOR_BUCKETS = ["milestone", "pricing"]
+
+// Items that are not counted as a prize (its NON_COUNTING_KEYS): triggers and these currencies.
+export const NON_COUNTING_CURRENCIES = ["dr-hidden", "dr-mission-1-hidden", "dr-mission-2-hidden", "dr-mission-3-hidden", "dr-mission-4-hidden", "dr-mission-5-hidden", "dr-pack-counter", "dr-basket-counter"]

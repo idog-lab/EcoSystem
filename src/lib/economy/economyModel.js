@@ -13,7 +13,7 @@
 // What the economist TAUGHT is kept in the project (taught.js) and wins over a
 // browser's copy: every economy made or read here has it put in last.
 
-import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF } from './gameKeys'
+import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF, VALIDATOR_CURRENCIES } from './gameKeys'
 import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from './taught'
 
 export const ECONOMY_VERSION = 5
@@ -438,6 +438,10 @@ export function currencyValue(currency, { date = null } = {}) {
 }
 
 export const findCurrency = (economy, name) => (economy?.currencies ?? []).find((c) => c.name === name) ?? null
+// A currency name the game is known to have though it is not in the table: the economist's list (GAME_CURRENCIES) or
+// their validator's (VALIDATOR_CURRENCIES).
+const KNOWN_CURRENCY_NAMES = new Set([...GAME_CURRENCIES, ...VALIDATOR_CURRENCIES])
+export const isKnownCurrencyName = (name) => KNOWN_CURRENCY_NAMES.has(name)
 export const findKey = (economy, listId, key) => (economy?.keys?.[listId] ?? []).find((k) => k.key === key) ?? null
 
 // A preset's worth: a listed one's value, or a Chef basket's tier value.

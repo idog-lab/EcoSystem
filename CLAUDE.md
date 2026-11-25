@@ -166,7 +166,13 @@ rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the
 Twister's price stays any whole number. Chef's grand prize follows RoundReward;
 Chef's value table comes from the economy (a chef keeps its own copy, step 2
-says when it differs). Merge's Syntax tab reads its item text with the checker
+says when it differs). **The checker holds the rules of the economist's own
+validator, "Reward Scanner Pro"** (economist: where the two disagree, "The
+validator's"): dynamic in brackets, what a [ ] group may hold, whole currency
+amounts, lower case triggers, an unknown currency, bucket or preset an
+error, and its prize count with its limits; where the validator is looser the
+app's stricter rule stays (asked) - docs/economy-rules.md, "The validator's
+rules". Merge's Syntax tab reads its item text with the checker
 (a reading only). Diamond Mine is not connected. Open questions are listed in
 that file.
 

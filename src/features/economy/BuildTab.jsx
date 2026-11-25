@@ -230,8 +230,13 @@ export default function BuildTab({ economy }) {
         <div className="flex flex-col gap-3" data-testid="economy-build-output">
           {text ? <p className={`${MONO} rounded-xl bg-slate-50 p-3 text-slate-800`} data-testid="economy-build-text">{text}</p> : <p className="text-sm text-slate-500">Nothing yet: add coins, a resource, a preset, a pack or a currency.</p>}
           {text && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <CopyButton text={text} />
+              {check.node && (
+                <span className="text-sm text-slate-600" data-testid="economy-build-prizes" title="Counted as the economist's validator counts: triggers and hidden counters are not prizes.">
+                  {check.prizes} {check.prizes === 1 ? 'prize' : 'prizes'}
+                </span>
+              )}
             </div>
           )}
           {text && <Findings issues={check.issues} />}
