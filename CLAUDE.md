@@ -28,9 +28,26 @@ When this file and the history disagree, this file wins.
   confirmed stay labelled "unverified" wherever they are shown or exported.
 - **Verify in the real app, not just the library** (Playwright suites below).
   Report what was actually checked, including what failed or was flaky.
-- **Publishing is the economist's call.** Commit, push and `npm run deploy`
-  only when asked, every time. A shared stage link always opens the deployed
-  site, so a change to play reaches phones only after a deploy.
+- **Two people work on the app, on branches** (economist, 25 Nov 2026: "im
+  working with another guy on the app"; chose "Pull request, you approve" and
+  "Automatic on every merge"). Every change goes on a branch of its own off an
+  up-to-date `origin/master` (`git fetch` first) - **never commit or push to
+  `master`**. Commit and push the branch only when asked, every time; then give
+  the economist the pull-request link
+  (`https://github.com/idog-lab/EcoSystem/compare/master...<branch>?expand=1`).
+  The economist reads it and merges it on GitHub - their own work and the
+  coworker's. **A merge into master publishes the site by itself**
+  (`.github/workflows/deploy.yml`: lint, build, write `gh-pages`); nobody
+  deploys by hand - `npm run deploy` refuses, and `npm run deploy:manual`
+  (from an up-to-date master only) is for when GitHub's own deploy is broken,
+  on the economist's word. Every pull request is linted and built on top of
+  the latest master (`.github/workflows/check.yml`, "Build and lint"); run
+  the engine checks that touch a change on the branch before handing over the
+  link - the check on GitHub does not run them. A shared stage link always opens the deployed site,
+  so a change to play reaches phones only once it is merged. Before starting
+  on a branch, bring it up to date with master; CLAUDE.md and
+  `docs/history.md` change in almost every piece of work, so expect to merge
+  them by hand.
 - Artwork is prototype concept art made by the economist, not studio artwork.
 - `src/features/chef` and `src/features/diamondMine` are separate features
   that share only `src/components/` and `src/lib/`. Leave them alone unless
@@ -141,7 +158,8 @@ docs/economy-rules.md   the economy's rules, where they apply, what is open
 
 Dev: `npm run dev` (port 5173, `strictPort` - localStorage is per origin
 including port, so never let it drift). `npm run build`, `npm run lint`
-(oxlint), `npm run deploy` (gh-pages, only when asked).
+(oxlint). The site is published by GitHub on a merge into master
+(`.github/workflows/deploy.yml`); `npm run deploy` refuses.
 Hosting: `https://idog-lab.github.io/EcoSystem/` - the work repo
 (`origin` = idog-lab/EcoSystem since 25 Nov 2026; the old repo is the remote
 `personal`, idoggk/Merge, pushed to only when asked). `base: '/EcoSystem/'` in

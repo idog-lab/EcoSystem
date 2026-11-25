@@ -8124,6 +8124,36 @@ rows only Recompletion reaches (merge tiers 13 and 14,
 only a reward whose Recompletion amount is above 0 (the 23 Nov backup:
 charms 200 there). Said so; nothing changed.
 
+## The work repo, branches and a deploy on every merge
+
+25 Nov 2026. The project moved to the work repo: `origin` is now
+idog-lab/EcoSystem (the old idoggk/Merge is the remote `personal`, pushed to
+only when asked), and the site is https://idog-lab.github.io/EcoSystem/
+(`base: '/EcoSystem/'`, `PRODUCTION_ORIGIN`; links made before still open
+idoggk.github.io/Merge). The economist switched on Pages for the gh-pages
+branch. Git asked to authorize on every push: the address carried the user
+"ido.g" while the sign-in is saved for the account idog-lab - the address is
+`https://idog-lab@github.com/...` now.
+
+Then: "we need to work with branches now i guess because im working with
+another guy on the app". Asked: "Pull request, you approve" and "Automatic on
+every merge". So every change goes on a branch and a pull request the
+economist merges, and `.github/workflows/deploy.yml` publishes master on
+every merge (lint, build, write gh-pages; "Run workflow" on the Actions tab
+publishes again by hand). `npm run deploy` refuses now - a hand deploy from a
+branch or an old master would take the other person's merged work off the
+site; `npm run deploy:manual` is the old command, for when GitHub's deploy is
+broken. A clean clone was built before: the same files as the live site.
+
+The economist asked whether a coworker's branch made from an older master
+would overwrite their work. No: a merge takes only what the branch changed;
+the same lines changed on both sides stop the merge as a conflict. The risk
+is changes that merge cleanly and do not fit together - so a check on every
+pull request (`.github/workflows/check.yml`: lint and build of the branch
+merged with the latest master), and the master ruleset is to require it and
+require a branch up to date with master before merging (set by the economist
+on GitHub).
+
 ## All my data, as one file
 
 25 Nov 2026, after the move to the work repo: "we got memory in the last

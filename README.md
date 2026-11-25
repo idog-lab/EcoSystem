@@ -15,7 +15,8 @@ npm run build
 npm run lint
 npm run verify    # engine checks
 npm run e2e       # browser checks (needs npm run dev running)
-npm run deploy    # publish to GitHub Pages
+# The site (https://idog-lab.github.io/EcoSystem/) is published by GitHub
+# whenever a pull request is merged into master (.github/workflows/deploy.yml).
 ```
 
 ## Folders

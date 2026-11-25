@@ -1,0 +1,31 @@
+# The check on every pull request into master: the branch merged with the
+# latest master is linted and built (economist, 25 Nov 2026: two people work
+# on the app; changes that do not touch the same lines can still not fit
+# together). The pull request shows a tick or a cross. With the master
+# ruleset's "Require status checks to pass" (this check, "Build and lint") and
+# "Require branches to be up to date before merging", nothing is merged that
+# was not checked on top of everything merged before it. Catches what breaks
+# the build or the code check - not a wrong number in the economy; the engine
+# checks (npm run verify) are run on the branch before a pull request.
+name: Check
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
