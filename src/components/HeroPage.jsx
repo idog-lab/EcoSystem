@@ -1,4 +1,5 @@
 import { Puzzle, Pickaxe, ChefHat, Coins, ArrowRight } from 'lucide-react'
+import BrowserDataPanel from './BrowserDataPanel'
 
 const FEATURES = [
   {
@@ -62,6 +63,8 @@ export default function HeroPage({ onSelect }) {
             <span className="text-sm text-slate-400 font-medium">More features coming soon.</span>
           </div>
         </div>
+
+        <BrowserDataPanel />
       </main>
     </div>
   )

@@ -8153,3 +8153,18 @@ pull request (`.github/workflows/check.yml`: lint and build of the branch
 merged with the latest master), and the master ruleset is to require it and
 require a branch up to date with master before merging (set by the economist
 on GitHub).
+
+## All my data, as one file
+
+25 Nov 2026, after the move to the work repo: "we got memory in the last
+repo. can we take it back ? we had some saved merge features there". The old
+site's data is still in the economist's browser, under idoggk.github.io; the
+new site cannot read it (a browser keeps each site apart). What existed moved
+it badly: saved events one at a time, Chef by its own file, the Economy page
+and Diamond Mine not at all. Asked, the economist chose "One-file move": the
+home screen has "Your data in this browser" - Download all my data (every key
+of the app in one file) and Restore all my data (shows what the file holds
+first; adds the saved events, puts in what this browser has none of, replaces
+a part only when ticked; downloads what is here first). This version is
+published once to the old site too (idoggk/Merge, built for /Merge/), so the
+old data can be downloaded there. verify-browser-data 11, browser-data 10.
