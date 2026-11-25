@@ -41,7 +41,7 @@ export default function BalanceTab({ economy }) {
 
   const result = useMemo(() => balanceTiers(rows, { economy, date: date || null, flagPct, currency }), [rows, economy, date, flagPct, currency])
   const set = (i, patch) => setRows((list) => list.map((r, j) => (j === i ? { ...r, ...patch } : r)))
-  const usable = economy.currencies.filter((c) => c.valueGameplay != null || c.daily)
+  const usable = economy.currencies.filter((c) => c.valueGameplay != null || c.daily || c.periods?.length)
 
   function usePaste() {
     const { rows: read, bad } = parseTierRows(paste)

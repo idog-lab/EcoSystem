@@ -29,14 +29,18 @@ When this file and the history disagree, this file wins.
 - **Verify in the real app, not just the library** (Playwright suites below).
   Report what was actually checked, including what failed or was flaky.
 - **Two people work on the app, on branches** (economist, 25 Nov 2026: "im
-  working with another guy on the app"; chose "Pull request, you approve" and
-  "Automatic on every merge"). Every change goes on a branch of its own off an
-  up-to-date `origin/master` (`git fetch` first) - **never commit or push to
-  `master`**. Commit and push the branch only when asked, every time; then give
-  the economist the pull-request link
-  (`https://github.com/idog-lab/EcoSystem/compare/master...<branch>?expand=1`).
-  The economist reads it and merges it on GitHub - their own work and the
-  coworker's. **A merge into master publishes the site by itself**
+  working with another guy on the app"; chose "Automatic on every merge").
+  Every change goes on a branch of its own off an up-to-date `origin/master`
+  (`git fetch` first) - **never commit or push to `master`**. **Claude takes
+  its own work all the way** (economist, 25 Nov 2026, of the pull-request
+  link: "why do we work with the pull request link ? i want u to do it
+  urself" - it replaces "Pull request, you approve"): when a piece of work is
+  done and its checks pass, commit, push the branch, open the pull request,
+  wait for GitHub's "Build and lint" check and merge it - then say what went
+  live. Never merge with a failing check, and never merge the coworker's
+  branches (theirs are theirs to merge). Pull requests are opened and merged
+  with GitHub's `gh` tool, signed in by the economist; never read a token out
+  of git's saved logins. **A merge into master publishes the site by itself**
   (`.github/workflows/deploy.yml`: lint, build, write `gh-pages`); nobody
   deploys by hand - `npm run deploy` refuses, and `npm run deploy:manual`
   (from an up-to-date master only) is for when GitHub's own deploy is broken,
@@ -105,7 +109,21 @@ are **never invented** - they come from the Economy page's lists - and the
 sheets' rounding rules (RoundReward, MergeRoundReward, spin cost, ...) are
 matched exactly. Rules in `src/lib/economy/` (rounding, economyModel, syntax,
 parse, segments, economyStore); the **Economy** page on the home screen
-(`src/features/economy/`) holds the values and keys, kept in this browser.
+(`src/features/economy/`) holds the values and keys. **The app is taught in
+the project** (economist, 25 Nov 2026: what they and their coworker teach is
+kept "In the project", taught by "Explain in chat", the basics first):
+`src/lib/economy/taught.js` holds every value taught, with the words it was
+said in, the day and who said it, and a taught value wins over a browser's
+own (the page marks it "Taught" and has no field for it). What is typed on
+the page and not taught stays in that browser, listed on the Worth tab with
+"Copy as a message". When they explain a value in chat, write it there - never
+invent one. **Four currencies are always in the game** (`CORE_CURRENCIES`,
+economist): dr-puzzle a value a day, dr-pet a value a live week (7 days from
+the day typed), dr-merge and dr-pickaxe from a date to a date - a table of
+their own with dates (`periods`); **a date with no value is unknown**, never
+the nearest one, for every dated currency. Other currencies are added from a
+drop list (`GAME_CURRENCIES`: the economist's list of the game's currencies,
+copied as given; dr-basket-counter on it is never offered - removed by them).
 **These rules are for prizes on a feature's tiers only** (economist: "all the
 rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the

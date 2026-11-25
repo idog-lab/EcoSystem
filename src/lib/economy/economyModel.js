@@ -9,8 +9,12 @@
 // One copy for the whole app (src/lib, shared by every feature), kept in this
 // browser and in backups (economyStore.js). A value nobody gave is null and
 // reads "not set" - never 0.
+//
+// What the economist TAUGHT is kept in the project (taught.js) and wins over a
+// browser's copy: every economy made or read here has it put in last.
 
-import { GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF } from './gameKeys'
+import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF } from './gameKeys'
+import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from './taught'
 
 export const ECONOMY_VERSION = 4
 
@@ -26,9 +30,9 @@ export const RESOURCES = [
 export const RESOURCE_BY_TOKEN = Object.fromEntries(RESOURCES.map((r) => [r.token, r]))
 export const RESOURCE_BY_ID = Object.fromEntries(RESOURCES.map((r) => [r.id, r]))
 
-// The economist's table. (Energy, "energy:N", was in the first text and is not used - economist: "u can remove
-// this energy".)
-export const DEFAULT_RESOURCE_VALUES = { coins: 1, wild: 2.5, stock: 2, undo: 0.25, entry: 1 }
+// The economist's table, as taught (taught.js). (Energy, "energy:N", was in the first text and is not used -
+// economist: "u can remove this energy".)
+export const DEFAULT_RESOURCE_VALUES = Object.fromEntries(RESOURCES.map((r) => [r.id, TAUGHT_RESOURCES[r.id]?.value ?? null]))
 
 // A sheet's name for a resource ("Extra Stock", "FreeRound") -> its id; null when unknown.
 export function resourceIdOf(name) {
@@ -46,14 +50,73 @@ export function resourceIdOf(name) {
 // value changes day by day; when it is set it is what a date reads.
 // One worth only - game play (economist, 24 Nov 2026: "we will use only the gameplay, u can remove all the pricing
 // things from the app"); a pricing worth an older save carries is dropped.
-export function createCurrency({ name = '', feature = '', valueGameplay = null, daily = '', startDate = '', endDate = '', note = '', ownName = false } = {}) {
-  return { name, feature, valueGameplay, daily, startDate, endDate, note, ownName }
+// `periods`: [{ from, to, value }] - the values of a currency that is always in the game (CORE_CURRENCIES), each
+// with the dates it holds for, both days included.
+export function createCurrency({ name = '', feature = '', valueGameplay = null, daily = '', periods = [], startDate = '', endDate = '', note = '', ownName = false } = {}) {
+  return { name, feature, valueGameplay, daily, periods: cleanPeriods(periods), startDate, endDate, note, ownName }
+}
+
+// THE CURRENCIES ALWAYS IN THE GAME (economist, 25 Nov 2026: "there are DRs that will always be in the game ...
+// puzzle, merge, picks, pet. those should be in a different table, that also holds the dates that the value is
+// relevant to. the puzzle should have different value for each day, and the pet should have different values for
+// each week he is live"). Asked: merge and picks are dr-merge and dr-pickaxe ("like we got in the table now"),
+// with a value "From date to date"; a pet week runs 7 days "From the day I type". Their worth is only what their
+// dates say: a date with no value reads unknown ("Unknown"), never the nearest one.
+//   step: 'day' (one value a day), 'week' (7 days from the day typed), 'range' (from a date to a date).
+export const CORE_CURRENCIES = [
+  { name: 'dr-puzzle', label: 'Puzzle', step: 'day' },
+  { name: 'dr-merge', label: 'Merge', step: 'range' },
+  { name: 'dr-pickaxe', label: 'Picks', step: 'range' },
+  { name: 'dr-pet', label: 'Pet', step: 'week' },
+]
+export const coreCurrency = (name) => CORE_CURRENCIES.find((c) => c.name === name) ?? null
+
+// --- Periods (the dates a value holds for) ----------------------------------
+
+export function addDays(date, n) {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+const byFrom = (a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0)
+// Only real periods, by date: from and to real dates, from not after to, a value that is a number.
+export function cleanPeriods(list) {
+  if (!Array.isArray(list)) return []
+  return list
+    .filter((p) => p && isRealDate(p.from) && isRealDate(p.to) && p.from <= p.to && p.value !== '' && p.value != null && Number.isFinite(Number(p.value)))
+    .map((p) => ({ from: p.from, to: p.to, value: Number(p.value) }))
+    .sort(byFrom)
+}
+// The period of `list` (other than index `except`) that shares a day with from..to, or null.
+export const overlapping = (list, from, to, except = -1) => list.find((p, i) => i !== except && p.from <= to && from <= p.to) ?? null
+// "30 Nov 2026"
+export const readableDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+export const periodText = (p) => (p.from === p.to ? p.from : `${p.from}..${p.to}`)
+// The writing of a list of periods: 2026-11-30=0.03|2026-12-01..2026-12-14=0.3
+export const formatPeriods = (list) => list.map((p) => `${periodText(p)}=${p.value}`).join('|')
+
+// Periods pasted from a sheet, for a step: 'day' reads date=value (the export writing,
+// 2026-11-30=0.0376875|2026-12-01=0.0333518); 'week' reads the first day of a week and its value; 'range' reads
+// from..to=value, or from, to and value with a tab or space between. Returns { periods, bad }.
+export function parsePeriods(text, step) {
+  const periods = []
+  const bad = []
+  for (const part of String(text ?? '').split(/[|\n\r;]+/).map((s) => s.trim()).filter(Boolean)) {
+    const m = step === 'range' ? part.match(/^(\d{4}-\d{2}-\d{2})\s*(?:\.\.|[\t ,]+)\s*(\d{4}-\d{2}-\d{2})\s*[=:\t ,]\s*(-?\d+(?:\.\d+)?)$/) : part.match(/^(\d{4}-\d{2}-\d{2})\s*[=:\t ,]\s*(-?\d+(?:\.\d+)?)$/)
+    if (!m || !isRealDate(m[1]) || (step === 'range' && (!isRealDate(m[2]) || m[2] < m[1]))) {
+      bad.push(part)
+      continue
+    }
+    if (step === 'range') periods.push({ from: m[1], to: m[2], value: Number(m[3]) })
+    else periods.push({ from: m[1], to: step === 'week' ? addDays(m[1], 6) : m[1], value: Number(m[2]) })
+  }
+  return { periods, bad }
 }
 
 // The names the economist gave (section 3), the three Merge Mania reads, and
 // the one this app made up. No value is known for any of them but dr-hidden.
 const SEED_CURRENCIES = [
-  createCurrency({ name: 'dr-puzzle', feature: 'Puzzle', note: 'Loses value day by day: paste its dated values.' }),
+  createCurrency({ name: 'dr-puzzle', feature: 'Puzzle', note: 'A value for each day.' }),
   createCurrency({ name: 'dr-pickaxe' }),
   createCurrency({ name: 'dr-midnight-blast-heel' }),
   createCurrency({ name: 'dr-pet' }),
@@ -113,22 +176,169 @@ const SEED_KEYS = {
 // stock, Wild or Free_round3). Worth by tier, the same every day for now (economist: "as for now the basket values
 // are like i gave u, when the chef model in the app will be better we will change its value daily").
 export const CHEF_BASKET_TIERS = ['Basic', 'Rare', 'Epic']
-export const DEFAULT_CHEF_BASKET_VALUES = { Basic: 0.25, Rare: 1, Epic: 4 }
+export const DEFAULT_CHEF_BASKET_VALUES = Object.fromEntries(CHEF_BASKET_TIERS.map((t) => [t, TAUGHT_CHEF_BASKETS[t]?.value ?? null]))
 export const CHEF_BASKET_TIER = /^Chef__(Basic|Rare|Epic)_Phase_/
 export const chefBasketKeys = (economy, { pricing = false } = {}) => (economy?.keys?.presets ?? []).map((k) => k.key).filter((k) => CHEF_BASKET_TIER.test(k) && (pricing || !/_pricing_/.test(k)))
+
+// --- What was taught (taught.js) --------------------------------------------
+
+const TAUGHT_CURRENCY_BY_NAME = new Map(TAUGHT_CURRENCIES.map((c) => [c.name, c]))
+export const taughtResource = (id) => TAUGHT_RESOURCES[id] ?? null
+export const taughtChefBasket = (tier) => TAUGHT_CHEF_BASKETS[tier] ?? null
+export const taughtCurrency = (name) => TAUGHT_CURRENCY_BY_NAME.get(name) ?? null
+export const taughtKey = (listId, key) => (TAUGHT_KEYS[listId] ?? []).find((k) => k.key === key) ?? null
+// Has this field of a taught entry been taught? (A taught currency may have a worth and no dates, or the reverse.)
+export const isTaught = (entry, field) => !!entry && entry[field] !== undefined
+
+const blank = (v) => v == null || v === ''
+const sameValue = (a, b) => (blank(a) || blank(b) ? blank(a) && blank(b) : Number(a) === Number(b))
+
+const TAUGHT = { resources: TAUGHT_RESOURCES, chefBaskets: TAUGHT_CHEF_BASKETS, currencies: TAUGHT_CURRENCIES, keys: TAUGHT_KEYS }
+
+// Puts what was taught into an economy, over what it held. Returns the economy and `replacedHere`: the values
+// this browser held of its own that the project's replaced ({ what, here, taught }) - said once on the page.
+// (`taught` is taught.js; the checks pass their own.)
+export function applyTaught(economy, taught = TAUGHT) {
+  const { resources: TAUGHT_RESOURCES, chefBaskets: TAUGHT_CHEF_BASKETS, currencies: TAUGHT_CURRENCIES, keys: TAUGHT_KEYS } = taught
+  const TAUGHT_CURRENCY_BY_NAME = new Map(TAUGHT_CURRENCIES.map((c) => [c.name, c]))
+  const replaced = []
+  const note = (what, here, taught) => {
+    if (!blank(here) && !sameValue(here, taught)) replaced.push({ what, here, taught })
+  }
+  const resources = { ...economy.resources }
+  for (const [id, t] of Object.entries(TAUGHT_RESOURCES)) {
+    note(`${RESOURCE_BY_ID[id]?.label ?? id}: worth of one`, resources[id], t.value)
+    resources[id] = t.value
+  }
+  const chefBaskets = { ...economy.chefBaskets }
+  for (const [tier, t] of Object.entries(TAUGHT_CHEF_BASKETS)) {
+    note(`${tier} Chef basket`, chefBaskets[tier], t.value)
+    chefBaskets[tier] = t.value
+  }
+  const currencies = economy.currencies.map((c) => {
+    const t = TAUGHT_CURRENCY_BY_NAME.get(c.name)
+    if (!t) return c
+    const next = { ...c }
+    if (isTaught(t, 'valueGameplay')) {
+      note(`${c.name}: worth`, c.valueGameplay, t.valueGameplay)
+      next.valueGameplay = t.valueGameplay
+    }
+    if (isTaught(t, 'daily')) {
+      if (!blank(c.daily) && c.daily !== t.daily) replaced.push({ what: `${c.name}: values by date`, here: 'its own dates', taught: 'the taught dates' })
+      next.daily = t.daily
+    }
+    if (isTaught(t, 'periods')) {
+      const taughtPeriods = cleanPeriods(t.periods)
+      if (c.periods?.length && formatPeriods(c.periods) !== formatPeriods(taughtPeriods)) replaced.push({ what: `${c.name}: values by date`, here: 'its own dates', taught: 'the taught dates' })
+      next.periods = taughtPeriods
+    }
+    for (const field of ['feature', 'note']) if (isTaught(t, field)) next[field] = t[field]
+    return next
+  })
+  for (const t of TAUGHT_CURRENCIES) {
+    if (currencies.some((c) => c.name === t.name)) continue
+    const { name, valueGameplay, daily, periods, feature, note: text } = t
+    currencies.push(createCurrency({ name, valueGameplay: valueGameplay ?? null, daily: daily ?? '', periods: periods ?? [], feature: feature ?? '', note: text ?? '' }))
+  }
+  const keys = { ...economy.keys }
+  for (const list of KEY_LISTS) {
+    const taught = TAUGHT_KEYS[list.id] ?? []
+    if (!taught.length) continue
+    const items = (keys[list.id] ?? []).map((k) => {
+      const t = taught.find((x) => x.key === k.key)
+      if (!t) return k
+      const next = { ...k }
+      if (isTaught(t, 'value')) {
+        note(`${list.atom}:${k.key}`, k.value, t.value)
+        next.value = t.value
+      }
+      if (isTaught(t, 'note')) next.note = t.note
+      return next
+    })
+    for (const t of taught) if (!items.some((k) => k.key === t.key)) items.push(createKey({ key: t.key, value: t.value ?? null, note: t.note ?? '' }))
+    keys[list.id] = items
+  }
+  // Not enumerable: never written to storage or a file, and gone from the copy the next change makes.
+  return Object.defineProperty({ ...economy, resources, chefBaskets, currencies, keys }, 'replacedHere', { value: replaced, enumerable: false })
+}
+
+// What this browser holds that was NOT taught: worths typed here, and currencies or keys added here. It stays in
+// this browser only until it is taught (the Worth tab lists it, ready to be sent).
+//   [{ kind: 'currency' | 'key', list?, name, value?, daily?, added }]
+const SEED_CURRENCY_NAMES = new Set([...SEED_CURRENCIES.map((c) => c.name), ...GAME_CURRENCIES])
+
+// Removed by the economist, though on the game's list: the basket counter (24 Nov 2026: "the basket counter has no
+// value. and also u can remove it, that logic is not up to date").
+const REMOVED_CURRENCIES = new Set(['dr-basket-counter'])
+
+// The game's currencies the Currencies table does not hold yet: the drop list a currency is added from (the
+// game's list, the ones the page starts with, the taught ones), by name.
+export function currencyChoices(economy) {
+  const have = new Set((economy?.currencies ?? []).map((c) => c.name))
+  const known = new Set([...SEED_CURRENCY_NAMES, ...TAUGHT_CURRENCIES.map((c) => c.name)])
+  return [...known].filter((name) => !have.has(name) && !coreCurrency(name) && !REMOVED_CURRENCIES.has(name)).sort()
+}
+
+export function notTaught(economy) {
+  const out = []
+  for (const c of economy?.currencies ?? []) {
+    const t = TAUGHT_CURRENCY_BY_NAME.get(c.name)
+    const core = !!coreCurrency(c.name)
+    // (A currency always in the game is worth only what its dates say: a worth without dates is not used.)
+    const value = isTaught(t, 'valueGameplay') || core ? null : c.valueGameplay
+    const daily = isTaught(t, 'daily') ? '' : c.daily
+    const periods = isTaught(t, 'periods') ? '' : formatPeriods(c.periods ?? [])
+    const added = !t && !SEED_CURRENCY_NAMES.has(c.name)
+    if (added || !blank(value) || !blank(daily) || periods) out.push({ kind: 'currency', name: c.name, value: blank(value) ? null : Number(value), daily: daily || periods || '', added })
+  }
+  for (const list of KEY_LISTS) {
+    const seeded = new Map((SEED_KEYS[list.id] ?? []).map((k) => [k.key, k]))
+    for (const k of economy?.keys?.[list.id] ?? []) {
+      const t = taughtKey(list.id, k.key)
+      const added = !t && !seeded.has(k.key)
+      const typed = list.valueLabel && !isTaught(t, 'value') && !blank(k.value) && !sameValue(k.value, seeded.get(k.key)?.value)
+      if (added || typed) out.push({ kind: 'key', list: list.id, atom: list.atom, name: k.key, value: typed ? Number(k.value) : null, added })
+    }
+  }
+  return out
+}
+
+// The same, written as a message to paste in chat.
+export function notTaughtMessage(items) {
+  const lines = items.map((it) => {
+    const name = it.kind === 'currency' ? it.name : `${it.atom}:${it.name}`
+    const parts = []
+    if (it.added) parts.push(it.kind === 'currency' ? 'a currency added here' : 'a key added here')
+    if (it.value != null) parts.push(`worth ${it.value}`)
+    if (it.daily) parts.push(`values by date ${it.daily}`)
+    return `- ${name}: ${parts.join(', ')}`
+  })
+  return `Please teach the app these values from my Economy page:\n${lines.join('\n')}`
+}
 
 export function createEconomy(overrides = {}) {
   const keys = {}
   for (const list of KEY_LISTS) keys[list.id] = (overrides.keys?.[list.id] ?? SEED_KEYS[list.id] ?? []).map((k) => createKey(k))
-  return {
+  const currencies = (overrides.currencies ?? SEED_CURRENCIES).map((c) => createCurrency(asCore(c)))
+  // The currencies always in the game are always on the page.
+  for (const core of CORE_CURRENCIES) if (!currencies.some((c) => c.name === core.name)) currencies.push(createCurrency(SEED_CURRENCIES.find((c) => c.name === core.name) ?? { name: core.name }))
+  return applyTaught({
     version: ECONOMY_VERSION,
     // (Only the resources of the table: one an older save still holds, like energy, is dropped.)
     resources: Object.fromEntries(Object.keys(DEFAULT_RESOURCE_VALUES).map((id) => [id, overrides.resources?.[id] !== undefined ? overrides.resources[id] : DEFAULT_RESOURCE_VALUES[id]])),
-    currencies: (overrides.currencies ?? SEED_CURRENCIES).map((c) => createCurrency(c)),
+    currencies,
     keys,
     chefBaskets: { ...DEFAULT_CHEF_BASKET_VALUES, ...(overrides.chefBaskets ?? {}) },
     updatedAt: overrides.updatedAt ?? null,
-  }
+  })
+}
+
+// A currency always in the game saved with values by date in the older writing (`daily`, dr-puzzle's): each date
+// becomes a period of that one day. Nothing else of it changes.
+function asCore(c) {
+  if (!c || !coreCurrency(c.name) || !c.daily || c.periods?.length) return c
+  const { entries } = parseDailyValues(c.daily)
+  return { ...c, daily: '', periods: entries.map((e) => ({ from: e.date, to: e.date, value: e.value })) }
 }
 
 // Version 4: the game's keys (gameKeys.js) are added to a saved economy's lists - what it holds stays, a key
@@ -180,22 +390,32 @@ export function parseDailyValues(text) {
 }
 export const formatDailyValues = (entries) => entries.map((e) => `${e.date}=${e.value}`).join('|')
 
-// A currency's worth of one unit (game play). With dated values, the date is clamped to the
-// first and last date given, and a date between two reads the last one
-// before it. null when nothing is known.
+// Does a currency have values by date (periods, or the dated writing)?
+export const hasDatedValues = (currency) => !!(currency?.periods?.length || parseDailyValues(currency?.daily).entries.length)
+
+// A currency's worth of one unit (game play), on a date. null when nothing is known - and a date with no value
+// given is unknown, never the nearest date's (economist, 25 Nov 2026, asked: "Unknown").
+// - A currency always in the game (CORE_CURRENCIES) is worth what the period holding the date says; nothing else.
+// - Another one with values by date: a date between two reads the last one before it; before the first or after
+//   the last, nothing.
+// With no date chosen, the first date's value is read, and said (`noDate`).
 export function currencyValue(currency, { date = null } = {}) {
   if (!currency) return null
+  const periods = currency.periods ?? []
+  if (periods.length || coreCurrency(currency.name)) {
+    if (!periods.length) return null
+    if (!date) return { value: periods[0].value, date: periods[0].from, to: periods[0].to, dated: true, noDate: true }
+    const hit = periods.find((p) => p.from <= date && date <= p.to)
+    return hit ? { value: hit.value, date: hit.from, to: hit.to, dated: true } : null
+  }
   if (currency.daily) {
     const { entries } = parseDailyValues(currency.daily)
     if (entries.length) {
-      if (!date) return { value: entries[0].value, date: entries[0].date, dated: true, clamped: false, noDate: true }
-      const first = entries[0]
-      const last = entries[entries.length - 1]
-      if (date <= first.date) return { value: first.value, date: first.date, dated: true, clamped: date < first.date }
-      if (date >= last.date) return { value: last.value, date: last.date, dated: true, clamped: date > last.date }
-      let hit = first
+      if (!date) return { value: entries[0].value, date: entries[0].date, dated: true, noDate: true }
+      if (date < entries[0].date || date > entries[entries.length - 1].date) return null
+      let hit = entries[0]
       for (const e of entries) if (e.date <= date) hit = e
-      return { value: hit.value, date: hit.date, dated: true, clamped: false }
+      return { value: hit.value, date: hit.date, dated: true }
     }
   }
   const v = currency.valueGameplay

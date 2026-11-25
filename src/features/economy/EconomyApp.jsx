@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Coins } from 'lucide-react'
 import { createEconomy, normalizeEconomy } from '../../lib/economy/economyModel'
 import { loadEconomy, saveEconomy } from '../../lib/economy/economyStore'
@@ -33,6 +33,11 @@ export default function EconomyApp({ onHome }) {
   const [tab, setTab] = useState('worth')
   const [status, setStatus] = useState(null)
   const fileRef = useRef(null)
+  // When the taught values replaced some of this browser's own, they are kept so (said once, on this visit).
+  useEffect(() => {
+    if (economy.replacedHere?.length) saveEconomy(economy)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function change(next) {
     const r = saveEconomy(next)
@@ -61,8 +66,11 @@ export default function EconomyApp({ onHome }) {
       const data = raw?.kind === 'economy' ? raw.economy : raw?.economy ?? null
       if (!data || typeof data !== 'object' || !data.resources) throw new Error('This file holds no economy.')
       if (!window.confirm('Replace the economy on this page with the one in the file?')) return
-      change(normalizeEconomy(data))
-      setStatus({ tone: 'ok', text: `Loaded from ${file.name}.` })
+      const read = normalizeEconomy(data)
+      change(read)
+      // A file made before a value was taught: the taught one is used, and that is said.
+      const taughtOver = read.replacedHere.map((r) => `${r.what} (${r.here} in the file, ${r.taught} taught)`).join('; ')
+      setStatus({ tone: 'ok', text: `Loaded from ${file.name}.${taughtOver ? ` The app has been taught its own value for: ${taughtOver} - the taught one is used.` : ''}` })
     } catch (e) {
       setStatus({ tone: 'error', text: e.message || 'The file could not be read.' })
     }
@@ -86,7 +94,9 @@ export default function EconomyApp({ onHome }) {
             <Coins size={18} strokeWidth={2.25} />
           </span>
           <h1 className="font-display text-xl font-bold tracking-tight text-slate-900">Economy</h1>
-          <span className="text-sm text-slate-500">One for the whole app, in allowance. Changes are kept in this browser at once.</span>
+          <span className="text-sm text-slate-500" title="A value marked Taught was explained in chat and kept in the app itself: you and your coworker see the same. Anything else typed here is kept in this browser only.">
+            One for the whole app, in allowance. Values marked Taught are the same for everyone; anything typed here stays in this browser.
+          </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={BUTTON} onClick={download} data-testid="economy-download">
@@ -120,6 +130,12 @@ export default function EconomyApp({ onHome }) {
         ))}
       </nav>
       <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-6 pb-12" data-economy-tab={tab}>
+        {economy.replacedHere?.length > 0 && (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="economy-replaced">
+            This browser had values of its own where the app has now been taught one, and the taught one is used:{' '}
+            {economy.replacedHere.map((r) => `${r.what} (${r.here} here, ${r.taught} taught)`).join('; ')}.
+          </p>
+        )}
         {status && (
           <p className={`rounded-xl px-3 py-2 text-sm ${status.tone === 'error' ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`} data-testid="economy-status">
             {status.text}
