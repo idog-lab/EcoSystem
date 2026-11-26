@@ -8524,3 +8524,40 @@ saved before the switch keeps its typed demands, says so, and has neither
 kind picked until one is. build-event and rc-demand typed Segment 2's demand
 by hand on a new project; they now give it a multiplier of 1.6 (500 x 1.6 =
 800, the same figures). verify-demand-source 7, e2e merge-demand-source 18.
+## Wicked Trails: the first level feature
+
+26 Nov 2026: "lets start the first feature ... it is called wicked trails. for
+each feature we build, we will need to have the place where we build the
+economy and a place we can see with our eyes some kind of a mock of the
+feature", with a picture of the game's screen (two lanes of tiers, a Final
+Prize panel) and the two DR items, and an earlier summary of the economy sheet.
+The economist's words: "the feature has 2 progress bars in it. each one is
+filled using the DR u can see in the side of the progress bar. each DR as we
+said is given through a brut win ... the calculation is through (in levels
+feature) ROE, rate of economy is the allowance worth of prizes a player gets
+from a BW. it should let us pick the amount of tiers in each row, and to put
+prizes in the grand prize."
+
+Asked, in two rounds:
+- the lanes: "they are both filled together. with multiplier. when one lane is
+  finished, the economy of the first one is given to the DR of the 2nd one.
+  first each BW will split the ROE between the 2 DRs" - the split "A share I
+  type", the easy lane's length against the hard one "A share I type", and
+  silver and gold DR per Brut Win "Two per segment";
+- the tiers: "Shares of the lane" (adding up to 100%);
+- the ROE: "each feature gets a ROE";
+- the Final Prize: "Sheet's rule: 20% / 40% take" (the Final Prize counted at
+  50% of its worth against the pool).
+
+Built as a model of its own (the home page's Wicked Trails, now available):
+Segments (a segment set taken, named Wicked_Trails_..., effort, silver and
+gold per Brut Win, the base), Prizes (the rules, both lanes' tiers with their
+DR, Brut Wins, what they earn and their target, each prize's worth by the
+economy and how far it is; the Final Prize's pool and target), Mock (a
+sketch of the event, a slider of Brut Wins played and "Win a level"). The
+five shares start at the old sheet's values, said so on the page. Not built:
+the export, Fu split, Sell DR; dr-wicked-trails-dr-silver is not on the
+game's currency list. The tier-worth reading and a prize scaled for another
+segment were moved from Merge's prizeLadder.js to lib/economy/prizeWorth.js,
+unchanged (verify-prize-ladder 24 still passes). verify-wicked-trails 20 (a
+worked example by hand), e2e wicked-trails 16.

@@ -176,6 +176,31 @@ rules". Merge's Syntax tab reads its item text with the checker
 (a reading only). Diamond Mine is not connected. Open questions are listed in
 that file.
 
+## Wicked Trails (the first level feature)
+
+`src/features/wickedTrails/` (`lib/wickedTrails.js`, `WickedTrailsApp.jsx`), at `/models/wicked-trails`; economist,
+26 Nov 2026: "for each feature we build, we will need to have the place where we build the economy and a place we can
+see with our eyes some kind of a mock of the feature". Two lanes - Easy (silver DR) and Hard (gold DR) - and a Final
+Prize for finishing both. Three views: **Segments** (taken from a segment set, named `Wicked_Trails_...`, each with its
+effort in Brut Wins, its silver and gold DR per Brut Win - "Two per segment" - and the base), **Prizes** (the rules,
+both lanes' tiers and the Final Prize, each prize's worth by the economy beside its target), **Mock** (a sketch of the
+event for a segment, played Brut Win by Brut Win - not the game's artwork). The rules, all asked:
+- both lanes fill together; "first each BW will split the ROE between the 2 DRs" by a share typed, and "when one lane is
+  finished, the economy of the first one is given to the DR of the 2nd one"; the easy lane's length is a share of the
+  hard one's, typed; the hard lane lasts the segment's whole effort;
+- **ROE** ("rate of economy is the allowance worth of prizes a player gets from a BW") - "each feature gets a ROE";
+- a lane's tiers are shares of it adding up to 100%; a tier earns what its lane earned between the tier before and it;
+- **the Final Prize by the sheet's rule**: the easy lane gives 20% of what it earns to it, the hard lane 40%, the tiers
+  keep the rest; the Final Prize is counted at 50% of its worth, so its worth should be the pool / 50%;
+- prizes are typed on the base; another segment's are the base's x its effort against the base's, unless typed.
+The five shares start at the old sheet's values (33.33, 50, 20, 40, 50) and are typed over; tier DR is rounded to a
+whole DR (the sheet's "8Box rounding steps" are not taught); 1 to 8 tiers a lane (this app's own, the export's
+milestones 0-7); the sheet's prize count (4 a tier, 5 the Final Prize) is a warning. Kept in this browser under
+`superplay-wicked-trails` and shared with the team (`wicked-trails/state.json`). **Not built yet**: the export (OPS
+rows, syntax), Fu split, Sell DR. `dr-wicked-trails-dr-silver` is not on the game's currency list (gold is). Held by
+`verify-wicked-trails.mjs` and `scripts/e2e/wicked-trails.mjs`. A rule of the economy said while teaching a feature
+is asked about and then put in the Economy (economist: "if i do, u can ask and then insert it into the economy").
+
 ## Repository map
 
 ```
@@ -208,6 +233,7 @@ src/
     assets/game/     the artwork in use (copied and trimmed from art-source/)
     data/            the demo stage
   features/diamondMine/, features/chef/   other features (Chef: a six-step flow, see docs/chef-overview.md)
+  features/wickedTrails/            Wicked Trails: segments, prizes against ROE, a mock (section above)
 server/            the toolkit server (API, auth, folders, documents, assumptions)
 prisma/            database schema and migrations
 tests/             Vitest: platform logic and the server on a throw-away database (npm test)
