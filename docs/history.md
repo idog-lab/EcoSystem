@@ -8662,3 +8662,17 @@ suggestions, sticky leading columns and group headings; the prize parts read
 triggers and presets by kind. The prize builder left Wicked Trails (Merge
 keeps it). A segment's prize put back to the base's scaled one follows the
 base again. verify-prize-parts 14, e2e wicked-trails 41.
+## The last share is the rest; lanes in colour; table rules for every feature
+
+26 Nov 2026: "i want that where we are looking at shares of a 100%, i want the
+last tier to add up to the 100% also, maybe to have coloring to differ between
+the lanes. this rules should apply to other features also, we need the tables
+to be as easy to read and to handle as it can be". In the sheet a lane's last
+tier is the rest of it (withRest in src/lib/sheetGrid.js): worked out, grey,
+marked "rest", never typed, so a lane always adds up to 100%; when the tiers
+before the last take it all, the step says "the tiers before the last take N%
+- the last has nothing left". Rows tinted by lane (rowTone in the sheet): the
+easy lane pink (its DR's colour in the mock), the hard lane teal, the Final
+Prize amber, typed cells lighter than worked-out ones, a coloured edge. The
+table rules are written down for every feature (CLAUDE.md, "Tables, in every
+feature"). verify-sheet-grid 22, e2e wicked-trails 45.

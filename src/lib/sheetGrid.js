@@ -83,6 +83,17 @@ export function move({ r, c }, key, { rows, cols, shift = false }) {
   }
 }
 
+// SHARES OF A WHOLE: THE LAST IS THE REST (economist, 26 Nov 2026: "where we are looking at shares of a 100%, i want
+// the last tier to add up to the 100% also ... this rules should apply to other features also"). A share typed in any
+// place but the last; the last is always what is left of the whole (two decimals). Returns the new list.
+export function withRest(shares, i, value, whole = 100) {
+  const out = [...shares]
+  const last = out.length - 1
+  if (i < last) out[i] = value ?? 0
+  if (last >= 0) out[last] = Math.round((whole - out.slice(0, last).reduce((a, b) => a + (Number(b) || 0), 0)) * 100) / 100
+  return out
+}
+
 // The rectangle between two cells: { r0, r1, c0, c1 }.
 export const rectOf = (a, b) => ({ r0: Math.min(a.r, b.r), r1: Math.max(a.r, b.r), c0: Math.min(a.c, b.c), c1: Math.max(a.c, b.c) })
 export const inRect = (rect, r, c) => r >= rect.r0 && r <= rect.r1 && c >= rect.c0 && c <= rect.c1

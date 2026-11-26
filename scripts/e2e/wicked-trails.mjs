@@ -137,10 +137,18 @@ ok(`the prize's columns: the core resources, puzzle, mini game, presets, a stick
 ok('easy tiers: 50 silver each, 80% kept: 10', (await val('easy-0', 'drTotal')) === '50' && (await val('easy-0', 'target')) === '10' && (await val('easy-1', 'target')) === '10')
 ok('hard tiers: 150 gold each; 60% kept: 15 and 30', (await val('hard-0', 'drTotal')) === '150' && (await val('hard-0', 'target')) === '15' && (await val('hard-1', 'target')) === '30')
 ok(`the Final Prize: pool 35, target 70 (${await text(page.locator('[data-field="pool"]'))}, ${await val('final', 'target')})`, (await text(page.locator('[data-field="pool"]'))) === '35' && (await val('final', 'target')) === '70')
-// A share typed, then the lane put back.
+// A share typed: the last tier of the lane is the rest of it, so the lane always adds up to 100%.
 await put('easy-0', 'share', '40')
-ok('a share typed: the step says the lane no longer adds up', /Easy lane: the tiers add up to 90%/.test(await text(page.getByTestId('wt-step-missing'))))
-await keys('Control+z')
+ok(`a share typed: the last tier becomes the rest (${await val('easy-1', 'share')})`, (await val('easy-1', 'share')) === '60 rest' && !/add up|nothing left/.test(await text(page.getByTestId('wt-step-missing'))))
+await at('easy-1', 'share').click()
+await keys('7')
+ok('the last share is worked out: it cannot be typed over', (await val('easy-1', 'share')) === '60 rest' && /worked out/.test(await text(page.locator('[data-sheet-note="wt-tiers"]'))))
+await put('easy-0', 'share', '105')
+ok(`the tiers before the last take more than the lane: said (${(await text(page.getByTestId('wt-step-missing'))).split('\n')[1]})`, /Easy lane: the tiers before the last take 105% - the last has nothing left/.test(await text(page.getByTestId('wt-step-missing'))))
+await keys('Control+z', 'Control+z')
+ok('undone: 50 and 50 again', (await val('easy-0', 'share')) === '50' && (await val('easy-1', 'share')) === '50 rest')
+const tint = async (row, colKey) => (await at(row, colKey).getAttribute('class')).match(/bg-(fuchsia|teal|amber)-\d+/)?.[1]
+ok(`each lane in its own colour - easy ${await tint('easy-0', 'undo')}, hard ${await tint('hard-0', 'undo')}, the Final Prize ${await tint('final', 'undo')}`, (await tint('easy-0', 'undo')) === 'fuchsia' && (await tint('hard-1', 'lane')) === 'teal' && (await tint('final', 'target')) === 'amber')
 // The prize, a part a column: Undo 40 is worth 10, the target.
 await put('easy-0', 'undo', '40')
 ok(`Undo typed in its column: worth 10 against the target 10 (${await val('easy-0', 'worth')}, off by ${await val('easy-0', 'off')})`, (await val('easy-0', 'worth')) === '10' && (await val('easy-0', 'off')) === '0 (0%)')

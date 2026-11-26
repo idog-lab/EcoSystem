@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Download, Map as MapIcon } from 'lucide-react'
 import Card from '../../../components/ui/Card'
 import SheetGrid from '../../../components/SheetGrid'
+import { withRest } from '../../../lib/sheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
 import { currencyChoices } from '../../../lib/economy/economyModel'
@@ -373,6 +374,14 @@ function prizeChange(s, index, place, text) {
   return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t === scaled ? '' : t } } : x)) }
 }
 
+// Each lane's colour in the sheet (the colours of its DR in the mock), the Final Prize's its own; solid, so a sticky
+// cell sits on it (economist: "maybe to have coloring to differ between the lanes").
+const LANE_TONE = {
+  easy: { edit: 'bg-fuchsia-50', fixed: 'bg-fuchsia-100', edge: 'border-l-fuchsia-400' },
+  hard: { edit: 'bg-teal-50', fixed: 'bg-teal-100', edge: 'border-l-teal-500' },
+  final: { edit: 'bg-amber-50', fixed: 'bg-amber-100', edge: 'border-l-amber-400' },
+}
+
 // A list typed in one cell: "a, b" -> ['a', 'b'].
 const listOf = (v) =>
   String(v ?? '')
@@ -435,7 +444,19 @@ function TiersStep({ state, change, index, setShown, economy }) {
   const columns = [
     { key: 'lane', group: 'The tier', label: 'Lane', width: 96, sticky: true, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
     { key: 'tier', group: 'The tier', label: 'Tier', width: 44, sticky: true },
-    { key: 'share', group: 'The tier', label: 'Share', sub: '% of lane', width: 72, type: 'number', align: 'right', editable: (r) => r.place !== 'final', title: () => "The tier's share of the lane; a lane's shares add up to 100%" },
+    {
+      key: 'share',
+      group: 'The tier',
+      label: 'Share',
+      sub: '% of lane',
+      width: 82,
+      type: 'number',
+      align: 'right',
+      // The last tier of a lane is the rest of it: worked out, never typed - the lane always adds up to 100%.
+      editable: (r) => r.place !== 'final' && !r.last,
+      display: (r) => (r.place === 'final' ? '' : r.last && r.tier > 1 ? <span title="The rest of the lane: 100% less the tiers before it">{fmt(r.share)} <span className="text-[10px] text-slate-400">rest</span></span> : fmt(r.share)),
+      title: () => "The tier's share of the lane. The last tier is the rest, so a lane always adds up to 100%",
+    },
     { key: 'drTotal', group: 'The tier', label: 'DR', sub: 'in all', width: 72, type: 'number', align: 'right', value: (r) => r.t?.drTotal ?? null, title: () => 'The DR in all to the end of the tier - what Ops gets' },
     ...(showLane
       ? [
@@ -578,7 +599,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
       for (const { row, key, value } of changes) {
         if (key === 'share' && row.laneId) {
           const lane = out.lanes[row.laneId]
-          out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...lane, shares: lane.shares.map((x, j) => (j === row.tier - 1 ? (value ?? 0) : x)) } } }
+          out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...lane, shares: withRest(lane.shares, row.tier - 1, value) } } }
           continue
         }
         const current = prizeOf(out, index, row.place).text
@@ -619,7 +640,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
           {seg.name} cannot be worked out yet: {w.problems.join(' ')}
         </p>
       )}
-      <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} />
+      <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} rowTone={(r) => LANE_TONE[r.laneId ?? 'final']} />
       <p className="text-xs text-slate-500" data-note>
         Puzzle and mini game take the nearest amount that has a preset on the Economy page. Worth is read by the Economy page, in allowance; a part with no worth there
         (most presets, for now) leaves the prize&apos;s worth unknown. Off by: green within 5% of the target, amber within 15% - this app&apos;s own reading. At most{' '}
