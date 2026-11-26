@@ -397,14 +397,14 @@ function RowSyntax({ state, index, place, economy, tone }) {
           <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             <th className="w-64 py-1 pr-3">Column</th>
             <th className="py-1 pr-3">Config OPS</th>
-            <th className="py-1 pr-3">Config RC OPS</th>
           </tr>
         </thead>
         <tbody>
           {row.cells.map((c) => (
             <tr key={c.column} className="border-t border-slate-100 align-top" data-syntax-column={c.column}>
               <td className="py-1 pr-3 font-mono text-[11.5px] text-slate-500">{c.column}</td>
-              {['ops', 'rc'].map((which) => (
+              {/* Config OPS only (economist: RC taken out of this panel; it stays in the export). */}
+              {['ops'].map((which) => (
                 <td key={which} className="py-1 pr-3">
                   <div className="flex items-start gap-1.5">
                     <code className="min-w-0 flex-1 break-all font-mono text-[12px] text-slate-800" data-syntax={which}>
