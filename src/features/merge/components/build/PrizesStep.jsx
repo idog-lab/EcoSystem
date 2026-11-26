@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useEconomy } from '../../../../lib/economy/economyStore'
+import PrizeBuilder from '../../../../components/PrizeBuilder'
 import { boardIsBuilt } from '../../lib/build/eventBuild'
 import { effortOfEvent, ladderRanks, milestoneTexts, phaseOfRank, prizeAgainstWorth, rankWorths, segmentLadder, segmentMultiplier } from '../../lib/build/prizeLadder'
 
@@ -42,6 +43,8 @@ function Gap({ result }) {
 
 export default function PrizesStep({ segments, shownSegments, goTo }) {
   const economy = useEconomy()
+  // The rank whose prize builder is open (one at a time).
+  const [building, setBuilding] = useState(null)
   const shown = shownSegments?.length ? shownSegments : segments.map((_, i) => i)
   const event = segments[0]
   const baseIndex = Math.min(Math.max(0, event.prizeBase ?? 0), segments.length - 1)
@@ -187,6 +190,7 @@ export default function PrizesStep({ segments, shownSegments, goTo }) {
                         {fmt(target)}
                       </td>
                       <td className="py-1.5 pr-3 min-w-[18rem]">
+                        <div className="flex items-start gap-1.5">
                         <input
                           className={`w-full rounded-xl border px-2.5 py-1.5 font-mono text-sm ${entry && !entry.own ? 'border-dashed border-slate-300 bg-slate-50 text-slate-500' : 'border-slate-200 bg-white'}`}
                           placeholder={isBase ? (starting[row.rank] ?? 'type the prize, e.g. allowance(coins:5)') : 'type a prize for this segment'}
@@ -195,6 +199,18 @@ export default function PrizesStep({ segments, shownSegments, goTo }) {
                           aria-label={`Prize at rank ${row.rank} for ${name(index)}`}
                           data-prize-input={row.rank}
                         />
+                        <button
+                          type="button"
+                          onClick={() => setBuilding((r) => (r === row.rank ? null : row.rank))}
+                          aria-expanded={building === row.rank}
+                          className={`shrink-0 rounded-xl px-2.5 py-1.5 text-xs font-semibold ring-1 ${building === row.rank ? 'bg-purple-600 text-white ring-purple-600' : 'bg-white text-slate-700 ring-slate-200 hover:text-purple-700'}`}
+                          title="Pick the prize's parts - coins, resources, presets, a sticker pack, currencies, a chest - and the text is written for you"
+                          data-prize-build={row.rank}
+                        >
+                          {building === row.rank ? 'Done' : 'Build'}
+                        </button>
+                        </div>
+                        {building === row.rank && <div className="mt-1.5"><PrizeBuilder value={text} onChange={(t) => setPrize(row.rank, t)} economy={economy} testid={`rank-${row.rank}`} /></div>}
                         {entry && !entry.own && (
                           <div className="mt-0.5 text-[10.5px] text-slate-400" data-from-base>
                             from the base ×{fmt(ratio)} - type to change it
