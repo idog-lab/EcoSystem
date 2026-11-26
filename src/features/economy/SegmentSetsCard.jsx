@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { BUTTON, INPUT, Num, PRIMARY, TD, TH, Text } from './economyUi'
-import { SEGMENT_SETS_KEY, editSet, featureOf, namedPlan, saveFlowAsSet, saveSets, setEffort, setPlaceholder, setSegmentsOf, useSegmentSets } from '../../lib/economy/segmentSets'
+import { SEGMENT_SETS_KEY, editSet, featureOf, modeGroups, namedPlan, saveFlowAsSet, saveSets, setEffort, setEffortFollow, setEfforts, setModeFactor, setPlaceholder, setSegmentsOf, useSegmentSets } from '../../lib/economy/segmentSets'
 import { teamData } from '../../lib/teamData'
 
 const REMOVE = 'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600'
@@ -63,6 +63,30 @@ export function SaveSetForm({ plan, onSaved = null, name: shownName, setName: se
   )
 }
 
+// EVERY MODE SPLIT AT ONCE (economist: "where we see a mode split i want to have a factor on the effort between those
+// ones"): each part after the first follows the part before it x the factor typed. A segment's own choice can still be
+// changed in its row.
+function ModeFactor({ set, sets }) {
+  const [factor, setFactor] = useState('')
+  const groups = modeGroups(set)
+  const followers = groups.reduce((n, g) => n + g.length - 1, 0)
+  const apply = () => {
+    const v = Number(String(factor).replace(',', '.'))
+    if (Number.isFinite(v) && v >= 0) store(setModeFactor(sets, set.id, v))
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg bg-purple-50 px-2 py-1.5 text-xs text-purple-900" data-set-mode-factor>
+      <span>
+        Mode splits ({groups.length}): the higher mode&apos;s effort = the lower&apos;s x
+      </span>
+      <input value={factor} onChange={(e) => setFactor(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && apply()} inputMode="decimal" placeholder="1.5" className={`${INPUT} w-16 !py-0.5 text-right`} aria-label="Factor between the parts of a mode split" data-set-mode-factor-input />
+      <button type="button" className={`${BUTTON} !px-2 !py-0.5 text-xs`} onClick={apply} disabled={factor === ''} data-set-mode-factor-apply>
+        Apply to {followers}
+      </button>
+    </div>
+  )
+}
+
 // The name placeholder in a segment's name (2D_Levels_), marked as the part a feature replaces.
 export function Placeholder({ text }) {
   return (
@@ -108,8 +132,9 @@ export default function SegmentSetsCard({ onOpen }) {
                 Name placeholder <Placeholder text={setPlaceholder(set)} /> - a feature that takes the set puts its own name there (Merge_{set.segments[0]?.id ?? '...'}).
               </div>
               <div className="text-[11px] text-slate-400">
-                {set.segments.length} segments · {set.segments.filter((s) => s.effort != null).length} with an effort{set.updatedAt ? ` · changed ${new Date(set.updatedAt).toLocaleDateString()}` : ''}
+                {set.segments.length} segments · {set.segments.filter((s) => setEfforts(set)[s.id]?.value != null).length} with an effort{set.updatedAt ? ` · changed ${new Date(set.updatedAt).toLocaleDateString()}` : ''}
               </div>
+              {modeGroups(set).length > 0 && <ModeFactor set={set} sets={sets} />}
               <table className="mt-1 w-full border-collapse" data-dense>
                 <thead>
                   <tr>
@@ -120,17 +145,53 @@ export default function SegmentSetsCard({ onOpen }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {set.segments.map((s) => (
-                    <tr key={s.id} className="border-t border-slate-100" data-set-segment={s.id}>
-                      <td className={`${TD} text-sm text-slate-700`} title={s.condition}>
-                        <Placeholder text={setPlaceholder(set)} />
-                        {s.id}
-                      </td>
-                      <td className={`${TD} text-right`}>
-                        <Num value={s.effort ?? ''} allowEmpty min={0} onCommit={(v) => store(setEffort(sets, set.id, s.id, v))} className="w-24 text-right" placeholder="-" aria-label={`Effort of ${s.id} in ${set.name}`} data-set-effort />
-                      </td>
-                    </tr>
-                  ))}
+                  {set.segments.map((s) => {
+                    const value = setEfforts(set)[s.id]
+                    return (
+                      <tr key={s.id} className="border-t border-slate-100" data-set-segment={s.id}>
+                        <td className={`${TD} text-sm text-slate-700`} title={s.condition}>
+                          <Placeholder text={setPlaceholder(set)} />
+                          {s.id}
+                        </td>
+                        <td className={`${TD} text-right`}>
+                          <div className="flex items-center justify-end gap-1">
+                            <select
+                              value={s.effortOf ?? ''}
+                              onChange={(e) => store(setEffortFollow(sets, set.id, s.id, e.target.value || null, s.effortFactor ?? 1))}
+                              className={`${INPUT} w-[7.5rem] !px-1.5 text-xs`}
+                              title={s.effortOf ? `${s.id}'s effort is ${s.effortOf}'s times the factor` : "Typed: a number of Brut Wins. Or another segment's effort times a factor."}
+                              aria-label={`How the effort of ${s.id} is set`}
+                              data-set-effort-mode
+                            >
+                              <option value="">Typed</option>
+                              {set.segments
+                                .filter((o) => o.id !== s.id)
+                                .map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    x {o.id}
+                                  </option>
+                                ))}
+                            </select>
+                            {s.effortOf ? (
+                              <>
+                                <Num value={s.effortFactor ?? ''} allowEmpty min={0} onCommit={(v) => store(setEffortFollow(sets, set.id, s.id, s.effortOf, v))} className="w-14 text-right" placeholder="x" aria-label={`Factor of ${s.id}`} data-set-effort-factor />
+                                <span className="w-14 text-right text-xs font-semibold tabular-nums text-purple-700" data-set-effort-value title={value?.problem ?? undefined}>
+                                  {value?.value != null ? `= ${value.value}` : '-'}
+                                </span>
+                              </>
+                            ) : (
+                              <Num value={s.effort ?? ''} allowEmpty min={0} onCommit={(v) => store(setEffort(sets, set.id, s.id, v))} className="w-[7.25rem] text-right" placeholder="-" aria-label={`Effort of ${s.id} in ${set.name}`} data-set-effort />
+                            )}
+                          </div>
+                          {value?.problem && s.effortOf && (
+                            <div className="text-[11px] text-amber-700" data-set-effort-problem>
+                              {value.problem}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

@@ -2,7 +2,7 @@
 // any feature with the feature's own names, a save of the same name keeping the efforts by segment.
 //   npx vite-node scripts/verify/verify-segment-sets.mjs
 import { createPlan } from '../../src/lib/economy/segmentFlow.js'
-import { editSet, normalizeSets, saveFlowAsSet, setEffort, setForFeature, setPlaceholder, setSegmentId } from '../../src/lib/economy/segmentSets.js'
+import { editSet, modeGroups, normalizeSets, saveFlowAsSet, setEffort, setEffortFollow, setEfforts, setForFeature, setModeFactor, setPlaceholder, setSegmentId } from '../../src/lib/economy/segmentSets.js'
 
 let fails = 0
 let total = 0
@@ -49,6 +49,32 @@ check('a set name with spaces and signs makes a clean placeholder', setPlacehold
 check('a generic set needs a name, one with letters or digits', !!saveFlowAsSet([], noFeature, '').error && !!saveFlowAsSet([], noFeature, ' ,, ').error)
 const genAgain = saveFlowAsSet(setEffort(gen.sets, gen.set.id, 'BW_0_1000', 12), noFeature, '2D_Levels')
 check('saved again under its name: the same set, its efforts kept', !genAgain.created && genAgain.sets.length === 1 && genAgain.set.segments[0].effort === 12)
+
+// Efforts that follow: a mode split's higher mode = the lower's x a factor (economist: "where we see a mode split i want
+// to have a factor on the effort between those ones").
+const modes = saveFlowAsSet([], { ...plan, feature: '2D_Levels', splits: [{ id: 'm', values: '3', segments: [0, 1] }] }, '').set
+const ids = modes.segments.map((s) => s.id)
+check(`a set with mode splits finds them (${modeGroups(modes).map((g) => g.join(' / ')).join(' | ')})`, modeGroups(modes).length === 2 && modeGroups(modes)[0].length === 2 && ids.includes('BW_0_1000_Mode_3_plus'))
+let ms = setEffort([modes], modes.id, 'BW_0_1000_Mode_0_3', 40)
+ms = setEffort(ms, modes.id, 'BW_1000_2500_Mode_0_3', 100)
+ms = setModeFactor(ms, modes.id, 1.5)
+let v = setEfforts(ms[0])
+check(`"Apply" on the mode splits: each higher mode = the lower x 1.5 (${v.BW_0_1000_Mode_3_plus.value}, ${v.BW_1000_2500_Mode_3_plus.value})`, v.BW_0_1000_Mode_3_plus.value === 60 && v.BW_1000_2500_Mode_3_plus.value === 150 && v.BW_0_1000_Mode_0_3.value === 40)
+ms = setEffort(ms, modes.id, 'BW_0_1000_Mode_0_3', 50)
+check('the follower follows: 50 x 1.5 = 75', setEfforts(ms[0]).BW_0_1000_Mode_3_plus.value === 75)
+ms = setEffortFollow(ms, modes.id, 'BW_2500_Plus', 'BW_1000_2500_Mode_3_plus', 2)
+check('a chain: x a segment that itself follows (150 x 2 = 300)', setEfforts(ms[0]).BW_2500_Plus.value === 300)
+const loop = setEffortFollow(setEffortFollow(ms, modes.id, 'BW_0_1000_Mode_0_3', 'BW_0_1000_Mode_3_plus', 1), modes.id, 'BW_0_1000_Mode_3_plus', 'BW_0_1000_Mode_0_3', 1)
+check('two segments following each other: no effort, and why', setEfforts(loop[0]).BW_0_1000_Mode_0_3.value === null && /follows it back/.test(setEfforts(loop[0]).BW_0_1000_Mode_0_3.problem))
+const typedAgain = setEffortFollow(ms, modes.id, 'BW_0_1000_Mode_3_plus', null)
+check('typed again: it keeps the effort it had (75)', setEfforts(typedAgain[0]).BW_0_1000_Mode_3_plus.value === 75 && typedAgain[0].segments.find((s) => s.id === 'BW_0_1000_Mode_3_plus').effortOf === null)
+const taken = setForFeature(ms[0], 'Wicked_Trails')
+const tk = Object.fromEntries(taken.segments.map((s) => [s.name, s]))
+check(`a feature takes the efforts worked out, and the link by its own keys (${tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effort}, x ${tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effortFactor} of ${tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effortOf})`, tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effort === 75 && tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effortOf === tk.Wicked_Trails_BW_0_1000_Mode_0_3.key && tk.Wicked_Trails_BW_0_1000_Mode_3_plus.effortFactor === 1.5 && tk.Wicked_Trails_BW_0_1000_Mode_0_3.effortOf === null)
+const resaved = saveFlowAsSet(ms, ms[0].plan, ms[0].name)
+check('saved again from the flow: the links are kept', resaved.set.segments.find((s) => s.id === 'BW_0_1000_Mode_3_plus').effortOf === 'BW_0_1000_Mode_0_3' && setEfforts(resaved.set).BW_0_1000_Mode_3_plus.value === 75)
+check('kept through storage', JSON.stringify(normalizeSets({ sets: ms })[0].segments) === JSON.stringify(ms[0].segments))
+v = null
 
 const read = normalizeSets(JSON.parse(JSON.stringify({ sets: two.sets })))
 check('a stored list reads back the same', JSON.stringify(read) === JSON.stringify(two.sets))

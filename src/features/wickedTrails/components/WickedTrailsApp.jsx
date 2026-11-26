@@ -216,8 +216,11 @@ function SegmentsStep({ state, change }) {
         ...s,
         segments: r.segments.map((x) => {
           const k = kept.get(x.key)
-          const follows = k?.effortOf && keys.has(k.effortOf)
-          return { name: x.name, key: x.key, condition: x.condition, effortTyped: x.effort, effortOf: follows ? k.effortOf : null, effortFactor: follows ? k.effortFactor : null, silverPerBW: k?.silverPerBW ?? null, goldPerBW: k?.goldPerBW ?? null, own: k?.own ?? {} }
+          // A segment that follows another in the set follows it here too (x its factor); else a link made here is kept.
+          const follows = !x.effortOf && k?.effortOf && keys.has(k.effortOf)
+          const effortOf = x.effortOf ?? (follows ? k.effortOf : null)
+          const effortFactor = x.effortOf ? x.effortFactor : follows ? k.effortFactor : null
+          return { name: x.name, key: x.key, condition: x.condition, effortTyped: x.effort, effortOf, effortFactor, silverPerBW: k?.silverPerBW ?? null, goldPerBW: k?.goldPerBW ?? null, own: k?.own ?? {} }
         }),
         baseIndex: Math.min(s.baseIndex, r.segments.length - 1),
         segmentSet: { id: set.id, name: set.name, updatedAt: set.updatedAt },
