@@ -8741,3 +8741,8 @@ sticker pack's fallback starts as Coins, asked how many: "0.25"
 ([sticker_pack:...|allowance(coins:0.25)]); a puzzle's plain preset (no
 ending) is shown as its Coins fallback; a mini game already started on
 _allowance (Coins). e2e wicked-trails 59.
+26 Nov 2026: "the fallbacks should support using delete on them that will
+take it back to coins" - a dropdown column may say what Delete brings it back
+to (SheetGrid `clearTo`): a puzzle's fallback to Coins (the plain preset), a
+mini game's to _allowance, a pack's to Coins 0.25; Delete on a pack's amount
+puts it back to 0.25. e2e wicked-trails 61.

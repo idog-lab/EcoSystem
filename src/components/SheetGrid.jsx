@@ -13,7 +13,8 @@ import { inRect, move, parseNumber, parseTsv, pasteTargets, rectOf, toTsv } from
 // columns: [{ key, label, sub, width, type: 'number' | 'text' | 'select' | 'toggle', editable: bool | (row) => bool,
 //   options: (row) => [{ value, label }], value: (row) => raw (what is edited and copied; row[key] by default),
 //   display: (row) => node, align: 'left' | 'right', tone: (row) => className, title: (row) => text,
-//   check: (row, value) => why or null (a value refused, with the reason), suggestions: (row) => [text] (offered while
+//   clearTo: what Delete brings the cell back to (a dropdown's default), check: (row, value) => why or null (a value
+//   refused, with the reason), suggestions: (row) => [text] (offered while
 //   typing), sticky: true (stays in sight when the sheet scrolls sideways - the leading columns), group: a heading over
 //   the columns that share it }]
 // rows: [{ id, ... }]. onCommit([{ row, key, value }]) - a number is a number or null, a text a string, a tick a boolean.
@@ -195,7 +196,13 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
       const cells = []
-      for (let r = rect.r0; r <= rect.r1; r += 1) for (let c = rect.c0; c <= rect.c1; c += 1) if (columns[c].type !== 'select' && columns[c].type !== 'toggle') cells.push({ r, c, text: '' })
+      // A column may say what Delete brings it back to (`clearTo`: a dropdown's default, say); else a dropdown or a tick
+      // is left as it is and any other cell is emptied.
+      for (let r = rect.r0; r <= rect.r1; r += 1)
+        for (let c = rect.c0; c <= rect.c1; c += 1) {
+          if (columns[c].clearTo !== undefined) cells.push({ r, c, value: columns[c].clearTo })
+          else if (columns[c].type !== 'select' && columns[c].type !== 'toggle') cells.push({ r, c, text: '' })
+        }
       return write(cells)
     }
     if (e.key === 'Escape') return setAnchor(at)
