@@ -8618,3 +8618,26 @@ the four real prizes of the economist's Wicked Trails export come back whole.
 In Wicked Trails each prize shows its text and worth with Build / Edit; in
 Merge's Prizes step a "Build" button sits beside the text field.
 verify-prize-parts 13, e2e wicked-trails 28, merge-prizes 18.
+## An Excel-like sheet, first in Wicked Trails
+
+26 Nov 2026: "the easiest way to create the teirs, shares, prizes and
+everything is an excel like interfac, where u can move easilly with the
+keyboard arrows. is there a layout we can maybe download or get from somewhere
+or create to be able to do so?" Offered: our own grid, react-data-grid (MIT)
+or Handsontable (a paid licence for company use). Chosen: "Build our own";
+where: "we will start with the wicked trails, we will make sure its built
+perfectly and then later when building other features we will put it in
+there". src/components/SheetGrid.jsx with its logic in src/lib/sheetGrid.js:
+arrows, Tab / Shift+Tab, Enter / Shift+Enter, Home / End, typing over a cell,
+F2 or a double click to edit, Escape, Shift+arrows or a drag to select, Ctrl+A,
+Ctrl+C / Ctrl+V blocks to and from Excel (quoted cells, a comma decimal, "33%";
+one value pasted on a selection fills it), Delete, Ctrl+Z / Ctrl+Y, dropdown
+cells (Enter, F2 or a letter), tick cells (Space), worked-out cells grey and
+refused with a word. Found while testing: a fast typist's second key could
+land before the edit box was on screen and start the edit again - what is
+typed is now kept in one place, no key lost. Wicked Trails: the segments are a
+sheet (base, effort from, effort typed, factor, silver, gold; lane lengths
+shown before the ROE is typed), and Tiers and Prizes became one step with one
+sheet - both lanes' tiers and the Final Prize - Ctrl+B opening the prize
+builder for the row picked. verify-sheet-grid 17, e2e wicked-trails 33 (the
+sheets driven with the keyboard, a block pasted, a block copied, undo).

@@ -201,16 +201,24 @@ that file.
 `src/features/wickedTrails/` (`lib/wickedTrails.js`, `WickedTrailsApp.jsx`), at `/models/wicked-trails`; economist,
 26 Nov 2026: "for each feature we build, we will need to have the place where we build the economy and a place we can
 see with our eyes some kind of a mock of the feature". Two lanes - Easy (silver DR) and Hard (gold DR) - and a Final
-Prize for finishing both. **A guided build of six steps** (economist: "the flow of the wicked trails is not good. it
-should be intuitive how i go on with the event build"): Segments, Rules, Tiers, Prizes, Mock, Export - a numbered bar
-with a tick on a step that needs nothing more (`stepStatus`), each step saying what it is for and what is still
-needed, Back / Next under it. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
+Prize for finishing both. **A guided build of five steps** (economist: "the flow of the wicked trails is not good. it
+should be intuitive how i go on with the event build"): Segments, Rules, Tiers and prizes, Mock, Export - a numbered
+bar with a tick on a step that needs nothing more (`stepStatus`), each step saying what it is for and what is still
+needed, Back / Next under it. **The segments and the tiers and prizes are sheets** (`src/components/SheetGrid.jsx`,
+`src/lib/sheetGrid.js`; economist: "the easiest way to create the tiers, shares, prizes and everything is an excel like
+interface, where u can move easily with the keyboard arrows" - asked, chose "Build our own", "we will start with the
+wicked trails, we will make sure its built perfectly and then later when building other features we will put it in
+there"): arrows, Tab, Enter, typing over a cell, F2, Shift+arrows or a drag to select, Ctrl+C / Ctrl+V blocks with
+Excel (one value fills a selection), Delete, Ctrl+Z / Ctrl+Y, dropdown and tick cells, worked-out cells grey and never
+typed over; a key typed before the edit box shows is never lost. Tiers and prizes are one sheet (both lanes' tiers, then
+the Final Prize); Ctrl+B on a row opens the prize builder for it; on another segment a prize typed is its own and Delete
+brings the base's back. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
 and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
 Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of
 another segment if we want, and an option to hard code the effort"; `resolveEfforts`: by key, chains followed, a loop
-or a missing segment says so). **Rules**: the ROE and the five shares. **Tiers**: tier counts and shares, each tier's
-DR (alone and in all), Brut Wins, what it earns and its target. **Prizes**: each prize's worth by the economy beside
-its target, per segment. **Mock**: a sketch of the event, played Brut Win by Brut Win - not the game's artwork.
+or a missing segment says so). **Rules**: the ROE and the five shares. **Tiers and prizes**: tier counts, and each
+tier's share, DR (alone and in all), Brut Wins, what it earns, its target, its prize and the prize's worth beside it,
+per segment. **Mock**: a sketch of the event, played Brut Win by Brut Win - not the game's artwork.
 **Export** (`lib/wickedTrailsExport.js`) in the layout of the economist's example
 `t_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx` (in the project folder, ignored by git): sheets "segments" (Key,
 Definition), "Congif OPS" and "Config RC OPS" - names and the 42 headers literal - a row a segment, the file named
