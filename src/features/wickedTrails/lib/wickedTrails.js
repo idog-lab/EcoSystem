@@ -207,6 +207,28 @@ export function prizeOf(state, index, place) {
   return { text: factor ? scaleReward(text, factor) : text, own: false, factor }
 }
 
+// THE CARRY BETWEEN A LANE'S TIERS (economist, 26 Nov 2026: "the off by also, should be cumulative, if we are -1 from
+// the last tier, we got 1 more allowance to give in the next tier. there is a carry to + or - in the prizes of the
+// tiers"). items: a lane's tiers in order, [{ target, worth }] - worth null when it is not known (a part with no worth),
+// 0 for a tier with no prize. Each tier's carry is what the tiers before it left (+ more to give, - less); its aim is
+// its target plus the carry; off by is its worth against the aim - the lane's running total. Once a worth is not known
+// the carry from there on is not known either. Returns [{ carry, aim, off }].
+export function carryThrough(items) {
+  let carry = 0
+  return items.map(({ target, worth }) => {
+    if (carry == null || target == null) {
+      const out = { carry, aim: null, off: null }
+      if (target == null) carry = null
+      return out
+    }
+    const aim = round2(target + carry)
+    const off = worth == null ? null : round2(worth - aim)
+    const out = { carry: round2(carry), aim, off }
+    carry = off == null ? null : round2(-off)
+    return out
+  })
+}
+
 // THE BUILD, STEP BY STEP (economist: "the flow of the wicked trails is not good. it should be intuitive how i go on
 // with the event build"): what each step still needs, in words. `readable(text)` says whether a prize can be read
 // (the economy's checker, passed in). { segments, rules, tiers, prizes } -> { done, missing: [text] }.

@@ -6,13 +6,13 @@ import { withRest } from '../../../lib/sheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
 import { currencyChoices } from '../../../lib/economy/economyModel'
-import { presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
+import { FALLBACK_KINDS, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
 import { presetFor } from '../../../lib/economy/syntax'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
 import { setForFeature, useSegmentSets } from '../../../lib/economy/segmentSets'
 import { teamData } from '../../../lib/teamData'
-import { FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
-import { END_TRIGGER, FINAL_FILTER, FINAL_TRIGGER, OPS_HEADERS, RC_FINAL_COINS, RC_TIER_EFFORT, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWorkbook, triggerOf } from '../lib/wickedTrailsExport'
+import { carryThrough, FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
+import { OPS_HEADERS, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWorkbook, rowSyntax } from '../lib/wickedTrailsExport'
 
 // WICKED TRAILS (lib/wickedTrails.js): the event built step by step (economist: "the flow of the wicked trails is not
 // good. it should be intuitive how i go on with the event build") - the segments, the rules, the tiers, the prizes
@@ -104,7 +104,6 @@ export default function WickedTrailsApp({ onHome }) {
           <MapIcon size={18} strokeWidth={2.25} />
         </span>
         <h1 className="font-display text-xl font-bold tracking-tight text-slate-900">Wicked Trails</h1>
-        <span className="text-sm text-slate-500">A level feature: two lanes filled by Brut Wins, and a Final Prize for finishing both.</span>
       </header>
       <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-6 pb-10">
         <nav className="flex flex-wrap items-center gap-1" aria-label="The steps of the build" data-testid="wt-steps">
@@ -129,23 +128,15 @@ export default function WickedTrailsApp({ onHome }) {
             )
           })}
         </nav>
-        <div className="rounded-2xl border border-purple-100 bg-white/85 px-4 py-3 shadow-sm" data-testid="wt-step-head">
-          <div className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+        {/* The step in one line: what it is for in its hover, what it still needs in a few words (the whole list in the hover). */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="wt-step-head" title={current.purpose}>
+          <span className="text-xs font-semibold uppercase tracking-wide text-purple-600" data-testid="wt-step-purpose" data-purpose={current.purpose}>
             Step {at + 1} of {STEPS.length} · {current.label}
-          </div>
-          <p className="mt-0.5 text-sm text-slate-700" data-testid="wt-step-purpose">
-            {current.purpose}
-          </p>
+          </span>
           {missing.length > 0 && (
-            <div className="mt-2 flex flex-col gap-0.5" data-testid="wt-step-missing">
-              <span className="text-xs font-semibold text-amber-700">Still needed:</span>
-              <ul className="ml-4 list-disc text-xs text-amber-800">
-                {missing.slice(0, 8).map((m) => (
-                  <li key={m}>{m}</li>
-                ))}
-                {missing.length > 8 && <li>and {missing.length - 8} more</li>}
-              </ul>
-            </div>
+            <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800" title={missing.join('\n')} data-testid="wt-step-missing" data-missing={missing.join('\n')}>
+              Still needed: {missingSummary(missing)}
+            </span>
           )}
         </div>
 
@@ -180,6 +171,15 @@ export default function WickedTrailsApp({ onHome }) {
       </main>
     </div>
   )
+}
+
+// What a step still needs, in a few words: the prizes not typed counted, the first other thing named.
+function missingSummary(missing) {
+  const prizes = missing.filter((m) => /no prize yet/.test(m)).length
+  const rest = missing.filter((m) => !/no prize yet/.test(m))
+  const parts = [...(rest.length ? [rest[0]] : []), ...(prizes ? [`${prizes} prize${prizes === 1 ? '' : 's'} to type`] : [])]
+  const more = rest.length - 1
+  return `${parts.join(' · ')}${more > 0 ? ` · and ${more} more` : ''}`
 }
 
 function SegmentChips({ state, index, setShown, note = null }) {
@@ -230,10 +230,9 @@ function SegmentsStep({ state, change }) {
     })
     setMessage(`${r.segments.length} segments taken from "${set.name}", named ${FEATURE_NAME}_, ${r.segments.filter((x) => x.effort != null).length} with an effort in Brut Wins.`)
   }
-  const setAll = (field, v) => change((s) => ({ ...s, segments: s.segments.map((x) => ({ ...x, [field]: v })) }))
 
   return (
-    <Card title="The segments" subtitle="Effort: typed (from the set, or your own number), or another segment's times a factor - it then follows that segment.">
+    <Card title="The segments">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <select value="" onChange={(e) => e.target.value && take(e.target.value)} className={`${INPUT} min-w-64`} data-testid="wt-segment-set" aria-label="Take the segments from a set">
@@ -260,14 +259,6 @@ function SegmentsStep({ state, change }) {
           </p>
         )}
         {state.segments.length > 0 && <SegmentsSheet state={state} change={change} />}
-        {state.segments.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="wt-fill-all">
-            Same for every segment:
-            <Num value={null} onCommit={(v) => v != null && v >= 0 && setAll('silverPerBW', v)} className="w-16" placeholder="silver" aria-label="Silver DR per Brut Win for every segment" data-field="all-silver" />
-            <Num value={null} onCommit={(v) => v != null && v >= 0 && setAll('goldPerBW', v)} className="w-16" placeholder="gold" aria-label="Gold DR per Brut Win for every segment" data-field="all-gold" />
-            <span className="text-slate-400">DR per Brut Win</span>
-          </div>
-        )}
       </div>
     </Card>
   )
@@ -332,10 +323,10 @@ function RulesStep({ state, change }) {
   )
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      <Card title="The ROE" subtitle="This feature's own rate of economy.">
+      <Card title="The ROE">
         <div data-testid="wt-rules-roe">{field('roe', 'ROE', 'Rate of economy: the allowance worth of prizes a player gets from one Brut Win', 'allowance a Brut Win')}</div>
       </Card>
-      <Card title="How it is shared" subtitle="These five start at the old sheet's values - type yours over them.">
+      <Card title="How it is shared">
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3" data-testid="wt-rules">
           {field('easyShare', 'Easy lane\'s share', 'While both lanes fill, this share of each Brut Win\'s ROE goes to the easy lane, the rest to the hard lane. Once the easy lane is done, all of it goes to the hard lane.', '% of a BW')}
           {field('easySize', 'Easy lane\'s length', 'The easy lane is done after this share of the effort; the hard lane lasts the whole effort', '% of the hard')}
@@ -350,14 +341,16 @@ function RulesStep({ state, change }) {
 
 // ---------------------------------------------------------------- 3. Tiers and prizes, one sheet
 // How far a prize is from its target, in words and colour.
-function OffBy({ check, target }) {
-  if (!check) return <span className="text-slate-300">-</span>
-  if (!check.ok) return <span className="text-rose-700">{check.issues.find((x) => x.level === 'error')?.message ?? 'Cannot be read'}</span>
-  if (check.worth == null) return <span className="text-amber-700">no worth yet{check.unknown.length ? `: ${check.unknown.join(', ')}` : ''}</span>
-  if (target == null) return <span className="text-slate-400">no target</span>
-  const pct = Math.abs(check.gapPct ?? 0)
-  const tone = pct <= 5 ? 'text-emerald-700' : pct <= 15 ? 'text-amber-700' : 'text-rose-700'
-  return <span className={`font-semibold ${tone}`} data-gap-pct={check.gapPct}>{`${check.gap > 0 ? '+' : ''}${fmt(check.gap)} (${check.gapPct > 0 ? '+' : ''}${check.gapPct}%)`}</span>
+// Off by, the lane so far: the prize's worth against its target plus the carry from the tiers before (lib carryThrough).
+function OffBy({ check, carried, empty }) {
+  if (empty) return <span className="text-slate-300">no prize</span>
+  if (check && !check.ok) return <span className="text-rose-700">{check.issues.find((x) => x.level === 'error')?.message ?? 'Cannot be read'}</span>
+  if (check && check.worth == null) return <span className="text-amber-700">no worth yet{check.unknown.length ? `: ${check.unknown.join(', ')}` : ''}</span>
+  if (!carried || carried.aim == null) return <span className="text-slate-400">{carried?.carry == null ? 'carry not known' : 'no target'}</span>
+  const off = carried.off
+  const pct = carried.aim > 0 ? Math.round((off / carried.aim) * 1000) / 10 : 0
+  const tone = Math.abs(pct) <= 5 ? 'text-emerald-700' : Math.abs(pct) <= 15 ? 'text-amber-700' : 'text-rose-700'
+  return <span className={`font-semibold ${tone}`} data-gap-pct={pct}>{`${off > 0 ? '+' : ''}${fmt(off)} (${pct > 0 ? '+' : ''}${pct}%)`}</span>
 }
 
 // What a prize change does: on the base it is every segment's; on another segment it is that segment's own (empty:
@@ -374,6 +367,74 @@ function prizeChange(s, index, place, text) {
   return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t === scaled ? '' : t } } : x)) }
 }
 
+// THE ROW WE ARE ON, AS OPS GETS IT (economist, 26 Nov 2026: "we will see under the events table a live syntax of the
+// row we are on"): its Req and Res in Config OPS and Config RC OPS, written by the export's own builders - the tier's
+// trigger and, on a lane's last tier, its chest - with what the checker finds, and a copy button.
+function RowSyntax({ state, index, place, economy, tone }) {
+  const row = place ? rowSyntax(state, index, place) : null
+  const [copied, setCopied] = useState(null)
+  if (!row) return null
+  const copy = (text, what) => {
+    const done = () => setCopied(what)
+    try {
+      navigator.clipboard.writeText(String(text)).then(done, done)
+    } catch {
+      done()
+    }
+  }
+  const res = row.cells.find((c) => c.column.endsWith('_Res'))
+  const findings = res?.ops ? checkReward(String(res.ops), { economy, prizeMode: 'custom', prizeLimit: place === 'final' ? PRIZE_LIMIT.final + 1 : PRIZE_LIMIT.tier + 1 }).issues : []
+  return (
+    <div className={`rounded-xl border border-slate-200 border-l-4 ${tone?.edge ?? ''} bg-white px-3 py-2`} data-testid="wt-row-syntax" data-row-place={place}>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-semibold uppercase tracking-wide text-purple-700">As Ops gets it</span>
+        <span className="font-semibold text-slate-700" data-testid="wt-row-syntax-title">
+          {row.title}
+        </span>
+      </div>
+      <table className="mt-1 w-full border-collapse text-sm" data-dense>
+        <thead>
+          <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <th className="w-64 py-1 pr-3">Column</th>
+            <th className="py-1 pr-3">Config OPS</th>
+            <th className="py-1 pr-3">Config RC OPS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {row.cells.map((c) => (
+            <tr key={c.column} className="border-t border-slate-100 align-top" data-syntax-column={c.column}>
+              <td className="py-1 pr-3 font-mono text-[11.5px] text-slate-500">{c.column}</td>
+              {['ops', 'rc'].map((which) => (
+                <td key={which} className="py-1 pr-3">
+                  <div className="flex items-start gap-1.5">
+                    <code className="min-w-0 flex-1 break-all font-mono text-[12px] text-slate-800" data-syntax={which}>
+                      {c[which] == null || c[which] === '' ? <span className="text-slate-400">-</span> : String(c[which])}
+                    </code>
+                    {c[which] != null && c[which] !== '' && (
+                      <button type="button" onClick={() => copy(c[which], `${c.column}-${which}`)} className="shrink-0 rounded-md px-1.5 text-[11px] font-semibold text-purple-700 ring-1 ring-purple-200 hover:bg-purple-50" data-syntax-copy={which}>
+                        {copied === `${c.column}-${which}` ? 'Copied' : 'Copy'}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {findings.length > 0 && (
+        <ul className="mt-1 text-[11.5px]" data-testid="wt-row-syntax-findings">
+          {findings.map((x) => (
+            <li key={x.message} className={x.level === 'error' ? 'text-rose-700' : 'text-amber-700'}>
+              {x.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // Each lane's colour in the sheet (the colours of its DR in the mock), the Final Prize's its own; solid, so a sticky
 // cell sits on it (economist: "maybe to have coloring to differ between the lanes").
 const LANE_TONE = {
@@ -388,6 +449,16 @@ const listOf = (v) =>
     .split(/[,\n]/)
     .map((x) => x.trim())
     .filter(Boolean)
+const FALLBACK_OPTIONS = [{ value: '', label: '-' }, ...FALLBACK_KINDS]
+// A puzzle's fallback is the ending of its preset's name (economist: "the puzzle and mini game has the fallback logic in
+// the text of the preset"): none, or puzzle_gameplay_<n>_undo / _entry / _stock / _wild.
+const PUZZLE_FALLBACKS = [
+  { value: '', label: '-' },
+  { value: 'undo', label: 'Undo' },
+  { value: 'entry', label: 'Free round' },
+  { value: 'stock', label: 'Extra stock' },
+  { value: 'wild', label: 'Wild' },
+]
 const MINI_KINDS = [
   { value: 'allowance', label: 'Coins' },
   { value: 'undo', label: 'Undo' },
@@ -410,7 +481,6 @@ const RESOURCE_COLUMNS = [
 function TiersStep({ state, change, index, setShown, economy }) {
   const seg = state.segments[index]
   const w = workOut(state, seg)
-  const isBase = index === state.baseIndex
   const keys = (list) => (economy?.keys?.[list] ?? []).map((k) => k.key).filter(Boolean)
   const presetKeys = keys('presets')
   const packKeys = keys('packs')
@@ -434,9 +504,22 @@ function TiersStep({ state, change, index, setShown, economy }) {
     })(),
   ]
   const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
+  // The carry along each lane: what a tier leaves (over or under its aim) moves to the next one; the Final Prize has
+  // its own pool and carries nothing. A tier with no prize gives 0; a worth not known stops the carry.
+  const carried = new Map()
+  for (const laneId of [...LANES.map((l) => l.id), null]) {
+    const lane = rows.filter((r) => r.laneId === laneId)
+    const items = lane.map((r) => {
+      const c = checkOf(r)
+      return { target: r.target, worth: !r.prize.text ? 0 : c?.ok ? c.worth : null }
+    })
+    carryThrough(items).forEach((x, k) => carried.set(lane[k].place, x))
+  }
   const anyMore = rows.some((r) => r.parts.currencies.length || r.parts.triggers.length || r.parts.extra.length || r.parts.packCoins != null)
   const [showLane, setShowLane] = useState(false)
   const [showMore, setShowMore] = useState(anyMore)
+  // The row the active cell is on: its syntax is shown under the sheet, live.
+  const [activePlace, setActivePlace] = useState('easy-0')
   const more = showMore || anyMore
   const own = (r) => (r.prize.own ? '' : 'italic !text-slate-400')
   const whole = (_, v) => (v != null && !Number.isInteger(v) ? 'a whole number' : null)
@@ -466,8 +549,34 @@ function TiersStep({ state, change, index, setShown, economy }) {
         ]
       : []),
     { key: 'target', group: 'Against the target', label: 'Target', sub: 'allowance', width: 76, type: 'number', align: 'right', tone: () => 'font-semibold !text-purple-700' },
+    {
+      key: 'carry',
+      group: 'Against the target',
+      label: 'Carry',
+      sub: 'from the tiers before',
+      width: 84,
+      type: 'number',
+      align: 'right',
+      value: (r) => carried.get(r.place)?.carry ?? null,
+      display: (r) => {
+        const c = carried.get(r.place)?.carry
+        if (r.place === 'final') return <span className="text-slate-300">-</span>
+        if (c == null) return <span className="text-amber-700" title="A tier before has a part with no worth yet: what it leaves is not known">?</span>
+        return <span className={c > 0 ? 'text-emerald-700' : c < 0 ? 'text-rose-700' : 'text-slate-400'}>{`${c > 0 ? '+' : ''}${fmt(c)}`}</span>
+      },
+      title: () => 'What the tiers before it in the lane left: + more to give here, - less',
+    },
     { key: 'worth', group: 'Against the target', label: 'Worth', sub: 'of the prize', width: 70, type: 'number', align: 'right', value: (r) => checkOf(r)?.worth ?? null },
-    { key: 'off', group: 'Against the target', label: 'Off by', width: 130, value: (r) => checkOf(r)?.gap ?? null, title: (r) => (checkOf(r)?.unknown?.length ? 'No worth yet on the Economy page: ' + checkOf(r).unknown.join(', ') : undefined), display: (r) => <OffBy check={checkOf(r)} target={r.target} /> },
+    {
+      key: 'off',
+      group: 'Against the target',
+      label: 'Off by',
+      sub: 'the lane so far',
+      width: 130,
+      value: (r) => carried.get(r.place)?.off ?? null,
+      title: (r) => (checkOf(r)?.unknown?.length ? 'No worth yet on the Economy page: ' + checkOf(r).unknown.join(', ') : 'Its worth against its target plus the carry: the lane so far'),
+      display: (r) => <OffBy check={checkOf(r)} carried={carried.get(r.place)} empty={!r.prize.text} />,
+    },
     { key: 'coins', group: 'The prize', label: 'Coins', sub: 'allowance', width: 76, type: 'number', align: 'right', editable: true, value: (r) => r.parts.coins, tone: own },
     ...RESOURCE_COLUMNS.map((c) => ({ key: c.key, group: 'The prize', label: c.label, width: c.key === 'stock' || c.key === 'entry' ? 70 : 58, type: 'number', align: 'right', editable: true, value: (r) => r.parts[c.key], check: whole, tone: own })),
     {
@@ -480,8 +589,22 @@ function TiersStep({ state, change, index, setShown, economy }) {
       align: 'right',
       editable: true,
       value: (r) => r.kinds.puzzle?.amount ?? null,
-      check: (_, v) => (v != null && !presetFor('puzzle', v, '', economy) ? 'no puzzle preset on the Economy page' : null),
+      check: (r, v) => (v != null && !presetFor('puzzle', v, r.kinds.puzzle?.fallback ?? '', economy) ? 'no puzzle preset of that kind on the Economy page' : null),
       title: (r) => r.kinds.puzzle?.key ?? 'A puzzle preset: the nearest amount on the Economy page is taken',
+      tone: own,
+    },
+    {
+      key: 'puzzleFallback',
+      group: 'The prize',
+      label: 'Fallback',
+      sub: 'puzzle',
+      width: 92,
+      type: 'select',
+      editable: (r) => !!r.kinds.puzzle,
+      value: (r) => r.kinds.puzzle?.fallback ?? '',
+      options: () => PUZZLE_FALLBACKS,
+      check: (r, v) => (r.kinds.puzzle && !presetFor('puzzle', r.kinds.puzzle.amount, v, economy) ? 'no puzzle preset with that fallback on the Economy page' : null),
+      title: (r) => (r.kinds.puzzle ? `${r.kinds.puzzle.key} - the fallback is in the preset's name. Ctrl+Down / Ctrl+Up go through the choices` : undefined),
       tone: own,
     },
     {
@@ -498,7 +621,19 @@ function TiersStep({ state, change, index, setShown, economy }) {
       title: (r) => r.kinds.mini?.key ?? 'A mini game preset: the nearest amount on the Economy page is taken',
       tone: own,
     },
-    { key: 'miniKind', group: 'The prize', label: 'Mini game', sub: 'gives', width: 92, type: 'select', editable: (r) => !!r.kinds.mini, value: (r) => r.kinds.mini?.kind ?? '', options: () => MINI_KINDS, tone: own },
+    {
+      key: 'miniKind',
+      group: 'The prize',
+      label: 'Fallback',
+      sub: 'mini game',
+      width: 92,
+      type: 'select',
+      editable: (r) => !!r.kinds.mini,
+      value: (r) => r.kinds.mini?.kind ?? '',
+      options: () => MINI_KINDS,
+      title: (r) => (r.kinds.mini ? `${r.kinds.mini.key} - the fallback is in the preset's name. Ctrl+Down / Ctrl+Up go through the choices` : undefined),
+      tone: own,
+    },
     {
       key: 'presets',
       group: 'The prize',
@@ -527,6 +662,20 @@ function TiersStep({ state, change, index, setShown, economy }) {
       title: (r) => r.parts.pack || undefined,
       tone: (r) => `font-mono text-[11.5px] ${own(r)}`,
     },
+    {
+      key: 'packAlt',
+      group: 'The prize',
+      label: 'Fallback',
+      sub: 'pack',
+      width: 86,
+      type: 'select',
+      editable: (r) => !!(r.parts.pack),
+      value: (r) => (r.parts.packAlt)?.kind ?? '',
+      options: () => FALLBACK_OPTIONS,
+      title: () => 'What the player gets when the pack cannot be had. Ctrl+Down / Ctrl+Up go through the choices',
+      tone: own,
+    },
+    { key: 'packAltN', group: 'The prize', label: 'Amount', sub: 'pack fallback', width: 60, type: 'number', align: 'right', editable: (r) => !!(r.parts.packAlt)?.kind && (r.parts.packAlt).kind !== 'hidden', value: (r) => (r.parts.packAlt)?.amount ?? null, check: (r, v) => (v != null && (r.parts.packAlt)?.kind !== 'coins' && !Number.isInteger(v) ? 'a whole number' : null), tone: own },
     {
       key: 'chest',
       group: 'The prize',
@@ -563,7 +712,6 @@ function TiersStep({ state, change, index, setShown, economy }) {
             tone: (r) => `font-mono text-[11.5px] ${own(r)}`,
           },
           { key: 'triggers', group: 'More', label: 'Triggers', sub: 'a, b - the export adds the tier\'s own', width: 170, type: 'text', editable: true, value: (r) => r.parts.triggers.join(', '), check: (_, v) => listOf(v).find((t) => !/^[a-z0-9_]+$/.test(t)) && 'a trigger is lower case letters, digits and "_"', tone: (r) => `font-mono text-[11.5px] ${own(r)}` },
-          { key: 'packCoins', group: 'More', label: 'Pack or coins', sub: 'allowance', width: 80, type: 'number', align: 'right', editable: (r) => !!r.parts.pack, value: (r) => r.parts.packCoins, title: () => 'Coins given instead of the pack when the player cannot get it', tone: own },
           { key: 'text', group: 'More', label: 'The text', sub: 'as Ops gets it; can be pasted whole', width: 380, type: 'text', editable: true, value: (r) => r.prize.text, title: (r) => r.prize.text || undefined, tone: (r) => `font-mono text-[11.5px] ${own(r)}` },
         ]
       : []),
@@ -573,11 +721,24 @@ function TiersStep({ state, change, index, setShown, economy }) {
   function withPart(parts, key, value) {
     const p = { ...parts, presets: [...parts.presets] }
     const kinds = presetsByKind(p.presets)
-    if (key === 'coins') p.coins = value == null ? null : Math.round(value * 100) / 100
+    const setAlt = (cur, kind) => (kind ? { kind, amount: kind === 'hidden' ? null : (cur?.amount ?? 1) } : null)
+    const setAltN = (cur, n) => (n == null ? (cur?.kind === 'hidden' ? cur : null) : { kind: cur?.kind ?? 'coins', amount: n })
+    if (key === 'packAlt') {
+      p.packAlt = setAlt(parts.packAlt, value)
+      p.packCoins = null
+    } else if (key === 'packAltN') {
+      p.packAlt = setAltN(parts.packAlt, value)
+      p.packCoins = null
+    } else if (key === 'coins') p.coins = value == null ? null : Math.round(value * 100) / 100
     else if (['wild', 'stock', 'undo', 'entry'].includes(key)) p[key] = value
-    else if (key === 'puzzle') p.presets = presetsFromKinds({ ...kinds, puzzle: value == null ? null : (presetFor('puzzle', value, '', economy) ?? kinds.puzzle) })
-    else if (key === 'mini') p.presets = presetsFromKinds({ ...kinds, mini: value == null ? null : (presetFor('mini_game', value, kinds.mini?.kind ?? 'allowance', economy) ?? kinds.mini) })
-    else if (key === 'miniKind' && kinds.mini) p.presets = presetsFromKinds({ ...kinds, mini: presetFor('mini_game', kinds.mini.amount, value, economy) ?? kinds.mini })
+    else if (key === 'puzzle' || (key === 'puzzleFallback' && kinds.puzzle)) {
+      // A puzzle preset of that amount with that fallback (the nearest amount that has one).
+      const next = key === 'puzzle' ? (value == null ? null : (presetFor('puzzle', value, kinds.puzzle?.fallback ?? '', economy) ?? kinds.puzzle)) : (presetFor('puzzle', kinds.puzzle.amount, value, economy) ?? kinds.puzzle)
+      p.presets = presetsFromKinds({ ...kinds, puzzle: next })
+    } else if (key === 'mini' || (key === 'miniKind' && kinds.mini)) {
+      const next = key === 'mini' ? (value == null ? null : (presetFor('mini_game', value, kinds.mini?.kind ?? 'allowance', economy) ?? kinds.mini)) : (presetFor('mini_game', kinds.mini.amount, value, economy) ?? kinds.mini)
+      p.presets = presetsFromKinds({ ...kinds, mini: next })
+    }
     else if (key === 'presets') p.presets = presetsFromKinds({ ...kinds, others: listOf(value) })
     else if (key === 'pack') {
       p.pack = value || ''
@@ -611,42 +772,35 @@ function TiersStep({ state, change, index, setShown, economy }) {
 
   return (
     <>
-      <SegmentChips state={state} index={index} setShown={setShown} note={isBase ? "The base: its prizes are every segment's, times its effort against the base's." : "Its prizes are the base's times its effort against the base's (grey) - type in a row to give it its own."} />
+      <SegmentChips state={state} index={index} setShown={setShown} />
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2" data-testid="wt-tier-counts">
         {LANES.map((lane) => (
           <label key={lane.id} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             {lane.label} ({lane.dr}): tiers
-            <Num value={state.lanes[lane.id].shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(state.lanes[lane.id], v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
-            <span className="text-xs font-normal text-slate-400">1 to {MAX_TIERS}</span>
+            <Num value={state.lanes[lane.id].shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(state.lanes[lane.id], v))} className="w-14" aria-label={`${lane.label}: how many tiers`} title={`1 to ${MAX_TIERS}, split evenly`} data-tier-count={lane.id} />
           </label>
         ))}
         <label className="flex items-center gap-1.5 text-xs text-slate-600">
           <input type="checkbox" checked={showLane} onChange={(e) => setShowLane(e.target.checked)} className="accent-purple-600" data-testid="wt-show-lane" />
-          the lane&apos;s numbers (DR this tier, Brut Wins, earned)
+          Lane numbers
         </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-600" title={anyMore ? 'Shown: a prize here has DRs, triggers or a part with no column' : undefined}>
           <input type="checkbox" checked={more} disabled={anyMore} onChange={(e) => setShowMore(e.target.checked)} className="accent-purple-600" data-testid="wt-show-more" />
-          DRs, triggers and the text
+          DRs, triggers, text
         </label>
       </div>
       {w.lanes ? (
-        <p className="text-sm text-slate-700" data-testid="wt-totals">
-          <span className="font-semibold">{seg.name}</span>: {fmt(w.E)} Brut Wins x ROE {fmt(state.rules.roe, 4)} = <span className="font-semibold">{fmt(w.total)}</span> allowance. The easy lane: {fmt(w.lanes.easy.totalDR, 0)} silver DR
-          over {fmt(w.lanes.easy.doneAtBW, 1)} Brut Wins; the hard lane: {fmt(w.lanes.hard.totalDR, 0)} gold DR over {fmt(w.lanes.hard.doneAtBW, 1)}. The Final Prize&apos;s pool <span data-field="pool">{fmt(w.pool)}</span>, counted at {fmt(state.rules.finalCounted)}%: its target{' '}
-          <span data-field="final-target">{fmt(w.finalTarget)}</span>.
+        <p className="text-sm text-slate-600" data-testid="wt-totals">
+          {fmt(w.E)} BW x {fmt(state.rules.roe, 4)} = <span className="font-semibold text-slate-800">{fmt(w.total)}</span> · easy {fmt(w.lanes.easy.totalDR, 0)} silver · hard {fmt(w.lanes.hard.totalDR, 0)} gold · Final Prize pool{' '}
+          <span data-field="pool">{fmt(w.pool)}</span> → <span data-field="final-target">{fmt(w.finalTarget)}</span>
         </p>
       ) : (
         <p className="rounded-lg bg-amber-50 px-2.5 py-1 text-sm text-amber-800" data-testid="wt-prizes-blocked">
           {seg.name} cannot be worked out yet: {w.problems.join(' ')}
         </p>
       )}
-      <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} rowTone={(r) => LANE_TONE[r.laneId ?? 'final']} />
-      <p className="text-xs text-slate-500" data-note>
-        Puzzle and mini game take the nearest amount that has a preset on the Economy page. Worth is read by the Economy page, in allowance; a part with no worth there
-        (most presets, for now) leaves the prize&apos;s worth unknown. Off by: green within 5% of the target, amber within 15% - this app&apos;s own reading. At most{' '}
-        {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize (the sheet&apos;s check). * The export puts each lane&apos;s last tier in its chest and adds each
-        tier&apos;s trigger.
-      </p>
+      <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} rowTone={(r) => LANE_TONE[r.laneId ?? 'final']} onActive={(row) => row && setActivePlace(row.place)} />
+      <RowSyntax state={state} index={index} place={rows.some((r) => r.place === activePlace) ? activePlace : rows[0]?.place} economy={economy} tone={LANE_TONE[rows.find((r) => r.place === activePlace)?.laneId ?? (activePlace === 'final' ? 'final' : 'easy')]} />
     </>
   )
 }
@@ -781,10 +935,6 @@ function MockStep({ state, index, setShown }) {
               </div>
             </div>
           </div>
-          <p className="text-xs text-slate-500" data-note>
-            A sketch of the event for {seg.name}, played by the rules of the steps before - not the game&apos;s artwork. The easy lane is done after {fmt(w.lanes.easy.doneAtBW, 1)} Brut Wins, the hard lane after{' '}
-            {fmt(w.lanes.hard.doneAtBW, 1)}.
-          </p>
         </>
       )}
     </>
@@ -824,7 +974,7 @@ function ExportStep({ state, change, index, setShown }) {
 
   return (
     <>
-      <Card title="The workbook" subtitle={`Three sheets, as the example: "${SHEET_NAMES.segments}", "${SHEET_NAMES.ops}" and "${SHEET_NAMES.rc}" - one row per segment.`}>
+      <Card title="The workbook">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -857,22 +1007,10 @@ function ExportStep({ state, change, index, setShown }) {
               </ul>
             </div>
           )}
-          <ul className="ml-4 list-disc text-xs text-slate-600" data-testid="wt-export-rules">
-            <li>
-              Right is the silver lane, Left the gold lane; a tier asks for the DR in all to its end. A milestone with no tier is {UNUSED.req} and {UNUSED.res}.
-            </li>
-            <li>
-              Each tier&apos;s prize starts with its own trigger - {triggerOf('easy', 0)}, {triggerOf('hard', 0)}, ..., {FINAL_TRIGGER} for the Final Prize (this app&apos;s names, as you asked). The last
-              tier of each lane is in its chest: silver, golden. The end trigger is {END_TRIGGER}; the Final Prize&apos;s filter {FINAL_FILTER}.
-            </li>
-            <li>
-              Config RC OPS: every tier asks for {Math.round((RC_TIER_EFFORT - 1) * 100)}% more, and the Final Prize&apos;s coins are {Math.round((RC_FINAL_COINS - 1) * 100)}% more (your rule for a from-level event).
-            </li>
-          </ul>
         </div>
       </Card>
       {state.segments.length > 0 && (
-        <Card title="What a row holds" subtitle="The segment picked, as Ops gets it. The tiers not in use are left out here; the file has all of them.">
+        <Card title="What a row holds">
           <div className="flex flex-col gap-3">
             <SegmentChips state={state} index={index} setShown={setShown} />
             {rowIndex < 0 ? (

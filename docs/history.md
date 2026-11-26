@@ -8676,3 +8676,37 @@ easy lane pink (its DR's colour in the mock), the hard lane teal, the Final
 Prize amber, typed cells lighter than worked-out ones, a coloured edge. The
 table rules are written down for every feature (CLAUDE.md, "Tables, in every
 feature"). verify-sheet-grid 22, e2e wicked-trails 45.
+## Wicked Trails: the row's syntax live, the carry, fallbacks, a cleaner page
+
+26 Nov 2026, four asks in a row:
+- "we will see under the events table a live syntax of the row we are on" -
+  under the tiers and prizes sheet, the row the active cell is on, as Ops
+  gets it: its Req and Res in Config OPS and Config RC OPS (rowSyntax, the
+  export's own builders: the tier's trigger, a lane's last tier in its chest),
+  copy buttons, the checker's findings.
+- "the off by also, should be commulative, if we are -1 from the last tier, we
+  got 1 more allowance to give in the bext tier. there is a carry to + or - in
+  the prizes of the tiers" - a Carry column (what the tiers before left) and
+  Off by against target + carry, the lane so far (carryThrough); a tier with
+  no prize gives 0; a worth not known stops the carry. The Final Prize has its
+  own pool and carries nothing.
+- "we need to ahve fallbacks for puzzle mini game and packs. can we do it like
+  in excel that there is data validation in it and with ctrl we can scroll
+  it?" - first built as [preset:...|fallback]; the screenshot showed the
+  economist's validator refusing it ("no preset:... inside brackets"). Asked:
+  "the puzzle and mini game has the fallback logic in the text of the preset"
+  - so a puzzle's fallback is its preset's ending (puzzle_gameplay_20_undo), a
+  mini game's the one it already had (mini_game_5_gameplay_wild); a pack's is
+  [sticker_pack:...|fallback] (a core resource or hidden) with its amount.
+  Dropdown cells go through their choices with Ctrl+Down / Ctrl+Up, Alt+Down
+  opens. Also asked: the feature's own triggers - "any trigger can be added,
+  those are used by the analysts": the checker no longer flags a trigger off
+  the list.
+- "this comments are not important, the page should be as clean and easy to
+  use as possible. less buttons and text", with a picture of the long "Still
+  needed" list: a step is one line (what it is for in its hover), "Still
+  needed: 5 prizes to type" with the list in its hover, the notes gone, the
+  keys in the sheet's hover, "Same for every segment" gone (a paste does it),
+  short labels and a one-line total.
+verify-wicked-trails 42, verify-prize-parts 18, verify-economy 316, e2e
+wicked-trails 55, economy-page 111, merge-prizes 18.

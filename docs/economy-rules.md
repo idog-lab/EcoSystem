@@ -407,6 +407,15 @@ Who reads it:
 - **Puzzle fallback inputs (BaseAmount, PuzzleMult) and RoundReward under 2.5**:
   "leave it" - the builder takes a worth and a multiplier; RoundReward gives 0.
 
+## Answered (26 Nov 2026)
+
+- **Any trigger may be added** ("any trigger can be added, those are used by the analysts"): a trigger off the Economy
+  page's list is no longer a finding of the checker.
+- **A puzzle's and a mini game's fallback is in the preset's name** ("the puzzle and mini game has the fallback logic
+  in the text of the preset"): puzzle_gameplay_<n>[_undo|_entry|_stock|_wild], mini_game_<n>_gameplay_<allowance|undo|
+  es|wild|entry>; never `[preset:...|...]` (the validator refuses a preset in brackets). A sticker pack's fallback is
+  `[sticker_pack:...|<fallback>]`: a core resource or `[dynamic(dr-hidden:1)]`.
+
 ## Open questions (not settled)
 
 None asked and waiting. The worths of the currencies and of the presets other
