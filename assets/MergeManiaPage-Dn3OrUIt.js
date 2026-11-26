@@ -1,1 +1,0 @@
-import{l as e}from"./index-DIuc7v2M.js";import{EditorApp as t}from"./App-_y7I8YWc.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
