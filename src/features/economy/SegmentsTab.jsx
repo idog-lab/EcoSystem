@@ -279,7 +279,7 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null, 
                       {[base[s.base] ? `${rule.code} ${base[s.base].min ?? 0}-${base[s.base].max ?? 'Plus'}` : null, ...(s.tags ?? []), s.mode?.name ? s.mode.name.replace(/_/g, ' ') : null].filter(Boolean).join(' · ')}
                     </td>
                     <td className={`${TD} max-w-0 w-full`} title={s.condition}>
-                      <div className={`truncate font-mono text-[12px] text-slate-600`}>{s.condition || <span className="font-sans text-slate-400">every player - no condition</span>}</div>
+                      <div className={`truncate font-mono text-[12px] text-slate-600`} data-cut-ok>{s.condition || <span className="font-sans text-slate-400">every player - no condition</span>}</div>
                     </td>
                   </tr>
                 ))}

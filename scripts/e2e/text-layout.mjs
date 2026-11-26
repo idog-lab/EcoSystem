@@ -72,7 +72,8 @@ function inspect() {
       continue
     }
     const ownText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 1)
-    if (ownText && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 2) say('text-cut', el, `${el.scrollWidth}px of text in ${el.clientWidth}px`)
+    // (A text cut on purpose, its full text in the hover, is marked data-cut-ok: a segment's condition on one line.)
+    if (ownText && !el.closest('[data-cut-ok]') && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 2) say('text-cut', el, `${el.scrollWidth}px of text in ${el.clientWidth}px`)
     // 2. Sticking out of the window (and not inside something that scrolls sideways).
     if (ownText && r.right > vw + 2 && !inScroller(el)) say('sticks-out-of-window', el, `ends at ${Math.round(r.right)}px in a ${vw}px window`)
     // 3. A table cell squeezed into a tall narrow column.

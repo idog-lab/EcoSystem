@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { setEffortTargetForBuild } from './features/merge/lib/build/eventBuild'
 import { laddersOfEvent } from './features/merge/lib/build/prizeLadder'
+import { DEFAULT_DEMAND_SOURCE, demandSourceOf } from './features/merge/lib/build/demandSource'
 import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer, Menu, Info, Plus, CalendarDays } from 'lucide-react'
 import BoardList from './features/merge/components/editor/BoardList'
 import BoardEditor from './features/merge/components/editor/BoardEditor'
@@ -425,6 +426,10 @@ function freshSegment(name) {
     // segments were copied from ({ id, name, updatedAt }), so step 1 can say when that set has changed since.
     effortBW: null,
     segmentSet: null,
+    // Where the DR demand comes from (lib/build/demandSource.js): on Segment 1, 'events' (the base's demand typed,
+    // the others base x multiplier) or 'levels' (Brut Wins x DR per Brut Win, each segment's own drPerBW).
+    demandSource: DEFAULT_DEMAND_SOURCE,
+    drPerBW: null,
   }
 }
 
@@ -523,6 +528,9 @@ function normalizeSegment(raw, defaultName) {
     prizeBase: Number.isInteger(raw.prizeBase) ? raw.prizeBase : 0,
     effortBW: raw.effortBW != null && Number.isFinite(Number(raw.effortBW)) ? Number(raw.effortBW) : null,
     segmentSet: raw.segmentSet && typeof raw.segmentSet === 'object' && raw.segmentSet.id ? raw.segmentSet : null,
+    // A project saved before the switch has none: its demands stay as typed until a kind is picked.
+    demandSource: demandSourceOf(raw.demandSource),
+    drPerBW: raw.drPerBW != null && Number.isFinite(Number(raw.drPerBW)) ? Number(raw.drPerBW) : null,
   }
 }
 
@@ -674,6 +682,8 @@ function buildSaveShape(segments) {
       prizeBase: seg.prizeBase,
       effortBW: seg.effortBW,
       segmentSet: seg.segmentSet,
+      demandSource: seg.demandSource,
+      drPerBW: seg.drPerBW,
     })),
   }
 }
@@ -718,7 +728,13 @@ function useSegment(initial) {
   const [prizeBase, setPrizeBase] = useState(initial.prizeBase ?? 0)
   const [effortBW, setEffortBW] = useState(initial.effortBW ?? null)
   const [segmentSet, setSegmentSet] = useState(initial.segmentSet ?? null)
+  const [demandSource, setDemandSource] = useState(initial.demandSource ?? null)
+  const [drPerBW, setDrPerBW] = useState(initial.drPerBW ?? null)
   return {
+    demandSource,
+    setDemandSource,
+    drPerBW,
+    setDrPerBW,
     condition,
     setCondition,
     segmentKey,
@@ -1716,6 +1732,8 @@ export function EditorApp({ onHome }) {
       seg.setPrizeBase(data.prizeBase)
       seg.setEffortBW(data.effortBW)
       seg.setSegmentSet(data.segmentSet)
+      seg.setDemandSource(data.demandSource)
+      seg.setDrPerBW(data.drPerBW)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
@@ -1792,6 +1810,8 @@ export function EditorApp({ onHome }) {
       seg.setPrizeBase(0)
       seg.setEffortBW(null)
       seg.setSegmentSet(null)
+      seg.setDemandSource(DEFAULT_DEMAND_SOURCE)
+      seg.setDrPerBW(null)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
