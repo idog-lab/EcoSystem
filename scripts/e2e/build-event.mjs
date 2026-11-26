@@ -46,7 +46,7 @@ async function build(page) {
   await openMerge(page)
 
   ok('the app opens on the Build event workflow, at step 1', (await page.getByTestId('build-event').isVisible()) && (await step(page, 'setup').getAttribute('aria-current')) === 'step')
-  ok('the five steps are shown in order', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,rewards,build,finalize')
+  ok('the six steps are shown in order', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,rewards,build,prizes,finalize')
   ok('the selected phase and segment are shown', /Normal/.test(await page.getByTestId('build-scope').innerText()) && (await page.getByTestId('build-scope-segment').innerText()).includes('Base (base)'))
   ok('nothing is built yet', (await chips(page)).includes('none'))
 
@@ -180,10 +180,13 @@ async function build(page) {
   ok('an unconfigured segment says why it was not built', (await page.getByTestId('segment-skipped').innerText()).includes('no DR demand was typed for this segment'))
   await coverage.locator('[data-coverage-segment="0"]').click()
 
-  // ---- Step 5: test, apply, export ----
+  // ---- Step 6: test, apply, export (the next step after Build is Prizes) ----
   await page.getByTestId('build-next').click()
   await page.waitForTimeout(200)
-  ok('step 5 says the build is in use, with nothing to apply', (await page.getByTestId('finalize-in-use').getAttribute('data-state')) === 'in-use' && /The Play tester plays it and the Syntax export holds it/.test(await page.getByTestId('finalize-in-use').innerText()) && (await page.getByTestId('finalize-apply').count()) === 0)
+  ok('the step after Build is Prizes', (await step(page, 'prizes').getAttribute('aria-current')) === 'step')
+  await page.getByTestId('build-next').click()
+  await page.waitForTimeout(200)
+  ok('step 6 says the build is in use, with nothing to apply', (await page.getByTestId('finalize-in-use').getAttribute('data-state')) === 'in-use' && /The Play tester plays it and the Syntax export holds it/.test(await page.getByTestId('finalize-in-use').innerText()) && (await page.getByTestId('finalize-apply').count()) === 0)
   ok('nothing warns that the export is of something else', (await page.getByTestId('export-warning').count()) === 0)
   await page.getByTestId('finalize-validate').click()
   await page.getByTestId('validation-table').waitFor({ state: 'visible', timeout: 120000 })
@@ -256,8 +259,8 @@ async function build(page) {
 {
   const { browser, page, errors } = await launch()
   await openMerge(page)
-  ok('step 1 is "DR demand" and it is where the workflow starts', (await step(page, 'setup').innerText()).includes('DR demand') && (await step(page, 'setup').getAttribute('aria-current')) === 'step' && (await page.getByText('1. DR demand', { exact: true }).isVisible()))
-  ok('the step order is amounts, layouts, rewards, build, then test and export', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()).join(' | '))).replace(/\d /g, '') === 'DR demand | Board layouts | Rewards and Twister | Build | Test and export')
+  ok('step 1 is "Segments" (with the DR demand) and it is where the workflow starts', (await step(page, 'setup').innerText()).includes('Segments') && (await step(page, 'setup').getAttribute('aria-current')) === 'step' && (await page.getByText('1. DR demand', { exact: true }).isVisible()))
+  ok('the step order is segments, layouts, rewards, build, prizes, then test and export', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()).join(' | '))).replace(/\d /g, '') === 'Segments | Board layouts | Rewards and Twister | Build | Prizes | Test and export')
   // A new project shows the one segment it has; the others are brought in as they are needed.
   ok('a new project shows one segment, in step 1 and in the bar at the top', (await page.locator('[data-field="demand"]').count()) === 1 && (await page.locator('[data-segment-tab]').count()) === 1 && (await page.getByTestId('add-segment').isVisible()))
   await page.getByTestId('setup-add-segment').click()

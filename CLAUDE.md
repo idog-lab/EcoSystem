@@ -323,7 +323,7 @@ the same subsidy gave 756 and 1,148 DR on two sets of boards, single builds),
 so no amount of subsidy lands in between and another build can; or
 **`not-settled`** - the passes ran out. `spendRange` is what the passes found
 a player paying. Step 4 shows demand, average and middle player, difference,
-completion and the signed calibration; step 5 shows the spread with real luck. Recompletion's demand is the normal event's, read-only
+completion and the signed calibration; step 6 shows the spread with real luck. Recompletion's demand is the normal event's, read-only
 (`rcSubsidyForMainSubsidy`). The last board is never typed: it closes the gap
 (`fillLastBoard`). Board 1 carries at most 150 DR (300 on Recompletion,
 `firstBoardCapFor`).
@@ -703,13 +703,47 @@ without a rebuild). Before this the Twister's timing never failed a segment.
 
 ## The Build event flow (the main path)
 
-Five steps, ids `setup, layouts, rewards, build, finalize`, shown as: DR
-demand · Board layouts · Rewards and Twister · Build · Test and export. Two
+Six steps, ids `setup, layouts, rewards, build, prizes, finalize`, shown as:
+Segments · Board layouts · Rewards and Twister · Build · Prizes · Test and
+export. Two
 former steps are folded sections now: the generator, lucky drops, dates and CC
 at the bottom of step 1 (`setup-generator`), the effort shape in step 4 beside
 the Build button (`build-effort-shape`); their old ids still lead there
 (`STEP_ALIAS`, `STEP_FOLD`, `goTo`). A step opens at its top (economist: "it
 should take me to the top part of the page and not make me scroll up").
+
+**Segments and prizes** (economist, 26 Nov 2026: "add segmentation into the
+merge and also the prizes ... the first tab as the segments, there we can also
+have the DR demand and the multipliers between segments. we should also give
+the value of a merge DR. then, the simulator should calculate the allowance
+worth of each rank in the prizes ladder. we should pick the base segments ...
+and then the item ladder is created from the base on the others").
+- **Step 1, Segments** (`SegmentsBuilder.jsx`): the Economy page's segment
+  flow (`SegmentPlanEditor`, exported from `SegmentsTab.jsx`), "Use these
+  segments" names Merge's segments from it, each with its condition and key
+  (at most the 8 segments Merge holds); the **worth of one merge DR** in
+  allowance, one per Merge event ("Per Merge event"); the demand and
+  multiplier table as before, plus "Prizes on": the base segment of the
+  prizes. The plan, the DR worth and the base are the event's, kept on
+  Segment 1 (`segmentPlan`, `drWorth`, `prizeBase`); `condition`,
+  `segmentKey` and `prizeLadder` are each segment's. All saved, backed up,
+  restored and cleared with the project.
+- **Step 5, Prizes** (`PrizesStep.jsx`, `lib/build/prizeLadder.js`): the
+  ranks marked in step 3's milestone rewards ("The ones I mark"; 13-14 from
+  Recompletion's). One playthrough of the base segment's boards in use, as
+  step 4's effort chart plays them (normal then Recompletion when built); **a
+  marked rank is worth the DR paid since the marked rank before it** ("DR
+  paid since the rank before") times the DR worth. The economist types the
+  prize; its worth by the economy and the difference show live ("the app
+  should show the allowance worth of the rank, then i put prizes inside and
+  the app calculates live how far i am"; green within 5%, amber within 15% -
+  this app's own reading, not a pass mark). Another segment's worth is the
+  base's times its multiplier against the base, and so is its prize (coins to
+  hundredths, other amounts whole, at least 1) unless one is typed for it.
+  "Start from them" copies step 3's milestone texts into the base. The
+  Syntax tab's Item Ladder takes each segment's prizes (`laddersOfEvent` in
+  App.jsx); an event with nothing typed in step 5 exports exactly as before.
+  Held by `verify-prize-ladder.mjs` and `scripts/e2e/merge-prizes.mjs`.
 
 **The header** (economist: "the app is very heavy in text and buttons"; of the
 advanced tools: "i use only the builder as for the last runs"): the three
@@ -767,7 +801,7 @@ and know what to do next without reading documentation"):
   down (`pasteDemands`); a running build shows a progress bar.
 - A table of segments leaves out the ones that are not built (no DR demand)
   and says which; the reward size is typed in step 1 only.
-- Step 5 ("Test and export") says what is in use, then three buttons: test on
+- Step 6 ("Test and export") says what is in use, then three buttons: test on
   players, play it, go back to the previous build (what each does is in its
   hover). The table of the four kinds of player is folded and opens by itself
   when a tap pays more than a merge.
