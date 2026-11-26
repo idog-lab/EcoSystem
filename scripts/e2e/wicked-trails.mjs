@@ -1,6 +1,8 @@
-// Wicked Trails in the browser: segments taken from a generic set, the DR per Brut Win typed, the rules, tiers and
-// prizes beside their target worth, another segment's prizes scaled by its effort, and the mock played to the end.
+// Wicked Trails in the browser, step by step as a first visit finds it: segments taken from a generic set (one
+// segment's effort following another's), the rules, the tiers, the prizes beside their target worth, the mock played
+// to the end, and the export downloaded and read back.
 // Run: npx vite-node scripts/e2e/wicked-trails.mjs
+import ExcelJS from 'exceljs'
 import { BASE, createChecker, launch } from './helpers.mjs'
 
 const { ok, finish } = createChecker()
@@ -30,64 +32,96 @@ await set(effort('BW_0_9'), 100)
 await set(effort('BW_9_18'), 200)
 await set(effort('BW_18_Plus'), 300)
 
-// Wicked Trails, from the home page.
+// Step 1: the segments.
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByRole('link', { name: /Wicked Trails/ }).first().click()
 await page.getByTestId('wt-header').waitFor()
-ok('Wicked Trails opens from the home page, on its segments', (await page.locator('[data-wt-view="segments"]').getAttribute('aria-selected')) === 'true')
+const steps = (await page.locator('[data-step]').allInnerTexts()).map((s) => s.replace(/\s+/g, ' ').trim())
+ok(`a first visit starts at step 1 of six (${steps.join(' | ')})`, steps.length === 6 && (await page.locator('[data-step="segments"]').getAttribute('aria-current')) === 'step' && /step 1 of 6/i.test(await text(page.getByTestId('wt-step-head'))))
+ok('the step says what to do and what is still needed', /Take the segments from a segment set/.test(await text(page.getByTestId('wt-step-purpose'))) && /Take the segments from a segment set/.test(await text(page.getByTestId('wt-step-missing'))))
 const picker = page.getByTestId('wt-segment-set')
 await picker.selectOption(await picker.locator('option', { hasText: '2D_Levels' }).getAttribute('value'))
 await page.waitForTimeout(300)
 const names = await page.locator('[data-wt-segment] td:nth-child(2) div:first-child').allInnerTexts()
-ok(`the set's segments, named Wicked_Trails_ (${names.join(', ')})`, names.length === 3 && names[0] === 'Wicked_Trails_BW_0_9' && /Wicked_Trails_/.test(await text(page.getByTestId('wt-segments-message'))))
-ok('their efforts came with them', (await page.locator('[data-wt-segment="0"] [data-field="effort-bw"]').inputValue()) === '100' && (await page.locator('[data-wt-segment="2"] [data-field="effort-bw"]').inputValue()) === '300')
-for (const i of [0, 1, 2]) {
-  await set(page.locator(`[data-wt-segment="${i}"] [data-field="silver-per-bw"]`), 2)
-  await set(page.locator(`[data-wt-segment="${i}"] [data-field="gold-per-bw"]`), 3)
-}
+ok(`the set's segments, named Wicked_Trails_, with their efforts (${names.join(', ')})`, names.length === 3 && names[0] === 'Wicked_Trails_BW_0_9' && (await page.locator('[data-wt-segment="2"] [data-field="effort-bw"]').inputValue()) === '300')
+// Segment 2 follows segment 1, x 1.5.
+await page.locator('[data-wt-segment="1"] [data-field="effort-mode"]').selectOption({ label: 'x Wicked_Trails_BW_0_9' })
+await set(page.locator('[data-wt-segment="1"] [data-field="effort-factor"]'), 1.5)
+ok(`a segment's effort as a factor of another: 100 x 1.5 (${await text(page.locator('[data-wt-segment="1"] [data-field="effort-value"]'))})`, (await text(page.locator('[data-wt-segment="1"] [data-field="effort-value"]'))) === '= 150')
+await set(page.locator('[data-field="all-silver"]'), 2)
+await set(page.locator('[data-field="all-gold"]'), 3)
+ok('"Same for every segment" fills silver and gold DR per Brut Win', (await page.locator('[data-wt-segment="2"] [data-field="gold-per-bw"]').inputValue()) === '3' && (await page.locator('[data-wt-segment="0"] [data-field="silver-per-bw"]').inputValue()) === '2')
+ok('step 1 is done (ticked), nothing more needed', (await page.locator('[data-step="segments"]').getAttribute('data-done')) === 'true' && (await page.getByTestId('wt-step-missing').count()) === 0)
+await set(page.locator('[data-wt-segment="0"] [data-field="effort-bw"]'), 120)
+ok('the follower follows: 120 x 1.5 = 180', (await text(page.locator('[data-wt-segment="1"] [data-field="effort-value"]'))) === '= 180')
+await set(page.locator('[data-wt-segment="0"] [data-field="effort-bw"]'), 100)
 
-// The prizes.
-await page.locator('[data-wt-view="prizes"]').click()
-await page.waitForTimeout(300)
-ok('the ROE is asked for first', /Type the ROE/.test(await text(page.getByTestId('wt-problems'))))
+// Step 2: the rules, reached with Next.
+await page.getByTestId('wt-next').click()
+await page.waitForTimeout(250)
+ok('Next leads to the rules, which ask for the ROE', (await page.locator('[data-step="rules"]').getAttribute('aria-current')) === 'step' && /ROE/.test(await text(page.getByTestId('wt-step-missing'))))
 await set(page.locator('[data-rule="roe"]'), 1)
 await set(page.locator('[data-rule="easyShare"]'), 50)
+ok('the rules are done', (await page.locator('[data-step="rules"]').getAttribute('data-done')) === 'true')
+
+// Step 3: the tiers.
+await page.getByTestId('wt-next').click()
+await page.waitForTimeout(250)
 await set(page.locator('[data-tier-count="easy"]'), 2)
 await set(page.locator('[data-tier-count="hard"]'), 2)
-ok('nothing left to fix', (await page.getByTestId('wt-problems').count()) === 0)
 const target = (lane, i) => text(page.locator(`[data-tier="${lane}-${i}"] [data-field="target"]`))
 const dr = (lane, i) => text(page.locator(`[data-tier="${lane}-${i}"] [data-field="dr"]`))
-console.log(`      easy ${await dr('easy', 0)}/${await dr('easy', 1)} DR, targets ${await target('easy', 0)}, ${await target('easy', 1)} | hard ${await dr('hard', 0)}/${await dr('hard', 1)} DR, targets ${await target('hard', 0)}, ${await target('hard', 1)}`)
 ok('easy tiers: 50 silver each, 12.5 earned, 80% kept: 10', (await dr('easy', 0)) === '50' && (await target('easy', 0)) === '10' && (await target('easy', 1)) === '10')
-ok('hard tiers: 150 gold each (100 BW x 3); 25 while sharing and 50 alone, 60% kept: 15 and 30', (await dr('hard', 0)) === '150' && (await target('hard', 0)) === '15' && (await target('hard', 1)) === '30')
-ok('the Final Prize: pool 35 (20% of 25 + 40% of 75), worth to aim for 70', (await text(page.locator('[data-field="pool"]'))) === '35' && (await text(page.locator('[data-field="final-target"]'))) === '70')
+ok('hard tiers: 150 gold each; 25 while sharing and 50 alone, 60% kept: 15 and 30', (await dr('hard', 0)) === '150' && (await target('hard', 0)) === '15' && (await target('hard', 1)) === '30')
+
+// Step 4: the prizes.
+await page.getByTestId('wt-next').click()
+await page.waitForTimeout(250)
+ok('the prizes step names every prize still to type (5)', (await page.locator('[data-testid="wt-step-missing"] li').count()) === 5)
 await set(page.locator('[data-prize-input="easy-0"]'), 'free_undo:40')
-const gap = await text(page.locator('[data-prize-gap="easy-0"]'))
-ok(`a prize typed shows its worth and how far from the target (${gap})`, /^10 \(0, 0%\)$/.test(gap))
+ok(`a prize typed shows its worth and how far from the target (${await text(page.locator('[data-prize-gap="easy-0"]'))})`, /^10 \(0, 0%\)$/.test(await text(page.locator('[data-prize-gap="easy-0"]'))))
+await set(page.locator('[data-prize-input="easy-1"]'), 'free_wild:4')
+await set(page.locator('[data-prize-input="hard-0"]'), 'free_wild:6')
+await set(page.locator('[data-prize-input="hard-1"]'), 'free_wild:12')
 await set(page.locator('[data-prize-input="final"]'), 'free_wild:20+free_undo:80')
-ok(`the Final Prize's worth against 70 (${await text(page.locator('[data-prize-gap="final"]'))})`, /^70 /.test(await text(page.locator('[data-prize-gap="final"]'))))
+ok(`the Final Prize: pool 35, worth to aim for 70 (${await text(page.locator('[data-prize-gap="final"]'))})`, (await text(page.locator('[data-field="pool"]'))) === '35' && /^70 /.test(await text(page.locator('[data-prize-gap="final"]'))))
+ok('every prize typed: the step is done', (await page.locator('[data-step="prizes"]').getAttribute('data-done')) === 'true')
 await page.locator('[data-wt-chip="1"]').click()
 await page.waitForTimeout(200)
-ok('another segment: its prize is the base\'s x its effort against the base\'s (200 / 100)', (await page.locator('[data-prize-input="easy-0"]').inputValue()) === 'free_undo:80' && (await page.locator('[data-from-base]').count()) >= 1 && (await target('easy', 0)) === '20')
+ok('the follower segment: the base\'s prize x 1.5 and its target', (await page.locator('[data-prize-input="easy-0"]').inputValue()) === 'free_undo:60' && (await target('easy', 0)) === '15')
 
-// The mock, for the base.
-await page.locator('[data-wt-view="mock"]').click()
+// Step 5: the mock, for the base.
+await page.getByTestId('wt-next').click()
 await page.waitForTimeout(200)
 await page.locator('[data-wt-chip="0"]').click()
 await page.getByTestId('wt-mock-bw').fill('30')
 await page.waitForTimeout(200)
 const bar = (id) => text(page.locator(`[data-mock-bar="${id}"]`))
-ok(`after 30 Brut Wins: easy tier 1 done, 10 of 50 into tier 2; hard 90 of 150 into tier 1 (${await bar('easy-1')}, ${await bar('hard-0')})`, (await bar('easy-0')) === '' && (await bar('easy-1')) === '10/50' && (await bar('hard-0')) === '90/150' && (await bar('hard-1')) === '0/150' && (await text(page.getByTestId('wt-mock-lanes-done'))) === '0/2')
-ok('the mock shows the prizes typed', /Undo/.test(await text(page.locator('[data-mock-lane="easy"]'))) && /Wild/.test(await text(page.locator('[data-mock-final]'))))
+ok(`after 30 Brut Wins: easy tier 1 done, 10 of 50 into tier 2; hard 90 of 150 (${await bar('easy-1')}, ${await bar('hard-0')})`, (await bar('easy-0')) === '' && (await bar('easy-1')) === '10/50' && (await bar('hard-0')) === '90/150' && (await text(page.getByTestId('wt-mock-lanes-done'))) === '0/2')
 await page.getByTestId('wt-mock-bw').fill('100')
 await page.waitForTimeout(200)
 ok('after the whole effort both lanes are done: 2/2', (await text(page.getByTestId('wt-mock-lanes-done'))) === '2/2')
 
+// Step 6: the export.
+await page.getByTestId('wt-next').click()
+await page.waitForTimeout(250)
+await page.getByTestId('wt-start-date').fill('2026-11-16')
+await page.waitForTimeout(200)
+ok(`the file is named as the example (${await text(page.getByTestId('wt-file-name'))})`, (await text(page.getByTestId('wt-file-name'))) === 't_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx')
+const cell = (column, which = 'ops') => text(page.locator(`[data-export-column="${column}"] [data-export-${which}]`))
+ok(`the row shows the trigger and the chest (${await cell('$_Script->RightMilestone_1_Res')})`, (await cell('$_Script->RightMilestone_1_Res')) === 'chest:silver(trigger:wicked_trails_silver_tier2+free_wild:4)')
+ok(`RC: 50% more a tier (${await cell('$_Script->LeftMilestone_1_Req', 'rc')})`, (await cell('$_Script->LeftMilestone_1_Req')) === '300' && (await cell('$_Script->LeftMilestone_1_Req', 'rc')) === '450')
+const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('wt-download').click()])
+const wb = new ExcelJS.Workbook()
+await wb.xlsx.readFile(await download.path())
+const sheets = wb.worksheets.map((w) => w.name)
+const ops = wb.getWorksheet('Congif OPS')
+ok(`the workbook: the example's three sheets, a row per segment (${sheets.join(', ')}; ${ops.rowCount - 1} rows)`, download.suggestedFilename() === 't_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx' && sheets.join('|') === 'segments|Congif OPS|Config RC OPS' && ops.rowCount === 4 && ops.getRow(1).getCell(1).value === 'Segment' && ops.getRow(2).getCell(1).value === 'def_Wicked_Trails_BW_0_9')
+
 // Kept.
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForTimeout(300)
-await page.locator('[data-wt-view="prizes"]').click()
-ok('after a reload the rules and prizes are kept', (await page.locator('[data-rule="roe"]').inputValue()) === '1' && (await page.locator('[data-prize-input="easy-0"]').inputValue()) === 'free_undo:40')
+ok('after a reload: the same step, the prizes and the effort that follows kept', (await page.locator('[data-step="export"]').getAttribute('aria-current')) === 'step' && (await page.locator('[data-step="prizes"]').getAttribute('data-done')) === 'true')
 ok(`no page error (${errors.join(' | ').slice(0, 200)})`, errors.length === 0)
 await browser.close()
 process.exit(finish('WICKED TRAILS') ? 1 : 0)

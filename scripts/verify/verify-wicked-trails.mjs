@@ -1,7 +1,8 @@
 // WICKED TRAILS (src/features/wickedTrails/lib/wickedTrails.js): two lanes filled together from Brut Wins, the ROE of
 // each BW split between them until the easy lane is done, tiers as shares of a lane, the Final Prize from the takes.
 //   npx vite-node scripts/verify/verify-wicked-trails.mjs
-import { createState, normalizeState, prizeOf, progressAt, ruleProblems, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
+import { createState, normalizeState, prizeOf, progressAt, resolveEfforts, ruleProblems, stepStatus, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
+import { OPS_HEADERS, buildExport, exportFileName } from '../../src/features/wickedTrails/lib/wickedTrailsExport.js'
 
 let fails = 0
 let total = 0
@@ -57,6 +58,45 @@ check('tiers that do not add up to 100% are named', ruleProblems(bad).some((p) =
 check('a segment without its multipliers says which', workOut(state, { effortBW: 10, silverPerBW: 1 }).problems.some((p) => /gold DR per Brut Win/.test(p)))
 check('a lane given 4 tiers splits them evenly and keeps the prizes by place', JSON.stringify(withTierCount(state.lanes.easy, 4)) === JSON.stringify({ shares: [25, 25, 25, 25], prizes: ['free_undo:10', '', '', ''] }))
 check('a stored state reads back the same', JSON.stringify(normalizeState(JSON.parse(JSON.stringify(state)))) === JSON.stringify(normalizeState(state)))
+
+// A segment's effort: typed, or another's x a factor (and a chain of them).
+const chain = resolveEfforts({
+  ...state,
+  segments: [
+    { name: 'A', key: 'a', effortTyped: 100 },
+    { name: 'B', key: 'b', effortOf: 'a', effortFactor: 1.5 },
+    { name: 'C', key: 'c', effortOf: 'b', effortFactor: 2 },
+    { name: 'D', key: 'd', effortOf: 'e', effortFactor: 1 },
+    { name: 'E', key: 'e', effortOf: 'd', effortFactor: 1 },
+    { name: 'F', key: 'f', effortOf: 'a' },
+  ],
+})
+const eff = Object.fromEntries(chain.segments.map((s) => [s.name, s]))
+check(`effort typed, x a segment, x a segment that follows another (${['A', 'B', 'C'].map((n) => eff[n].effortBW).join(', ')})`, eff.A.effortBW === 100 && eff.B.effortBW === 150 && eff.C.effortBW === 300)
+check('two segments following each other have no effort, and say why', eff.D.effortBW === null && /follows it back/.test(eff.D.effortProblem) && eff.E.effortBW === null)
+check('a factor not typed is asked for', eff.F.effortBW === null && /factor of A/.test(eff.F.effortProblem))
+check('an old save (effortBW only) reads as typed', normalizeState({ segments: [{ name: 'X', key: 'x', effortBW: 42 }] }).segments[0].effortTyped === 42)
+
+// What each step still needs.
+const st = stepStatus(normalizeState(state))
+check(`steps: segments, rules and tiers are done; prizes name what is missing (${st.prizes.missing.length})`, st.segments.done && st.rules.done && st.tiers.done && !st.prizes.done && st.prizes.missing.some((m) => /Hard lane, tier 1: no prize yet/.test(m)) && st.prizes.missing.some((m) => /Final Prize/.test(m)))
+check('a new feature: every step says what it needs', !stepStatus(createState()).segments.done && stepStatus(createState()).rules.missing.some((m) => /ROE/.test(m)))
+
+// The export, in the example's layout.
+const ex = normalizeState({ ...state, segments: [{ ...state.segments[0], key: 'def_WT_A', condition: 'cond A' }], lanes: { easy: { shares: [50, 50], prizes: ['free_undo:4', 'free_wild:2'] }, hard: { shares: [25, 25, 50], prizes: ['free_entry:1', 'free_undo:8', 'chest:purple(free_wild:3)'] } }, finalPrize: 'allowance:milestone(coins:4)+free_entry:1' })
+const out = buildExport(ex)
+const col = (name, sheet = out.ops) => sheet[0][OPS_HEADERS.indexOf(name)]
+check('one segment: the segments sheet holds its key without def_ and its condition', out.segments.length === 1 && out.segments[0][0] === 'WT_A' && out.segments[0][1] === 'cond A' && col('Segment') === 'def_WT_A')
+check('Right is silver, Left is gold; the end trigger and the filter as in the example', col('$_Script->DR_Right') === 'dr-wicked-trails-dr-silver' && col('$_Script->DR_Left') === 'dr-wicked-trails-dr-gold' && col('$_Script->endTrigger') === 'trigger:wicked_trail_end' && col('$_Script->FinalPrize_Res_Filter') === 'chest|coins')
+check(`requirements are the DR in all: right 50, 100; left 75, 150, 300; then 100 (${[0, 1, 2].map((i) => col(`$_Script->RightMilestone_${i}_Req`)).join(', ')})`, col('$_Script->MilestoneNum_Right') === 2 && col('$_Script->RightMilestone_0_Req') === 50 && col('$_Script->RightMilestone_1_Req') === 100 && col('$_Script->RightMilestone_2_Req') === 100 && col('$_Script->LeftMilestone_2_Req') === 300 && col('$_Script->MilestoneNum_Left') === 3)
+check(`each tier's own trigger; the last tier of each lane in its chest (${col('$_Script->RightMilestone_1_Res')})`, col('$_Script->RightMilestone_0_Res') === 'trigger:wicked_trails_silver_tier1+free_undo:4' && col('$_Script->RightMilestone_1_Res') === 'chest:silver(trigger:wicked_trails_silver_tier2+free_wild:2)' && col('$_Script->LeftMilestone_0_Res') === 'trigger:wicked_trails_gold_tier1+free_entry:1')
+check(`a prize typed as a chest keeps it, the trigger inside (${col('$_Script->LeftMilestone_2_Res')})`, col('$_Script->LeftMilestone_2_Res') === 'chest:purple(trigger:wicked_trails_gold_tier3+free_wild:3)')
+check('a milestone with no tier: [dynamic(dr-hidden:1)]', col('$_Script->RightMilestone_2_Res') === '[dynamic(dr-hidden:1)]' && col('$_Script->LeftMilestone_7_Res') === '[dynamic(dr-hidden:1)]')
+check(`the Final Prize with its trigger (${col('$_Script->FinalPrize_Res')})`, col('$_Script->FinalPrize_Res') === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:4)+free_entry:1')
+check(`RC: every tier 50% more, the Final Prize's coins 40% more (${col('$_Script->LeftMilestone_2_Req', out.rc)}, ${col('$_Script->FinalPrize_Res', out.rc)})`, col('$_Script->RightMilestone_0_Req', out.rc) === 75 && col('$_Script->LeftMilestone_2_Req', out.rc) === 450 && col('$_Script->FinalPrize_Res', out.rc) === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:5.6)+free_entry:1' && col('$_Script->RightMilestone_2_Req', out.rc) === 100)
+check('every row has the example\'s 42 columns', OPS_HEADERS.length === 42 && out.ops[0].length === 42 && out.rc[0].length === 42)
+check(`the file is named as the example (${exportFileName('2026-11-16')})`, exportFileName('2026-11-16') === 't_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx')
+check('a segment not worked out is left out and named', buildExport({ ...ex, segments: [{ ...ex.segments[0], goldPerBW: null }] }).problems.some((p) => /left out/.test(p)))
 
 console.log(`\nWICKED TRAILS: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

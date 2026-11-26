@@ -831,6 +831,8 @@ export const GAME_CURRENCIES = [
   "dr-pooh-collection-cart",
   "dr-pooh-collection-bow",
   "dr-wicked-trails-dr-gold",
+  // Added by the economist, 26 Nov 2026 ("yes add the silver currency to the economy"): Wicked Trails' easy lane.
+  "dr-wicked-trails-dr-silver",
   "dr-pumpkin-chef-halloween",
   "dr-broom",
   "dr-videotape",
