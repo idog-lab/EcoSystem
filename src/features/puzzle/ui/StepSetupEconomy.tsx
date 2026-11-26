@@ -3,7 +3,7 @@ import { REGULAR_PIECES, RC_PIECES, uniformProgression, type EventMode } from '.
 import { effortShares, pieceWorthOf } from '../engine/regular'
 import { Choice, Label, Note, Num, Panel, Table, Text, Btn } from './kit'
 import { fmt, pct, td, parsePasted } from './format'
-import { addDays, dayLabel, setDays, setLength, usePuzzle } from './shared'
+import { dayLabel, setDays, setLength, usePuzzle } from './shared'
 
 const MODES: { value: EventMode; label: string; hint: string }[] = [
   { value: 'standard', label: 'Standard', hint: 'Regular prices.' },
@@ -327,7 +327,7 @@ function RcEconomy() {
           ))}
         </Table>
         <p className="mt-2 text-xs text-slate-500" data-note>
-          A piece's price is the board's DR x its rank / (n(n+1)/2), rounded. RC starts when board 6 of the regular puzzle is done ({addDays(ev.setup.start, 0).replace('T', ' ')} UTC is the event start).
+          A piece's price is the board's DR x its rank / (n(n+1)/2), rounded. A player reaches RC when board 6 of the regular puzzle is done.
         </p>
       </Panel>
     </div>

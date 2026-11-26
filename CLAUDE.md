@@ -53,6 +53,12 @@ When this file and the history disagree, this file wins.
   `docs/history.md` change in almost every piece of work, so expect to merge
   them by hand.
 - Artwork is prototype concept art made by the economist, not studio artwork.
+- **Puzzle** (`src/features/puzzle`, `/models/puzzle`) is the first model whose
+  events are stored on the toolkit server. **Read `docs/puzzle-overview.md`
+  before a Puzzle task**: the rules in force, where the approved requirements
+  override the workbook, and what is not confirmed. Its engines are ported from
+  the workbook with parity tests (`tests/puzzle`, reading the ignored
+  `reference/puzzle-workbook.json`); change a formula only with them passing.
 - `src/features/chef` and `src/features/diamondMine` are separate features
   that share only `src/components/` and `src/lib/`. Leave them alone unless
   asked. **Chef has its own description, `docs/chef-overview.md`** - the
@@ -103,7 +109,7 @@ When this file and the history disagree, this file wins.
 The home page and everything around the tools is the **platform**
 (`docs/architecture.md`, setup in `docs/setup.md`, the model list and its
 workbook-source uncertainties in `docs/catalog.md`). In short: the catalog is
-`src/platform/registry/catalog.ts` (22 models, 18 of them not built yet; add one there plus a loader
+`src/platform/registry/catalog.ts` (22 models, 17 of them not built yet; add one there plus a loader
 in `modules.ts`, never by editing the home page); every model opens at
 `/models/<slug>` as a lazily loaded module that owns its page; the home page
 searches display names only and filters by shared folders, both kept in the
@@ -185,9 +191,10 @@ src/
   features/diamondMine/, features/chef/   other features (Chef: a six-step flow, see docs/chef-overview.md)
 server/            the toolkit server (API, auth, folders, documents, assumptions)
 prisma/            database schema and migrations
-tests/             Vitest: platform logic and the server on a throw-away database (npm test)
+tests/             Vitest: platform logic, Puzzle parity, the server on a throw-away database (npm test)
 scripts/
-  e2e-platform/    the home page in a browser, two members at once (npm run test:e2e:platform)
+  e2e-platform/    the home page and Puzzle in a browser, two members at once (npm run test:e2e:platform, test:e2e:puzzle)
+  puzzle/          extract the Puzzle workbook to reference/ and regenerate its defaults
   verify/          engine checks (npm run verify)
   e2e/             browser checks against the dev server (npm run e2e; one: npx vite-node <file>)
   art/             prepare the artwork from art-source/
@@ -197,6 +204,7 @@ reference/         the economist's reference spreadsheets: Merge Out.xlsx (Small
 docs/history.md    the full design history
 docs/chef-overview.md   the Chef feature: what it is and how to work on it
 docs/economy-rules.md   the economy's rules, where they apply, what is open
+docs/puzzle-overview.md the Puzzle model: rules, overrides of the workbook, open questions
 ```
 
 Dev: `npm run server` (the API, port 8787; see docs/setup.md) and `npm run dev` (port 5173, `strictPort` - localStorage is per origin

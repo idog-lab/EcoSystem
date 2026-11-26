@@ -165,6 +165,14 @@ export type CcSettings = {
   presets: string[]
 }
 
+const TEMPLATE_WEDGES: Wedge[] = [
+  { id: 'S_S', name: 'sword_small', value: 5, visualVariant: '', stingerId: '' },
+  { id: 'S_M', name: 'sword_medium', value: 10, visualVariant: '', stingerId: '' },
+  { id: 'S_B', name: 'sword_big', value: 20, visualVariant: '', stingerId: '' },
+  { id: 'S_J', name: 'sword_jackpot', value: 50, visualVariant: '', stingerId: '' },
+  { id: 'F_2', name: 'free_2', value: 2, visualVariant: '', stingerId: '' },
+]
+
 export const weekDays = (length: EventLength) => W.days[length]
 
 const tierFromWorkbook = (t: (typeof W.rewards)[number][number]): RegularTierReward => ({
@@ -275,7 +283,8 @@ export function createDefaultEvent({ name = 'New Puzzle event', start = '2026-12
       rcTiers: W.maleficent.rcTiers.map((t) => ({ active: t.difficulty != null, difficulty: t.difficulty ?? 0, removal: t.removal ?? 0 })),
       cheapKept: W.maleficent.cheapKept,
       buckets: W.maleficent.buckets.map((b) => ({ ...b })),
-      wedges: W.maleficent.wedges.map((w) => ({ id: w.id, name: w.name, value: w.value, visualVariant: '', stingerId: '' })),
+      // The Maleficent template's "Wheel Wedges" tab (read 26 Nov 2026) - the workbook's own list has scratch rows (a second S_S, F_1).
+      wedges: TEMPLATE_WEDGES.map((w) => ({ ...w })),
       layouts: [],
       multipliers: [],
       regularWheel: W.maleficent.regularWheel.map((t, i) => wheelTier(t, spinsOf(String(i + 1)))),

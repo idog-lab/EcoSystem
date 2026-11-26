@@ -81,6 +81,14 @@ Not character-level co-editing: shared documents with conflict handling.
 **History.** Every document save writes an immutable `DocumentRevision`
 (payload, actor, time); a trigger refuses UPDATE and DELETE on it.
 
+**What happened afterwards** (`server/modules/records`, Puzzle first): an
+export made from a revision (`DocumentExport`: the revision, the engine version,
+a fingerprint and the cells sent), which revision ran live for which game event
+and from when (`LiveRun`; a mid-event change is a new row, `revision` null ends
+it), and results measured later (`ObservedResult`, joined to the live revisions
+of its window when stored). All three are append-only (database triggers), and
+an export or a live run must name a revision that exists.
+
 ## Documents and shared assumptions
 
 `ModelDocument` (title, `schemaVersion`, JSON `payload`, `revision`) is a
