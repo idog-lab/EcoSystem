@@ -8736,3 +8736,8 @@ picked) - and the prize sheet's mini game column is headed Merge or Diamond
 Mine. verify-calendar 13, verify-wicked-trails 43, e2e wicked-trails 59,
 economy-page 111. (A test edit removed the wrong date line once; found with a
 probe - the app was right.)
+26 Nov 2026: "make the default value of fallbacks to be coins" - a new
+sticker pack's fallback starts as Coins, asked how many: "0.25"
+([sticker_pack:...|allowance(coins:0.25)]); a puzzle's plain preset (no
+ending) is shown as its Coins fallback; a mini game already started on
+_allowance (Coins). e2e wicked-trails 59.

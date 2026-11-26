@@ -486,8 +486,11 @@ const listOf = (v) =>
 const FALLBACK_OPTIONS = [{ value: '', label: '-' }, ...FALLBACK_KINDS]
 // A puzzle's fallback is the ending of its preset's name (economist: "the puzzle and mini game has the fallback logic in
 // the text of the preset"): none, or puzzle_gameplay_<n>_undo / _entry / _stock / _wild.
+// The plain preset (no ending) is the coins one: the default (economist: "make the default value of fallbacks to be
+// coins"), as a mini game's starts on _allowance.
+const PACK_FALLBACK_COINS = 0.25
 const PUZZLE_FALLBACKS = [
-  { value: '', label: '-' },
+  { value: '', label: 'Coins' },
   { value: 'undo', label: 'Undo' },
   { value: 'entry', label: 'Free round' },
   { value: 'stock', label: 'Extra stock' },
@@ -777,8 +780,15 @@ function TiersStep({ state, change, index, setShown, economy }) {
     else if (key === 'presets') p.presets = presetsFromKinds({ ...kinds, others: listOf(value) })
     else if (key === 'pack') {
       p.pack = value || ''
-      if (!value) p.packCoins = null
-      else if (!parts.pack) p.packCounter = true
+      if (!value) {
+        p.packCoins = null
+        p.packAlt = null
+      } else if (!parts.pack) {
+        // A new pack: its counter, and a fallback of coins to start (economist: "make the default value of fallbacks to
+        // be coins" - 0.25 allowance, their number).
+        p.packCounter = true
+        if (!parts.packAlt) p.packAlt = { kind: 'coins', amount: PACK_FALLBACK_COINS }
+      }
     } else if (key === 'packCoins') p.packCoins = value
     else if (key === 'chest') p.chest = value || ''
     else if (key === 'triggers') p.triggers = listOf(value)
