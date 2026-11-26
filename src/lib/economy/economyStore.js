@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { createEconomy, normalizeEconomy } from './economyModel'
+import { teamData } from '../teamData'
 
 export const ECONOMY_STORAGE_KEY = 'superplay-economy'
 const EVENT = 'superplay-economy-changed'
@@ -26,6 +27,8 @@ export function saveEconomy(economy) {
   try {
     window.localStorage.setItem(ECONOMY_STORAGE_KEY, JSON.stringify(next))
     window.dispatchEvent(new CustomEvent(EVENT))
+    // Shared with the team when connected (lib/teamData.js).
+    teamData.changed(ECONOMY_STORAGE_KEY)
     return { ok: true, economy: next }
   } catch (e) {
     return { ok: false, error: e?.message ?? 'The browser did not keep it.' }

@@ -8380,3 +8380,23 @@ the chat record as given (no hand copying), added to every preset list
 at a time with its count; Build a prize groups its presets. presetFor's
 nearest amount now finds mf_80 for 85 where only mf_90 existed (a tie goes
 down; nothing in the app calls it yet). verify-economy 315, economy-page 110.
+
+## Team data on GitHub
+
+26 Nov 2026: "i want the site to be live, with live data between all the
+users. how can we make it happen ?" The coworker's platform has a server with
+Google sign-in and shared documents, but nowhere to run it and no tool saving
+to it. Asked where it should run: "i think we need to focus on the memory to
+live in github, can we do that?" - yes. The site's repository is public, so a
+private repository was created for the data, idog-lab/EcoSystem-data (asked:
+"Create idog-lab/EcoSystem-data"), and every collaborator invited with write
+("read and change all the collaborators": yaacovs-dot, moralf-hub). Shared
+first: the Economy page, saved Merge events, Chef, Diamond Mine.
+`src/lib/teamData.js` copies each save there and brings the team's newest in
+when the app opens; a save never writes over another person's change made
+since (they choose); each person connects once with a token on the data page;
+a dot in the corner says whether the last save reached the team (it covered a
+Chef field as a word tag at first - a dot in the margin now, words only when
+something needs the person). verify-team-data 24 (two browsers, a stand-in
+GitHub), e2e team-data 16; saved-events 20, browser-data 10 + 11, Chef 188,
+economy-page 110 unchanged.

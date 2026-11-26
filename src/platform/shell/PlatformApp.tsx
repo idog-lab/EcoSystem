@@ -4,6 +4,7 @@ import { parseRoute } from '../routing/routes'
 import HomePage from '../catalog/HomePage'
 import ModelRoute from './ModelRoute'
 import { MessagePage } from './MessagePage'
+import TeamDataBadge from '../../components/TeamDataBadge'
 
 // The top of the app: which screen the URL shows (routing/routes.ts).
 // Merge Mania's shared links (?s=, ?play, ?plan) keep opening exactly as
@@ -17,6 +18,19 @@ const loading = <MessagePage title="Loading…" text="" quiet />
 export default function PlatformApp() {
   const { path, search } = useLocation()
   const route = parseRoute(path, search)
+  // The team data tag (lib/teamData.js) sits on the toolkit's own pages - never on a player's link.
+  const page = Page(route)
+  return route.name === 'play-link' || route.name === 'plan-link' ? (
+    page
+  ) : (
+    <>
+      {page}
+      <TeamDataBadge />
+    </>
+  )
+}
+
+function Page(route: ReturnType<typeof parseRoute>) {
   switch (route.name) {
     case 'play-link':
       return <Suspense fallback={loading}><PlayLink /></Suspense>

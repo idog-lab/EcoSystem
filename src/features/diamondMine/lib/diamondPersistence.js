@@ -3,6 +3,8 @@
 // Merge feature; bolting Diamond Mine's unrelated {gems, boards} shape onto
 // it would blur that.
 
+import { teamData } from '../../../lib/teamData'
+
 const STORAGE_KEY = 'merge-mania-diamond-mine'
 
 export function loadDiamondState() {
@@ -17,4 +19,6 @@ export function loadDiamondState() {
 
 export function saveDiamondState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  // Shared with the team when connected (lib/teamData.js).
+  teamData.changed(STORAGE_KEY)
 }

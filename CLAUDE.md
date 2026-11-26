@@ -1007,6 +1007,31 @@ tabs belong was answered (above).
 
 ## Persistence
 
+**Team data on GitHub** (economist, 26 Nov 2026: "i want the site to be live,
+with live data between all the users" - asked where: "i think we need to
+focus on the memory to live in github"; chose a private repository open to
+every collaborator; shared: the Economy page, saved Merge events, Chef,
+Diamond Mine). `src/lib/teamData.js`: every tool still saves in the browser,
+and a connected browser copies each save to the private repository
+**`idog-lab/EcoSystem-data`** (one file a thing: `economy/economy.json`,
+`economy/segment-plan.json`, `chef/chefs.json`, `diamond-mine/state.json`,
+`merge/saved-events/<id>.json`), and brings the team's newest in when the app
+opens (`main.tsx`, at most 8 s; never on a play link) or on "Get the team's
+latest". Every save is a commit by who made it. A save that finds the file
+changed by someone since is never written over it: the person chooses (the
+team's / mine over the team's). Each person connects once on the data page
+with a GitHub token (classic "repo" for a collaborator - a fine-grained one
+cannot reach another person's repository; the owner's can be fine-grained),
+kept in the browser under `ecotk-team-token` - a key "Download all my data"
+never takes. The open Merge project, Chef's runs, drafts and the Balance tab
+stay in the browser. Not instant: another person's change arrives at the next
+open or "Get the team's latest". The site's own repository is PUBLIC: never put
+shared data in it. The coworker's server (`server/`, PostgreSQL) stays unhosted.
+A save calls `teamData.changed(key)` / `eventChanged(id)` / `eventDeleted(id)`;
+a new shared thing goes in `SHARED_ITEMS`. Held by `verify-team-data.mjs` (two
+browsers, a stand-in GitHub: `scripts/verify/fakeGitHub.mjs`) and
+`scripts/e2e/team-data.mjs`.
+
 `localStorage` key `merge-mania-board-simulator`, `{ segments: [...] }`, written
 by Save only - the header says "Unsaved changes" while the project differs
 from what was saved or loaded. Separate entries: build drafts, the effort
