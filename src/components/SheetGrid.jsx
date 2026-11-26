@@ -281,7 +281,7 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
         onKeyDown={onKeyDown}
         onCopy={onCopy}
         onPaste={onPaste}
-        className="overflow-x-auto rounded-xl border border-slate-200 bg-white outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
+        className="overflow-x-auto rounded-xl border border-slate-300 bg-white outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
         role="grid"
         aria-label={testid}
         title="Arrows move · type to replace · F2 or double click edits · Enter down, Tab right · Shift+arrows select · Ctrl+C / Ctrl+V with Excel · Delete clears · Ctrl+Z undo · a dropdown: Ctrl+Down / Ctrl+Up go through it, Alt+Down opens it"
@@ -297,15 +297,15 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
             {groups && (
               <tr className="bg-slate-50">
                 {groups.map((g) => (
-                  <th key={g.key} colSpan={g.span} className="border-b border-r border-slate-200 px-2 pt-1.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-purple-700" data-sheet-group={g.group}>
+                  <th key={g.key} colSpan={g.span} className="border-b border-r border-slate-300 px-2 pt-1.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-purple-700" data-sheet-group={g.group}>
                     {g.group}
                   </th>
                 ))}
               </tr>
             )}
-            <tr className="border-b border-slate-200 bg-slate-50/80">
+            <tr className="border-b border-slate-300 bg-slate-50/80">
               {columns.map((c, i) => (
-                <th key={c.key} style={stick(i, 3)} className={`bg-slate-50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 align-bottom ${c.align === 'right' ? 'text-right' : 'text-left'}`} title={c.title ? undefined : c.hint}>
+                <th key={c.key} style={stick(i, 3)} className={`border-b border-r border-slate-300 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 align-bottom ${c.align === 'right' ? 'text-right' : 'text-left'}`} title={c.title ? undefined : c.hint}>
                   {c.label}
                   {c.sub && <span className="block font-normal normal-case tracking-normal text-slate-400">{c.sub}</span>}
                 </th>
@@ -338,7 +338,7 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                       }}
                       onMouseEnter={() => dragging.current && setActive({ r, c })}
                       onDoubleClick={() => startEdit(r, c, 'edit')}
-                      className={`relative h-8 overflow-hidden border-b border-r border-slate-100 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${(() => {
+                      className={`relative h-8 overflow-hidden border-b border-r border-slate-300 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${(() => {
                         const tone = rowTone?.(row)
                         if (tone) return `${canEdit ? `${tone.edit} text-slate-800` : `${tone.fixed} text-slate-500`} ${c === 0 ? `border-l-4 ${tone.edge}` : ''}`
                         return canEdit ? 'bg-white text-slate-800' : lefts[c] != null ? 'bg-slate-50 text-slate-500' : 'bg-slate-50/70 text-slate-500'

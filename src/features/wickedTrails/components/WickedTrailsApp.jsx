@@ -643,6 +643,8 @@ function TiersStep({ state, change, index, setShown, economy }) {
       editable: (r) => !!r.kinds.puzzle,
       value: (r) => r.kinds.puzzle?.fallback ?? '',
       options: () => PUZZLE_FALLBACKS,
+      // A row with no puzzle has no fallback to show.
+      display: (r) => (r.kinds.puzzle ? PUZZLE_FALLBACKS.find((o) => o.value === (r.kinds.puzzle.fallback ?? ''))?.label : ''),
       check: (r, v) => (r.kinds.puzzle && !presetFor('puzzle', r.kinds.puzzle.amount, v, economy) ? 'no puzzle preset with that fallback on the Economy page' : null),
       title: (r) => (r.kinds.puzzle ? `${r.kinds.puzzle.key} - the fallback is in the preset's name. Ctrl+Down / Ctrl+Up go through the choices` : undefined),
       tone: own,
@@ -706,6 +708,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
     {
       key: 'packAlt',
       clearTo: 'coins',
+      display: (r) => (r.parts.pack ? (FALLBACK_OPTIONS.find((o) => o.value === (r.parts.packAlt?.kind ?? ''))?.label ?? '') : ''),
       group: 'The prize',
       label: 'Fallback',
       sub: 'pack',

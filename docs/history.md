@@ -8746,3 +8746,8 @@ take it back to coins" - a dropdown column may say what Delete brings it back
 to (SheetGrid `clearTo`): a puzzle's fallback to Coins (the plain preset), a
 mini game's to _allowance, a pack's to Coins 0.25; Delete on a pack's amount
 puts it back to 0.25. e2e wicked-trails 61.
+26 Nov 2026: "make the lines between cells a bit bolder, its hard to see them
+now" - the sheet's cell lines and its header's are a darker grey (slate-300
+for slate-100), the header has lines between its columns. Seen on the way: a
+puzzle's fallback read "Coins" on a row with no puzzle - a fallback shows only
+on a row that has the puzzle (or the pack). e2e wicked-trails 61.
