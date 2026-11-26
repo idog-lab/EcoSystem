@@ -8367,3 +8367,16 @@ Answered: where the validator is looser, the app's stricter rules stay
 Duplicate(...) are still read with the note ("keep that for now");
 trigger:Pity stays on the list as it is ("leave the pity"). Nothing changed in
 what the checker does.
+
+## The presets by feature
+
+26 Nov 2026: "as for the keys tabs. i want us to break the options for chef,
+stickers, puzzle, magical friend, diamond mine/merge and others. all send u
+all presets names" - three lists (puzzle 469 with one name twice, mini games
+and diamond_push 342, magical friends 1014), "the ones of the diamond/merge
+magical friends and puzzle are important for data validation". Copied from
+the chat record as given (no hand copying), added to every preset list
+(economy version 6), so the checker knows them. The Keys tab shows one group
+at a time with its count; Build a prize groups its presets. presetFor's
+nearest amount now finds mf_80 for 85 where only mf_90 existed (a tie goes
+down; nothing in the app calls it yet). verify-economy 315, economy-page 110.

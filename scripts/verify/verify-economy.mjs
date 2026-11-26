@@ -9,7 +9,8 @@
 // 2 rounding                 5 the builders                        8 segment conditions
 // 3 reading and checking     6 empty input gives nothing           9 Chef reads the same table
 import { mround, roundTo, roundReward, mergeRoundReward, roundCost, roundAltDrAmount, roundPuzzleFallback, roundCoins } from '../../src/lib/economy/rounding.js'
-import { chefBasketKeys, createEconomy, createCurrency, createKey, normalizeEconomy, resourceIdOf, currencyValue, parseDailyValues, presetValue, chefValuesFromEconomy, DEFAULT_RESOURCE_VALUES, applyTaught, notTaught, notTaughtMessage, currencyChoices, CORE_CURRENCIES, coreCurrency, parsePeriods, formatPeriods, overlapping, cleanPeriods } from '../../src/lib/economy/economyModel.js'
+import { PRESET_GROUPS, presetGroup, chefBasketKeys, createEconomy, createCurrency, createKey, normalizeEconomy, resourceIdOf, currencyValue, parseDailyValues, presetValue, chefValuesFromEconomy, DEFAULT_RESOURCE_VALUES, applyTaught, notTaught, notTaughtMessage, currencyChoices, CORE_CURRENCIES, coreCurrency, parsePeriods, formatPeriods, overlapping, cleanPeriods } from '../../src/lib/economy/economyModel.js'
+import { GAME_PRESETS, GAME_PRESETS_CHEF, GAME_PRESETS_MF, GAME_PRESETS_MINI_GAME, GAME_PRESETS_PUZZLE } from '../../src/lib/economy/gameKeys.js'
 import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from '../../src/lib/economy/taught.js'
 import { parseReward, formatReward, checkReward, rewardWorth } from '../../src/lib/economy/parse.js'
 import { altReward, chefBasketSyntax, chestSyntax, coinsSyntax, counterSyntax, drSyntax, joinPlus, packSyntax, presetFor, presetSyntax, resourceSyntax, rewardSyntax, tierSyntax } from '../../src/lib/economy/syntax.js'
@@ -217,7 +218,7 @@ eq('a mini-game preset snaps to the nearest amount on the list (30 -> 40)', pres
 eq('...(20 -> 5)', presetFor('mini_game', 20, 'es', presets)?.key, 'mini_game_5_gameplay_es')
 check('...and falls back to its _allowance when the kind is not listed', presetFor('mini_game', 30, 'wild', presets)?.key === 'mini_game_25_gameplay_allowance' && presetFor('mini_game', 30, 'wild', presets).fellBack)
 eq('a preset no key exists for is not made up', presetFor('puzzle', 100, '', presets), null)
-eq('a pet preset of the list is found', presetFor('mf', 85, 'entry', economy, { cross: true })?.key, 'mf_90_gameplay_entry_cross')
+eq('a pet preset of the list is found, the nearest amount (88 -> 90)', presetFor('mf', 88, 'entry', economy, { cross: true })?.key, 'mf_90_gameplay_entry_cross')
 
 section('6. Empty or invalid input gives nothing - never a broken fragment')
 eq('no currency name', drSyntax({ name: '', amount: 5 }), '')
@@ -411,7 +412,15 @@ section('8c. The flow of building segments (segmentFlow.js)')
 
 section('8b. The game keys (given 24 Nov 2026)')
 eq('608 sticker packs, every one worth 0 (economist: "0 for every pack")', `${economy.keys.packs.length} ${economy.keys.packs.every((k) => k.value === 0)}`, '608 true')
-eq('the presets of the two lists and the four of the examples', economy.keys.presets.length, 81 + 21 + 4)
+const ALL_PRESETS = new Set([...GAME_PRESETS, ...GAME_PRESETS_CHEF, 'mini_game_5_gameplay_es', 'mini_game_40_gameplay_es', 'puzzle_gameplay_250', 'mf_90_gameplay_entry_cross', ...GAME_PRESETS_PUZZLE, ...GAME_PRESETS_MINI_GAME, ...GAME_PRESETS_MF])
+eq(`the presets: the two lists of 24 Nov, the four of the examples, the puzzle, mini-game and magical-friend lists of 26 Nov (469, 342, 1014 as given), each once`, economy.keys.presets.length, ALL_PRESETS.size)
+check('...the lists of 26 Nov copied as given: their first and last names, and the one name given twice kept once', GAME_PRESETS_PUZZLE.length === 469 && GAME_PRESETS_MINI_GAME.length === 342 && GAME_PRESETS_MF.length === 1014 && GAME_PRESETS_PUZZLE[0] === 'puzzle_5' && GAME_PRESETS_PUZZLE.at(-1) === 'puzzle_tier_end_5' && GAME_PRESETS_MINI_GAME.at(-1) === 'diamond_push_10' && GAME_PRESETS_MF.at(-1) === 'mf_1000_pricing_entry_cross' && economy.keys.presets.filter((k) => k.key === 'puzzle_pricing_700_entry').length === 1)
+check('a puzzle, a mini-game and a magical-friend preset of the lists read with nothing to fix (the validator calls a preset not known an error)', ['preset:puzzle_gameplay_100_wild', 'preset:mini_game_300_pricing_wild', 'preset:mf_1000_gameplay_es_cross', 'preset:diamond_push_7'].every((t) => checkReward(t, { economy }).ok && !codes(t).length))
+eq('every preset has its group: Chef, Puzzle, Magical friends, Diamond Mine / Merge, others', ['Chef__Rare_Phase_1_Allowance', 'Chef_Dish3_Complete', 'chef_trade1_free_round1', 'joker_basket', 'puzzle_gameplay_100_wild', 'Puzzle_end_scene_offer', 'mf_90_gameplay_entry_cross', 'mini_game_5_gameplay_es', 'diamond_push_3', 'pick_7', 'market_GP'].map(presetGroup).join(' '), 'chef chef chef chef puzzle puzzle mf mini-game mini-game other other')
+{
+  const groups = Object.fromEntries(PRESET_GROUPS.map((g) => [g.id, economy.keys.presets.filter((k) => presetGroup(k.key) === g.id).length]))
+  check(`...and the groups add up to the whole list (${JSON.stringify(groups)})`, Object.values(groups).reduce((a, b) => a + b, 0) === economy.keys.presets.length && groups.mf === 1014 && groups['mini-game'] === 342)
+}
 check('a pack reads as known, worth 0', checkReward('[sticker_pack:Joker_Pack|allowance(coins:1)]', { economy }).issues.length === 0 && rewardWorth('[sticker_pack:Joker_Pack|allowance(coins:1)]', economy).worth === 0)
 eq('Chef_Dish1_Complete and the Inject keys are presets', ['Chef_Dish1_Complete', 'Chef_Inject_Blocker_Epic', 'pick_20', 'joker_basket'].filter((k) => codes(`preset:${k}`).length === 0).length, 4)
 eq('a Chef basket is worth its tier: Basic 0.25, Rare 1, Epic 4 (Free_round3 too)', ['Chef__Basic_Phase_2_Free_round', 'Chef__Rare_Phase_1_Extra_stock', 'Chef__Epic_Phase_1_Free_round3'].map((k) => presetValue(economy, k)?.value).join(' '), '0.25 1 4')
@@ -419,7 +428,9 @@ eq('the other presets have no worth until one is given', presetValue(economy, 'p
 eq('the Chef baskets offered to build with are the game-play ones (no _pricing_)', chefBasketKeys(economy).length, 17)
 {
   const older = normalizeEconomy({ version: 3, keys: { packs: [createKey({ key: 'My_Pack', value: 2 }), createKey({ key: 'Joker_Pack' })], presets: [createKey({ key: 'pick_1', value: 5 })] } })
-  check('an economy saved before gets the game keys added, keeps its own, and a typed worth stays', older.keys.packs.length === 609 && older.keys.packs.find((k) => k.key === 'My_Pack').value === 2 && older.keys.packs.find((k) => k.key === 'Joker_Pack').value === 0 && older.keys.presets.find((k) => k.key === 'pick_1').value === 5 && older.keys.presets.length === 106)
+  check('an economy saved before gets the game keys added, keeps its own, and a typed worth stays', older.keys.packs.length === 609 && older.keys.packs.find((k) => k.key === 'My_Pack').value === 2 && older.keys.packs.find((k) => k.key === 'Joker_Pack').value === 0 && older.keys.presets.find((k) => k.key === 'pick_1').value === 5 && older.keys.presets.length === ALL_PRESETS.size)
+  const v5 = normalizeEconomy({ version: 5, keys: { presets: [createKey({ key: 'pick_1', value: 5 }), createKey({ key: 'my_own_preset', value: 2 })] } })
+  check('an economy saved before 26 Nov gets the presets by feature added, keeps its own and its worths', v5.keys.presets.some((k) => k.key === 'mf_1000_pricing_entry_cross') && v5.keys.presets.find((k) => k.key === 'my_own_preset')?.value === 2 && v5.keys.presets.find((k) => k.key === 'pick_1').value === 5 && v5.keys.presets.length === ALL_PRESETS.size + 1)
 }
 
 section('8c. Balancing a feature\'s tiers (section 6)')

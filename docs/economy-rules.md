@@ -214,6 +214,21 @@ brought up to date when opened (a worth someone typed is kept).
   puzzle value over the event's days.
 - The keys lists on the Economy page are searched (a long list shows 12 at a
   time); a saved economy gets these keys added when opened, and keeps its own.
+- **The presets by feature** (26 Nov 2026: "i want us to break the options for
+  chef, stickers, puzzle, magical friend, diamond mine/merge and others. all
+  send u all presets names" - "the ones of the diamond/merge magical friends
+  and puzzle are important for data validation"): three lists copied as given
+  (`GAME_PRESETS_PUZZLE` 469 - `puzzle_pricing_700_entry` is on it twice;
+  `GAME_PRESETS_MINI_GAME` 342 - the mini games and `diamond_push`;
+  `GAME_PRESETS_MF` 1014). They are on every economy's preset list (economy
+  version 6 adds them to one saved before), so the checker knows them - a
+  preset not known is an error since the validator's rules. The Keys tab
+  shows one group at a time with its count (`PRESET_GROUPS`, read from the
+  name): Chef (`Chef...`, `chef_...`, and `joker_basket` - this app's
+  reading), Sticker packs, Puzzle (`puzzle...`), Magical friends (`mf_`),
+  Diamond Mine / Merge (`mini_game_`, `diamond_push_`), Other presets (the
+  rest: `pick_N`, `market_...`, mystery box, scene boosts), then chests,
+  triggers and buckets. Build a prize groups its preset list the same way.
 
 ## 4. Segments
 
