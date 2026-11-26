@@ -23,6 +23,7 @@ const USER_KEY = 'ecotk-team-user'
 export const SHARED_ITEMS = [
   { key: 'superplay-economy', path: 'economy/economy.json', label: 'Economy page' },
   { key: 'economy-segment-plan', path: 'economy/segment-plan.json', label: 'Segment plan (Economy page)' },
+  { key: 'economy-segment-sets', path: 'economy/segment-sets.json', label: 'Segment sets (Economy page)' },
   { key: 'merge-mania-chef', path: 'chef/chefs.json', label: 'Chef' },
   { key: 'merge-mania-diamond-mine', path: 'diamond-mine/state.json', label: 'Diamond Mine' },
 ]

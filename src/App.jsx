@@ -421,6 +421,10 @@ function freshSegment(name) {
     segmentPlan: null,
     drWorth: null,
     prizeBase: 0,
+    // A segment's effort in Brut Wins, copied from a segment set (Economy page), and - on Segment 1 - the set the
+    // segments were copied from ({ id, name, updatedAt }), so step 1 can say when that set has changed since.
+    effortBW: null,
+    segmentSet: null,
   }
 }
 
@@ -517,6 +521,8 @@ function normalizeSegment(raw, defaultName) {
     segmentPlan: raw.segmentPlan && typeof raw.segmentPlan === 'object' ? raw.segmentPlan : null,
     drWorth: Number.isFinite(Number(raw.drWorth)) && raw.drWorth !== null && raw.drWorth !== '' ? Number(raw.drWorth) : null,
     prizeBase: Number.isInteger(raw.prizeBase) ? raw.prizeBase : 0,
+    effortBW: raw.effortBW != null && Number.isFinite(Number(raw.effortBW)) ? Number(raw.effortBW) : null,
+    segmentSet: raw.segmentSet && typeof raw.segmentSet === 'object' && raw.segmentSet.id ? raw.segmentSet : null,
   }
 }
 
@@ -666,6 +672,8 @@ function buildSaveShape(segments) {
       segmentPlan: seg.segmentPlan,
       drWorth: seg.drWorth,
       prizeBase: seg.prizeBase,
+      effortBW: seg.effortBW,
+      segmentSet: seg.segmentSet,
     })),
   }
 }
@@ -708,6 +716,8 @@ function useSegment(initial) {
   const [segmentPlan, setSegmentPlan] = useState(initial.segmentPlan ?? null)
   const [drWorth, setDrWorth] = useState(initial.drWorth ?? null)
   const [prizeBase, setPrizeBase] = useState(initial.prizeBase ?? 0)
+  const [effortBW, setEffortBW] = useState(initial.effortBW ?? null)
+  const [segmentSet, setSegmentSet] = useState(initial.segmentSet ?? null)
   return {
     condition,
     setCondition,
@@ -721,6 +731,10 @@ function useSegment(initial) {
     setDrWorth,
     prizeBase,
     setPrizeBase,
+    effortBW,
+    setEffortBW,
+    segmentSet,
+    setSegmentSet,
     main,
     recompletion,
     legacyRecompletionB,
@@ -1700,6 +1714,8 @@ export function EditorApp({ onHome }) {
       seg.setSegmentPlan(data.segmentPlan)
       seg.setDrWorth(data.drWorth)
       seg.setPrizeBase(data.prizeBase)
+      seg.setEffortBW(data.effortBW)
+      seg.setSegmentSet(data.segmentSet)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
@@ -1774,6 +1790,8 @@ export function EditorApp({ onHome }) {
       seg.setSegmentPlan(null)
       seg.setDrWorth(null)
       seg.setPrizeBase(0)
+      seg.setEffortBW(null)
+      seg.setSegmentSet(null)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)

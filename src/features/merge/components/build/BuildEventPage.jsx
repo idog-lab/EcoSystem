@@ -562,6 +562,9 @@ function SetupStep(props) {
             <thead>
               <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
                 <th className="py-2 pr-6">Segment</th>
+                <th className="py-2 pr-4" title="This segment's effort in Brut Wins, from the segment set it was taken from (Economy page, Segments). It is not turned into a DR demand: that is still typed.">
+                  Effort <span className="normal-case tracking-normal font-normal">(Brut Wins)</span>
+                </th>
                 <th className="py-2 pr-6">
                   DR demand <span className="normal-case tracking-normal font-normal">(player spends)</span>
                 </th>
@@ -600,6 +603,9 @@ function SetupStep(props) {
                           {seg.condition}
                         </div>
                       )}
+                    </td>
+                    <td className="py-1.5 pr-4">
+                      <CommitNumber value={seg.effortBW} allowEmpty min={0} onCommit={(v) => seg.setEffortBW(v)} className="w-24" placeholder="-" aria-label={`${name} effort in Brut Wins`} data-field="effort-bw" />
                     </td>
                     <td className="py-1.5 pr-6">
                       <CommitNumber

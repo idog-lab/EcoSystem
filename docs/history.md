@@ -8433,3 +8433,69 @@ rounded (coins to hundredths, others whole, at least 1), Segment 1 keeping
 the event-level fields. Opening a saved event or a backup, and Clear data,
 did not know the new fields at first (found while testing; fixed).
 verify-prize-ladder 24, e2e merge-prizes 17.
+
+## Segment sets
+
+26 Nov 2026: "we got features that are live for 2 days and are from levels.
+for those events we hold the same segments with the same effort (each
+segment gets a base of Brut Wins as the effort of the segment). i want us to
+create a memory of segment chunks with their demand if given. as an example
+of those. when lets say i go into the disco (which can be 2 days from level)
+i can pick the segments from a drop list and ill get the effort also for
+those segments. i need in the segments section in the economy to be able to
+edit those for all in one time. after we will have this anchor, we will be
+able to continue and learn how to start building features". Asked: the
+effort - "Brut Wins per segment"; an edit after a feature took a set -
+"Copied when picked"; how a set is made - "Save from the segment flow".
+
+Built: on the Economy page's Segments tab, "Save the flow above as a set"
+(a name; the same name updates the set and keeps its efforts by segment) and
+one card with every set (rename, delete, open in the flow, each segment's
+effort). A set's segments are kept without the feature's name, so Disco,
+Merge or any feature takes the same set under its own name. In Merge's step
+1, "Take the segments from a set" copies names, conditions, the flow and the
+efforts (a new "Effort (Brut Wins)" column); a set changed afterwards is
+said, with "Take its new numbers". This app's own: the efforts are kept by
+the segment's name without the feature; "Use these segments" from the flow
+keeps an effort by segment key and forgets the set. Nothing turns Brut Wins
+into a DR demand yet. Shared with the team (economy/segment-sets.json).
+verify-segment-sets 13, e2e segment-sets 14.
+
+## The Segments tab, one view at a time; a set's name placeholder
+
+26 Nov 2026: "the layout of the segments page is not so good. too scrollable.
+and u need to search for things". Measured at 1500 x 800: the Segments tab
+was 2,121 px (the flow, the read card, the segments, the sets and the
+functions one under the other). Now four views, one at a time: Build
+segments (steps 1-3 left, the segments right and in sight, "Save as a set"
+on them, each condition on one line with a short "Who" column - the shared
+Brut Wins formula hid the part that differs), Segment sets (small cards side
+by side), Read a condition, Functions. Tallest view 935 px. Merge's effort
+field showed "not giver" (cut): a dash now.
+
+Same day: "when we have a default segment like the 2D_levels to somehow hold
+in the segments name the (Name)_ ... so when we do each feature, the model of
+the feature will prefix the name of the feature to the segments. if we make
+generic 2d_levels segments, we will hold the 2D_LEVELS as a name placeholder
+that changes between features that use the segments". A set already kept its
+segments without the feature; now the feature typed when the set is saved is
+shown as its placeholder (2D_Levels_BW_0_9, the placeholder marked), a set
+saved with no name takes it as its name, and Merge's message says it named
+Merge_ in place of it. verify-segment-sets 15, e2e segment-sets 16,
+economy-page 111, merge-prizes 17.
+
+## Generic segments: no feature typed
+
+26 Nov 2026, with a picture of the flow refusing to save ("Type the feature's
+name") while 2D_Levels was typed as the set's name: "i want sometime like we
+talked to create a generic segment that will be overriden with the features
+name. so i dont have a feature name to put in". The flow asked for a feature
+before anything could be saved, so a generic set could only be made by
+typing a made-up feature. On the Economy page the feature may now be left
+empty ("Empty: generic"): the set's name typed beside "Save as a set" names
+the segments as it is typed (2D_Levels_BW_0_9, the placeholder marked;
+Feature_ until a name is typed; a name with spaces or signs is made into
+letters, digits and "_"), and it is saved as the set's placeholder, so any
+feature that takes the set puts its own name there. Merge's own flow still
+has its feature. verify-segment-sets 20, e2e segment-sets 21 (Merge takes
+the generic set as Merge_BW_...), economy-page 111.

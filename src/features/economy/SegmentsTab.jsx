@@ -5,6 +5,8 @@ import { COMPARISONS, CONDITION_PARTS, MODE_MULTIPLIERS, SEGMENT_FUNCTIONS, cond
 import { BASE_RULES, baseRule, baseSegments, buildPlan, createPlan, createSplit, createSpecific, planTable, withBaseRule } from '../../lib/economy/segmentFlow'
 import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
 import { teamData } from '../../lib/teamData'
+import SegmentSetsCard, { Placeholder, SaveSetForm } from './SegmentSetsCard'
+import { isGeneric, namePlaceholder, namedPlan, useSegmentSets } from '../../lib/economy/segmentSets'
 
 const LABEL = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500'
 const REMOVE = 'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30'
@@ -21,9 +23,40 @@ function loadPlan() {
   }
 }
 
-// THE ECONOMY PAGE'S SEGMENTS TAB: the flow, a condition read in words, the functions known.
+// The views of the tab, one at a time (economist: "too scrollable. and u need to search for things"); the one open is
+// remembered in this browser.
+const VIEW_KEY = 'economy-segments-view'
+const VIEWS = [
+  { id: 'build', label: 'Build segments' },
+  { id: 'sets', label: 'Segment sets' },
+  { id: 'read', label: 'Read a condition' },
+  { id: 'functions', label: 'Functions' },
+]
+function loadView() {
+  try {
+    const v = window.localStorage.getItem(VIEW_KEY)
+    return VIEWS.some((x) => x.id === v) ? v : 'build'
+  } catch {
+    return 'build'
+  }
+}
+
+// THE ECONOMY PAGE'S SEGMENTS TAB: building segments, the sets kept, a condition read in words, the functions known.
 export default function SegmentsTab() {
   const [plan, setPlan] = useState(loadPlan)
+  const [view, setViewState] = useState(loadView)
+  // The set's name typed beside "Save as a set": with no feature typed, it names the segments (generic segments).
+  const [setName, setSetName] = useState('')
+  const sets = useSegmentSets()
+  const setView = (v) => {
+    setViewState(v)
+    try {
+      window.localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      // Not remembered; the tab works without it.
+    }
+  }
+  const counts = { sets: sets.length, functions: SEGMENT_FUNCTIONS.length }
   useEffect(() => {
     try {
       window.localStorage.setItem(PLAN_KEY, JSON.stringify(plan))
@@ -35,8 +68,34 @@ export default function SegmentsTab() {
   }, [plan])
   return (
     <div className="flex flex-col gap-4">
-      <SegmentPlanEditor plan={plan} setPlan={setPlan} aside={<ReadCard />} />
-      <FunctionsCard />
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Segments" data-testid="economy-seg-views">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            aria-selected={view === v.id}
+            onClick={() => setView(v.id)}
+            data-seg-view={v.id}
+            className={`rounded-lg px-3 py-1 text-sm font-semibold ring-1 transition-colors ${view === v.id ? 'bg-slate-800 text-white ring-slate-800' : 'bg-white/80 text-slate-600 ring-slate-200 hover:text-purple-700'}`}
+          >
+            {v.label}
+            {counts[v.id] != null && <span className="ml-1.5 text-xs font-normal opacity-70">{counts[v.id]}</span>}
+          </button>
+        ))}
+      </div>
+      {view === 'build' && <SegmentPlanEditor plan={plan} setPlan={setPlan} genericName={setName} action={<SaveSetForm plan={plan} name={setName} setName={setSetName} />} />}
+      {view === 'sets' && (
+        <SegmentSetsCard
+          onOpen={(set) => {
+            setPlan(() => ({ ...set.plan }))
+            setSetName(set.name)
+            setView('build')
+          }}
+        />
+      )}
+      {view === 'read' && <ReadCard />}
+      {view === 'functions' && <FunctionsCard />}
     </div>
   )
 }
@@ -45,22 +104,34 @@ export default function SegmentsTab() {
 // specifics added to the segments picked, mode splits that duplicate the segments picked - and the segments.
 // Shared by the Economy page and Merge Mania's Segments step (`setPlan` takes a function, as React's does).
 // `aside`: a card beside the mode splits; `action`: a button beside "Copy as a table" (Merge's "Use these segments").
-export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }) {
+// `genericName`: on the Economy page, the feature may be left empty - generic segments, named after the set's name
+// typed (`genericName`, the name placeholder; lib/economy/segmentSets.js). Merge passes none: its feature is typed.
+export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null, genericName = null }) {
   const patch = (p) => setPlan((x) => ({ ...x, ...p }))
-  const result = buildPlan(plan)
-  const base = baseSegments(plan)
+  const generic = genericName != null && isGeneric(plan)
+  const named = generic ? namedPlan(plan, genericName) : plan
+  const placeholder = generic ? named.feature : null
+  const result = buildPlan(named)
+  const base = baseSegments(named)
   const rule = baseRule(plan.baseRule)
   const setSpecific = (i, p) => patch({ specifics: plan.specifics.map((s, j) => (j === i ? { ...s, ...p } : s)) })
   const setSplit = (i, p) => patch({ splits: plan.splits.map((s, j) => (j === i ? { ...s, ...p } : s)) })
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] xl:items-start">
+      <div className="flex min-w-0 flex-col gap-4">
         <Card title={<StepTitle n={1} text="The feature and the base" />} subtitle="The base cuts the players into segments by one rule, in bands: a band is above its start and at most its end. Brut Wins is weighted: 0.7 x the last 3 days + 0.3 x the last 14.">
           <div className="flex flex-col gap-3">
             <label className={`${LABEL} self-start`}>
               Feature
-              <input value={plan.feature} onChange={(e) => patch({ feature: e.target.value })} className={`${INPUT} w-36`} data-testid="economy-seg-feature" />
+              <input
+                value={plan.feature}
+                onChange={(e) => patch({ feature: e.target.value })}
+                placeholder={genericName != null ? 'Empty: generic' : undefined}
+                title={genericName != null ? 'Leave it empty for generic segments: the set\'s name stands in for the feature, and a feature that takes the set puts its own name there.' : undefined}
+                className={`${INPUT} w-36`}
+                data-testid="economy-seg-feature"
+              />
             </label>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">The base rule</span>
@@ -152,9 +223,10 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
         {aside}
       </div>
 
+      <div className="min-w-0 xl:sticky xl:top-4">
       <Card
         title={<StepTitle n={4} text={`${result.segments.length} segments`} />}
-        subtitle="Names put a specific's tag before the mode: Disco_BW_0_9_OOC_Mode_0_3 (this app's order)."
+        subtitle="Names put a specific's tag before the mode: Disco_BW_0_9_OOC_Mode_0_3 (this app's order). A condition's full text is in its hover and in the copied table."
         action={
           <span className="flex flex-wrap items-center gap-2">
             {action}
@@ -163,6 +235,12 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
         }
       >
         <div className="flex flex-col gap-2">
+          {generic && (
+            <p className="rounded-lg bg-purple-50 px-2.5 py-1 text-sm text-purple-900" data-testid="economy-seg-generic" data-note>
+              Generic segments: <Placeholder text={placeholder} /> stands for the feature
+              {namePlaceholder(genericName) ? ' (the set\'s name)' : ' - name the set to name it'}. A feature that takes the set puts its own name there.
+            </p>
+          )}
           {result.errors.map((e) => (
             <p key={e} className="rounded-lg bg-rose-50 px-2.5 py-1 text-sm text-rose-800" data-plan-error>
               {e}
@@ -179,15 +257,30 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
                 <tr className="border-b border-slate-200">
                   <th className={TH}>Name</th>
                   <th className={TH}>Key</th>
+                  <th className={TH} title="Who is in it, in short: the base band, the specifics' tags, the mode split">Who</th>
                   <th className={TH}>Condition</th>
                 </tr>
               </thead>
               <tbody>
                 {result.segments.map((s) => (
                   <tr key={s.key} className="border-b border-slate-100 align-top text-sm" data-segment={s.name}>
-                    <td className={`${TD} whitespace-nowrap font-medium text-slate-800`}>{s.name}</td>
+                    <td className={`${TD} whitespace-nowrap font-medium text-slate-800`}>
+                      {placeholder && s.name.startsWith(`${placeholder}_`) ? (
+                        <>
+                          <Placeholder text={placeholder} />
+                          {s.name.slice(placeholder.length + 1)}
+                        </>
+                      ) : (
+                        s.name
+                      )}
+                    </td>
                     <td className={`${TD} whitespace-nowrap font-mono text-[12.5px] text-slate-600`}>{s.key}</td>
-                    <td className={`${TD} ${MONO} text-slate-700`}>{s.condition || <span className="font-sans text-slate-400">every player - no condition</span>}</td>
+                    <td className={`${TD} whitespace-nowrap text-xs text-slate-600`} data-cell="who">
+                      {[base[s.base] ? `${rule.code} ${base[s.base].min ?? 0}-${base[s.base].max ?? 'Plus'}` : null, ...(s.tags ?? []), s.mode?.name ? s.mode.name.replace(/_/g, ' ') : null].filter(Boolean).join(' · ')}
+                    </td>
+                    <td className={`${TD} max-w-0 w-full`} title={s.condition}>
+                      <div className={`truncate font-mono text-[12px] text-slate-600`}>{s.condition || <span className="font-sans text-slate-400">every player - no condition</span>}</div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -195,6 +288,7 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
           </div>
         </div>
       </Card>
+      </div>
     </div>
   )
 }
