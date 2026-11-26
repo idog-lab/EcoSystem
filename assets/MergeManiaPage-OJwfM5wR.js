@@ -1,0 +1,1 @@
+import{r as e}from"./index-Cp6Rcfk1.js";import{EditorApp as t}from"./App-Ds-8PoMA.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
