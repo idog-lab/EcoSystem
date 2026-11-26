@@ -9,6 +9,7 @@
 // Ids are never changed by that.
 import { SCHEMA_VERSION } from './chefModel'
 import { migrateChefState } from './chefMigration'
+import { teamData } from '../../../lib/teamData'
 
 const STORAGE_KEY = 'merge-mania-chef'
 
@@ -55,6 +56,8 @@ export function loadChefLibrary() {
 
 export function saveChefLibrary(library) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...library, schemaVersion: SCHEMA_VERSION }))
+  // Shared with the team when connected (lib/teamData.js); the runs below stay in this browser.
+  teamData.changed(STORAGE_KEY)
 }
 
 // THE LAST RUN OF A CHEF, kept in this browser (a known limit was "Simulation
