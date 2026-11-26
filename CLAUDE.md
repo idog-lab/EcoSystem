@@ -845,7 +845,16 @@ and then the item ladder is created from the base on the others").
   have a feature name to put in"): the set's name typed beside "Save as a
   set" stands in for it as it is typed (`namedPlan`, `namePlaceholder`:
   letters, digits and "_"; `Feature_` until a name is typed) and is saved as
-  the set's placeholder. Merge's own flow always has its feature. **The Segments tab
+  the set's placeholder. Merge's own flow always has its feature. **A segment's
+  effort in a set is typed or another segment's x a factor** (economist, of a
+  set's mode splits: "where we see a mode split i want to have a factor on the
+  effort between those ones"; `setEfforts`, `setEffortFollow`): chosen in its
+  row ("Typed" / "x <segment>"), followed through chains (a loop or a segment
+  with no effort is said), and a set with mode splits has one line that makes
+  every higher mode the lower's x the factor typed (`modeGroups`,
+  `setModeFactor`). A feature that takes the set gets the efforts worked out;
+  Wicked Trails keeps the link too (its own "x a segment" was built first, on
+  a misreading - the economist meant the set; it stays). **The Segments tab
   shows one view at a time** (economist: "too scrollable. and u need to
   search for things"): Build segments (steps 1-3 on the left, the segments
   on the right in sight, with "Save as a set" on them; a condition on one

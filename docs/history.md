@@ -8589,3 +8589,17 @@ factor of another segment if we want, and an option to hard code the effort"
 - each segment's effort is Typed or "x <segment>" with a factor, followed
 through chains, a loop named. verify-wicked-trails 37, e2e wicked-trails 24
 (the downloaded workbook read back).
+## Segment sets: an effort as a factor of another segment
+
+26 Nov 2026, with a picture of a set of twelve 2D_LEVELS segments, mode
+splits among them: "when i said the effort multiplier i meant when we build a
+segment. an example. those segments, where we see a mode split i want to have
+a factor on the effort between those ones. so there i want it". (The factor
+had first been built into Wicked Trails' segments step; it stays there, and
+now follows the set.) In a set, each segment's effort is "Typed" or "x
+<segment>" with a factor, followed through chains; a set with mode splits has
+one line - "the higher mode's effort = the lower's x [1.5] Apply to N" - that
+makes every later part of each mode split follow the part before it. A
+feature that takes the set gets the efforts worked out (Merge: 50, 75, 100,
+150 in the test); Wicked Trails keeps the link by its own keys.
+verify-segment-sets 29, e2e segment-sets 25.

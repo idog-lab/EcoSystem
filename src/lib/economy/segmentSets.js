@@ -49,7 +49,9 @@ function normalizeSet(raw) {
     id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
     name: String(raw.name ?? '').trim() || 'Unnamed set',
     plan: raw.plan,
-    segments: (Array.isArray(raw.segments) ? raw.segments : []).map((s) => ({ id: String(s.id ?? ''), condition: String(s.condition ?? ''), effort: cleanEffort(s.effort) })).filter((s) => s.id),
+    segments: (Array.isArray(raw.segments) ? raw.segments : [])
+      .map((s) => ({ id: String(s.id ?? ''), condition: String(s.condition ?? ''), effort: cleanEffort(s.effort), effortOf: typeof s.effortOf === 'string' && s.effortOf ? s.effortOf : null, effortFactor: cleanEffort(s.effortFactor) }))
+      .filter((s) => s.id),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date(0).toISOString(),
   }
 }
@@ -58,11 +60,55 @@ export function normalizeSets(raw) {
   return list.map(normalizeSet).filter(Boolean)
 }
 
-// The plan's segments, ready for a set: [{ id, condition, effort }], an effort kept from `before` by the same id.
+// The plan's segments, ready for a set: [{ id, condition, effort, effortOf, effortFactor }], what was given for a
+// segment kept from `before` by the same id (a segment followed that is gone leaves its follower typed).
 export function setSegmentsOf(plan, before = []) {
   const result = buildPlan(plan)
-  const efforts = new Map(before.map((s) => [s.id, s.effort]))
-  return { errors: result.errors, segments: result.segments.map((s) => ({ id: setSegmentId(s.name, plan), condition: s.condition, effort: efforts.get(setSegmentId(s.name, plan)) ?? null })) }
+  const kept = new Map(before.map((s) => [s.id, s]))
+  const ids = new Set(result.segments.map((s) => setSegmentId(s.name, plan)))
+  return {
+    errors: result.errors,
+    segments: result.segments.map((s) => {
+      const id = setSegmentId(s.name, plan)
+      const k = kept.get(id)
+      const follows = k?.effortOf && ids.has(k.effortOf)
+      return { id, condition: s.condition, effort: k?.effort ?? null, effortOf: follows ? k.effortOf : null, effortFactor: follows ? (k.effortFactor ?? null) : null }
+    }),
+  }
+}
+
+// A SEGMENT'S EFFORT IN A SET (economist, 26 Nov 2026, of a set's mode splits: "where we see a mode split i want to
+// have a factor on the effort between those ones"): typed, or another segment's of the set x a factor - followed
+// through a chain. { [id]: { value, problem } }: no value when the chain comes back to itself, names a segment that is
+// not there, has no factor, or ends on a segment with no effort.
+export function setEfforts(set) {
+  const byId = new Map((set?.segments ?? []).map((s) => [s.id, s]))
+  const out = {}
+  const walk = (seg, seen) => {
+    if (out[seg.id]) return out[seg.id]
+    if (!seg.effortOf) return { value: seg.effort ?? null, problem: null }
+    if (seen.has(seg.id)) return { value: null, problem: 'It follows a segment that follows it back.' }
+    const from = byId.get(seg.effortOf)
+    if (!from) return { value: null, problem: 'It follows a segment that is not in the set.' }
+    if (seg.effortFactor == null) return { value: null, problem: `Type its factor of ${from.id}.` }
+    const r = walk(from, new Set([...seen, seg.id]))
+    return r.value == null ? { value: null, problem: r.problem ?? `${from.id} has no effort yet.` } : { value: Math.round(r.value * seg.effortFactor * 100) / 100, problem: null }
+  }
+  for (const seg of set?.segments ?? []) out[seg.id] = walk(seg, new Set())
+  return out
+}
+
+// The mode splits of a set: the segments that differ only by their _Mode_ part, in order - [[id, id, ...]].
+export function modeGroups(set) {
+  const groups = new Map()
+  for (const seg of set?.segments ?? []) {
+    const at = seg.id.indexOf('_Mode_')
+    if (at < 0) continue
+    const head = seg.id.slice(0, at)
+    if (!groups.has(head)) groups.set(head, [])
+    groups.get(head).push(seg.id)
+  }
+  return [...groups.values()].filter((g) => g.length > 1)
 }
 
 // Saves the flow as a set: a new one, or the set of that name brought up to the flow (its efforts kept by segment).
@@ -88,17 +134,46 @@ export function editSet(sets, id, change, now = new Date().toISOString()) {
 }
 export const setEffort = (sets, id, segmentId, effort, now) =>
   editSet(sets, id, (s) => ({ segments: s.segments.map((x) => (x.id === segmentId ? { ...x, effort: cleanEffort(effort) } : x)) }), now)
+// A segment's effort set to follow another of the set x a factor (ofId null: typed again, with the effort it had).
+export const setEffortFollow = (sets, id, segmentId, ofId, factor, now) =>
+  editSet(
+    sets,
+    id,
+    (s) => {
+      const values = setEfforts(s)
+      return { segments: s.segments.map((x) => (x.id !== segmentId ? x : ofId ? { ...x, effortOf: ofId, effortFactor: cleanEffort(factor) } : { ...x, effortOf: null, effortFactor: null, effort: x.effort ?? values[x.id]?.value ?? null })) }
+    },
+    now,
+  )
+// Every mode split of the set at once: each part after the first follows the part before it x `factor`.
+export const setModeFactor = (sets, id, factor, now) =>
+  editSet(
+    sets,
+    id,
+    (s) => {
+      const follow = new Map(modeGroups(s).flatMap((g) => g.slice(1).map((segId, k) => [segId, g[k]])))
+      return { segments: s.segments.map((x) => (follow.has(x.id) ? { ...x, effortOf: follow.get(x.id), effortFactor: cleanEffort(factor) } : x)) }
+    },
+    now,
+  )
 
-// A set as a feature takes it: its flow with the feature's name, and each segment's name, key, condition and effort.
-// { plan, segments: [{ name, key, condition, effort }], errors }
+// A set as a feature takes it: its flow with the feature's name, and each segment's name, key, condition and effort -
+// the effort in force (a factor worked out), and, for a feature that keeps the link, the key of the segment it follows
+// and the factor. { plan, segments: [{ name, key, condition, effort, effortOf, effortFactor }], errors }
 export function setForFeature(set, feature) {
   const plan = { ...set.plan, feature }
   const result = buildPlan(plan)
-  const efforts = new Map(set.segments.map((s) => [s.id, s.effort]))
+  const values = setEfforts(set)
+  const byId = new Map(set.segments.map((s) => [s.id, s]))
+  const keyOfId = new Map(result.segments.map((s) => [setSegmentId(s.name, plan), s.key]))
   return {
     plan,
     errors: result.errors,
-    segments: result.segments.map((s) => ({ name: s.name, key: s.key, condition: s.condition, effort: efforts.get(setSegmentId(s.name, plan)) ?? null })),
+    segments: result.segments.map((s) => {
+      const id = setSegmentId(s.name, plan)
+      const own = byId.get(id)
+      return { name: s.name, key: s.key, condition: s.condition, effort: values[id]?.value ?? null, effortOf: own?.effortOf ? (keyOfId.get(own.effortOf) ?? null) : null, effortFactor: own?.effortOf ? own.effortFactor : null }
+    }),
   }
 }
 
