@@ -24,6 +24,18 @@ export const featureOf = (plan) => String(plan?.feature ?? '').trim().replace(/\
 // A segment's name without its feature: "Disco_BW_0_2500" -> "BW_0_2500".
 // The set's name placeholder: the feature typed when it was saved ("2D_Levels").
 export const setPlaceholder = (set) => featureOf(set?.plan)
+// GENERIC SEGMENTS (economist, 26 Nov 2026: "i want sometime like we talked to create a generic segment that will be
+// overriden with the features name. so i dont have a feature name to put in"): the feature may be left empty on the
+// Economy page; the set's name then stands in for it - "2D_Levels" gives 2D_Levels_BW_0_9 - and is kept as the set's
+// placeholder. The name made fit for a segment's name: letters, digits and "_".
+export const namePlaceholder = (name) =>
+  String(name ?? '')
+    .replace(/[^A-Za-z0-9_ ]/g, ' ')
+    .trim()
+    .replace(/\s+/g, '_')
+// The plan as it is named: its feature, or - when none is typed - the placeholder from the set's name ('Feature' if none).
+export const isGeneric = (plan) => !String(plan?.feature ?? '').trim()
+export const namedPlan = (plan, setName) => (isGeneric(plan) ? { ...plan, feature: namePlaceholder(setName) || 'Feature' } : plan)
 export function setSegmentId(name, plan) {
   const prefix = `${featureOf(plan)}_`
   return String(name).startsWith(prefix) ? String(name).slice(prefix.length) : String(name)
@@ -55,10 +67,13 @@ export function setSegmentsOf(plan, before = []) {
 
 // Saves the flow as a set: a new one, or the set of that name brought up to the flow (its efforts kept by segment).
 // Returns { sets, set, created } or { error }.
-export function saveFlowAsSet(sets, plan, name, now = new Date().toISOString()) {
+export function saveFlowAsSet(sets, typedPlan, name, now = new Date().toISOString()) {
   // No name typed: the set is named after its placeholder (the feature typed in the flow).
-  const clean = String(name ?? '').trim() || String(plan?.feature ?? '').trim()
-  if (!clean) return { error: 'Type a name for the set.' }
+  const clean = String(name ?? '').trim() || String(typedPlan?.feature ?? '').trim()
+  if (!clean) return { error: isGeneric(typedPlan) ? 'Type a name for the set: with no feature, it is the name placeholder.' : 'Type a name for the set.' }
+  if (isGeneric(typedPlan) && !namePlaceholder(clean)) return { error: 'The set\'s name stands for the feature: it needs letters or digits.' }
+  // No feature typed: generic segments, the set's name the placeholder.
+  const plan = namedPlan(typedPlan, clean)
   const existing = sets.find((s) => s.name.toLowerCase() === clean.toLowerCase())
   const { errors, segments } = setSegmentsOf(plan, existing?.segments ?? [])
   if (errors.length) return { error: `The flow has something to fix first: ${errors[0]}` }

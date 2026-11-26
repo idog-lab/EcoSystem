@@ -8483,3 +8483,19 @@ shown as its placeholder (2D_Levels_BW_0_9, the placeholder marked), a set
 saved with no name takes it as its name, and Merge's message says it named
 Merge_ in place of it. verify-segment-sets 15, e2e segment-sets 16,
 economy-page 111, merge-prizes 17.
+
+## Generic segments: no feature typed
+
+26 Nov 2026, with a picture of the flow refusing to save ("Type the feature's
+name") while 2D_Levels was typed as the set's name: "i want sometime like we
+talked to create a generic segment that will be overriden with the features
+name. so i dont have a feature name to put in". The flow asked for a feature
+before anything could be saved, so a generic set could only be made by
+typing a made-up feature. On the Economy page the feature may now be left
+empty ("Empty: generic"): the set's name typed beside "Save as a set" names
+the segments as it is typed (2D_Levels_BW_0_9, the placeholder marked;
+Feature_ until a name is typed; a name with spaces or signs is made into
+letters, digits and "_"), and it is saved as the set's placeholder, so any
+feature that takes the set puts its own name there. Merge's own flow still
+has its feature. verify-segment-sets 20, e2e segment-sets 21 (Merge takes
+the generic set as Merge_BW_...), economy-page 111.

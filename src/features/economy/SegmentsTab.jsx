@@ -5,8 +5,8 @@ import { COMPARISONS, CONDITION_PARTS, MODE_MULTIPLIERS, SEGMENT_FUNCTIONS, cond
 import { BASE_RULES, baseRule, baseSegments, buildPlan, createPlan, createSplit, createSpecific, planTable, withBaseRule } from '../../lib/economy/segmentFlow'
 import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
 import { teamData } from '../../lib/teamData'
-import SegmentSetsCard, { SaveSetForm } from './SegmentSetsCard'
-import { useSegmentSets } from '../../lib/economy/segmentSets'
+import SegmentSetsCard, { Placeholder, SaveSetForm } from './SegmentSetsCard'
+import { isGeneric, namePlaceholder, namedPlan, useSegmentSets } from '../../lib/economy/segmentSets'
 
 const LABEL = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500'
 const REMOVE = 'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30'
@@ -45,6 +45,8 @@ function loadView() {
 export default function SegmentsTab() {
   const [plan, setPlan] = useState(loadPlan)
   const [view, setViewState] = useState(loadView)
+  // The set's name typed beside "Save as a set": with no feature typed, it names the segments (generic segments).
+  const [setName, setSetName] = useState('')
   const sets = useSegmentSets()
   const setView = (v) => {
     setViewState(v)
@@ -82,11 +84,12 @@ export default function SegmentsTab() {
           </button>
         ))}
       </div>
-      {view === 'build' && <SegmentPlanEditor plan={plan} setPlan={setPlan} action={<SaveSetForm plan={plan} />} />}
+      {view === 'build' && <SegmentPlanEditor plan={plan} setPlan={setPlan} genericName={setName} action={<SaveSetForm plan={plan} name={setName} setName={setSetName} />} />}
       {view === 'sets' && (
         <SegmentSetsCard
           onOpen={(set) => {
             setPlan(() => ({ ...set.plan }))
+            setSetName(set.name)
             setView('build')
           }}
         />
@@ -101,10 +104,15 @@ export default function SegmentsTab() {
 // specifics added to the segments picked, mode splits that duplicate the segments picked - and the segments.
 // Shared by the Economy page and Merge Mania's Segments step (`setPlan` takes a function, as React's does).
 // `aside`: a card beside the mode splits; `action`: a button beside "Copy as a table" (Merge's "Use these segments").
-export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }) {
+// `genericName`: on the Economy page, the feature may be left empty - generic segments, named after the set's name
+// typed (`genericName`, the name placeholder; lib/economy/segmentSets.js). Merge passes none: its feature is typed.
+export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null, genericName = null }) {
   const patch = (p) => setPlan((x) => ({ ...x, ...p }))
-  const result = buildPlan(plan)
-  const base = baseSegments(plan)
+  const generic = genericName != null && isGeneric(plan)
+  const named = generic ? namedPlan(plan, genericName) : plan
+  const placeholder = generic ? named.feature : null
+  const result = buildPlan(named)
+  const base = baseSegments(named)
   const rule = baseRule(plan.baseRule)
   const setSpecific = (i, p) => patch({ specifics: plan.specifics.map((s, j) => (j === i ? { ...s, ...p } : s)) })
   const setSplit = (i, p) => patch({ splits: plan.splits.map((s, j) => (j === i ? { ...s, ...p } : s)) })
@@ -116,7 +124,14 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
           <div className="flex flex-col gap-3">
             <label className={`${LABEL} self-start`}>
               Feature
-              <input value={plan.feature} onChange={(e) => patch({ feature: e.target.value })} className={`${INPUT} w-36`} data-testid="economy-seg-feature" />
+              <input
+                value={plan.feature}
+                onChange={(e) => patch({ feature: e.target.value })}
+                placeholder={genericName != null ? 'Empty: generic' : undefined}
+                title={genericName != null ? 'Leave it empty for generic segments: the set\'s name stands in for the feature, and a feature that takes the set puts its own name there.' : undefined}
+                className={`${INPUT} w-36`}
+                data-testid="economy-seg-feature"
+              />
             </label>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">The base rule</span>
@@ -220,6 +235,12 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
         }
       >
         <div className="flex flex-col gap-2">
+          {generic && (
+            <p className="rounded-lg bg-purple-50 px-2.5 py-1 text-sm text-purple-900" data-testid="economy-seg-generic" data-note>
+              Generic segments: <Placeholder text={placeholder} /> stands for the feature
+              {namePlaceholder(genericName) ? ' (the set\'s name)' : ' - name the set to name it'}. A feature that takes the set puts its own name there.
+            </p>
+          )}
           {result.errors.map((e) => (
             <p key={e} className="rounded-lg bg-rose-50 px-2.5 py-1 text-sm text-rose-800" data-plan-error>
               {e}
@@ -243,7 +264,16 @@ export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }
               <tbody>
                 {result.segments.map((s) => (
                   <tr key={s.key} className="border-b border-slate-100 align-top text-sm" data-segment={s.name}>
-                    <td className={`${TD} whitespace-nowrap font-medium text-slate-800`}>{s.name}</td>
+                    <td className={`${TD} whitespace-nowrap font-medium text-slate-800`}>
+                      {placeholder && s.name.startsWith(`${placeholder}_`) ? (
+                        <>
+                          <Placeholder text={placeholder} />
+                          {s.name.slice(placeholder.length + 1)}
+                        </>
+                      ) : (
+                        s.name
+                      )}
+                    </td>
                     <td className={`${TD} whitespace-nowrap font-mono text-[12.5px] text-slate-600`}>{s.key}</td>
                     <td className={`${TD} whitespace-nowrap text-xs text-slate-600`} data-cell="who">
                       {[base[s.base] ? `${rule.code} ${base[s.base].min ?? 0}-${base[s.base].max ?? 'Plus'}` : null, ...(s.tags ?? []), s.mode?.name ? s.mode.name.replace(/_/g, ' ') : null].filter(Boolean).join(' · ')}
