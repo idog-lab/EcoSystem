@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Download, Map as MapIcon } from 'lucide-react'
 import Card from '../../../components/ui/Card'
 import PrizeBuilder from '../../../components/PrizeBuilder'
+import SheetGrid from '../../../components/SheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
 import { setForFeature, useSegmentSets } from '../../../lib/economy/segmentSets'
 import { teamData } from '../../../lib/teamData'
-import { FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, baseText, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
+import { FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
 import { END_TRIGGER, FINAL_FILTER, FINAL_TRIGGER, OPS_HEADERS, RC_FINAL_COINS, RC_TIER_EFFORT, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWorkbook, triggerOf } from '../lib/wickedTrailsExport'
 
 // WICKED TRAILS (lib/wickedTrails.js): the event built step by step (economist: "the flow of the wicked trails is not
@@ -18,8 +19,7 @@ const STEP_KEY = 'superplay-wicked-trails-view'
 const STEPS = [
   { id: 'segments', label: 'Segments', purpose: 'Take the segments from a segment set. Give each its effort in Brut Wins - typed, or a factor of another segment - and how much silver and gold DR one Brut Win gives it. Pick the base: its prizes are the ones you type.' },
   { id: 'rules', label: 'Rules', purpose: 'Type the feature\'s ROE - the allowance worth of prizes a player gets from one Brut Win - and check how it is shared between the lanes and the Final Prize.' },
-  { id: 'tiers', label: 'Tiers', purpose: 'Choose how many tiers each lane has and where they sit, as shares of the lane. Every tier shows the DR it asks for and the worth it should give.' },
-  { id: 'prizes', label: 'Prizes', purpose: 'Type the base segment\'s prize for every tier and for the Final Prize; each shows its worth and how far it is from its target. Then look at the other segments.' },
+  { id: 'tiers', label: 'Tiers and prizes', purpose: 'One sheet: how many tiers each lane has, where they sit (shares of the lane), and the prize of every tier and of the Final Prize, beside the worth it should give. Move with the arrows, type over a cell, paste from Excel.' },
   { id: 'mock', label: 'Mock', purpose: 'Play the event for a segment, a Brut Win at a time, and see the lanes fill.' },
   { id: 'export', label: 'Export', purpose: 'Pick the event\'s first day and download the workbook for Ops: the segments, Config OPS and Config RC OPS.' },
 ]
@@ -28,7 +28,6 @@ const BUTTON = 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm 
 const PRIMARY = 'inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:opacity-40'
 const TH = 'px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap align-bottom'
 const TD = 'px-2 py-1.5 align-top'
-const SUB = 'block font-normal normal-case tracking-normal'
 const fmt = (v, d = 2) => (v == null ? '-' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d }))
 
 function load(key, fallback) {
@@ -56,7 +55,11 @@ function Num({ value, onCommit, className = 'w-20', ...props }) {
 
 export default function WickedTrailsApp({ onHome }) {
   const [state, setState] = useState(() => normalizeState(load(STORAGE_KEY, null)))
-  const [step, setStepState] = useState(() => (STEPS.some((s) => s.id === load(STEP_KEY, null)) ? load(STEP_KEY, null) : 'segments'))
+  // (A step remembered from before the sheet: Prizes is now part of Tiers and prizes.)
+  const [step, setStepState] = useState(() => {
+    const kept = load(STEP_KEY, null) === 'prizes' ? 'tiers' : load(STEP_KEY, null)
+    return STEPS.some((s) => s.id === kept) ? kept : 'segments'
+  })
   const [shown, setShown] = useState(null)
   const economy = useEconomy()
   useEffect(() => {
@@ -79,7 +82,9 @@ export default function WickedTrailsApp({ onHome }) {
   // Every change works the efforts out again (a segment may follow another's).
   const change = (fn) => setState((s) => resolveEfforts(fn(s)))
   const index = shown != null && shown < state.segments.length ? shown : Math.min(state.baseIndex, Math.max(0, state.segments.length - 1))
-  const status = stepStatus(state, (text) => checkReward(text, { economy }).ok)
+  const parts = stepStatus(state, (text) => checkReward(text, { economy }).ok)
+  // Tiers and prizes are one step: done when both are.
+  const status = { ...parts, tiers: { done: parts.tiers.done && parts.prizes.done, missing: [...parts.tiers.missing, ...parts.prizes.missing] } }
   const at = STEPS.findIndex((s) => s.id === step)
   const current = STEPS[at]
   const missing = status[step]?.missing ?? []
@@ -149,8 +154,7 @@ export default function WickedTrailsApp({ onHome }) {
           <>
             {step === 'segments' && <SegmentsStep state={state} change={change} />}
             {step === 'rules' && <RulesStep state={state} change={change} />}
-            {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} />}
-            {step === 'prizes' && <PrizesStep state={state} change={change} index={index} setShown={setShown} economy={economy} />}
+            {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} economy={economy} />}
             {step === 'mock' && <MockStep state={state} index={index} setShown={setShown} />}
             {step === 'export' && <ExportStep state={state} change={change} index={index} setShown={setShown} />}
           </>
@@ -223,7 +227,6 @@ function SegmentsStep({ state, change }) {
     })
     setMessage(`${r.segments.length} segments taken from "${set.name}", named ${FEATURE_NAME}_, ${r.segments.filter((x) => x.effort != null).length} with an effort in Brut Wins.`)
   }
-  const setSeg = (i, patch) => change((s) => ({ ...s, segments: s.segments.map((x, j) => (j === i ? { ...x, ...patch } : x)) }))
   const setAll = (field, v) => change((s) => ({ ...s, segments: s.segments.map((x) => ({ ...x, [field]: v })) }))
 
   return (
@@ -253,113 +256,7 @@ function SegmentsStep({ state, change }) {
             </button>
           </p>
         )}
-        {state.segments.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm" data-testid="wt-segments" data-dense>
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className={TH} title="The base segment: the prizes typed in step 4 are its own; the others' follow from it">
-                    Base
-                  </th>
-                  <th className={TH}>Segment</th>
-                  <th className={TH} title="Typed: a number of Brut Wins. Or another segment's effort times a factor - it follows that segment when it changes.">
-                    Effort
-                    <span className={SUB}>(Brut Wins)</span>
-                  </th>
-                  <th className={TH}>
-                    Silver DR
-                    <span className={SUB}>per Brut Win</span>
-                  </th>
-                  <th className={TH}>
-                    Gold DR
-                    <span className={SUB}>per Brut Win</span>
-                  </th>
-                  <th className={TH} title="The easy lane's length in silver DR">
-                    Easy lane
-                    <span className={SUB}>(silver DR)</span>
-                  </th>
-                  <th className={TH} title="The hard lane's length in gold DR">
-                    Hard lane
-                    <span className={SUB}>(gold DR)</span>
-                  </th>
-                  <th className={TH} title="Effort x ROE: the allowance worth of everything the segment's player gets in the feature">
-                    Worth
-                    <span className={SUB}>(allowance)</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.segments.map((seg, i) => {
-                  const w = workOut(state, seg)
-                  return (
-                    <tr key={seg.key || i} className="border-b border-slate-100" data-wt-segment={i}>
-                      <td className={`${TD} text-center`}>
-                        <input type="radio" name="wt-base" checked={state.baseIndex === i} onChange={() => change((s) => ({ ...s, baseIndex: i }))} aria-label={`${seg.name} is the base`} data-field="base" />
-                      </td>
-                      <td className={`${TD} max-w-[22rem]`}>
-                        <div className="whitespace-nowrap font-semibold text-slate-800">{seg.name}</div>
-                        <div className="truncate font-mono text-[10.5px] text-slate-400" title={seg.condition} data-cut-ok>
-                          {seg.condition}
-                        </div>
-                      </td>
-                      <td className={TD}>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <select
-                            value={seg.effortOf ?? ''}
-                            onChange={(e) => setSeg(i, e.target.value ? { effortOf: e.target.value, effortFactor: seg.effortFactor ?? 1 } : { effortOf: null, effortTyped: seg.effortBW ?? seg.effortTyped })}
-                            className={`${INPUT} max-w-[13rem]`}
-                            aria-label={`${seg.name}: how its effort is set`}
-                            data-field="effort-mode"
-                          >
-                            <option value="">Typed</option>
-                            {state.segments
-                              .filter((o) => o.key !== seg.key)
-                              .map((o) => (
-                                <option key={o.key} value={o.key}>
-                                  x {o.name}
-                                </option>
-                              ))}
-                          </select>
-                          {seg.effortOf ? (
-                            <>
-                              <span className="text-xs text-slate-500">x</span>
-                              <Num value={seg.effortFactor} onCommit={(v) => setSeg(i, { effortFactor: v != null && v >= 0 ? v : null })} className="w-16" placeholder="1.5" aria-label={`${seg.name}: factor`} data-field="effort-factor" />
-                              <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-purple-700" data-field="effort-value">
-                                = {fmt(seg.effortBW)}
-                              </span>
-                            </>
-                          ) : (
-                            <Num value={seg.effortTyped} onCommit={(v) => setSeg(i, { effortTyped: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} effort in Brut Wins`} data-field="effort-bw" />
-                          )}
-                        </div>
-                        {seg.effortProblem && (
-                          <div className="mt-0.5 text-[11px] text-amber-700" data-field="effort-problem">
-                            {seg.effortProblem}
-                          </div>
-                        )}
-                      </td>
-                      <td className={TD}>
-                        <Num value={seg.silverPerBW} onCommit={(v) => setSeg(i, { silverPerBW: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} silver DR per Brut Win`} data-field="silver-per-bw" />
-                      </td>
-                      <td className={TD}>
-                        <Num value={seg.goldPerBW} onCommit={(v) => setSeg(i, { goldPerBW: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} gold DR per Brut Win`} data-field="gold-per-bw" />
-                      </td>
-                      <td className={`${TD} tabular-nums`} data-field="easy-total">
-                        {w.lanes ? fmt(w.lanes.easy.totalDR, 0) : '-'}
-                      </td>
-                      <td className={`${TD} tabular-nums`} data-field="hard-total">
-                        {w.lanes ? fmt(w.lanes.hard.totalDR, 0) : '-'}
-                      </td>
-                      <td className={`${TD} tabular-nums`} data-field="worth">
-                        {w.lanes ? fmt(w.total) : '-'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {state.segments.length > 0 && <SegmentsSheet state={state} change={change} />}
         {state.segments.length > 1 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="wt-fill-all">
             Same for every segment:
@@ -371,6 +268,50 @@ function SegmentsStep({ state, change }) {
       </div>
     </Card>
   )
+}
+
+// The segments as a sheet: the base (a tick), where the effort comes from (Typed, or x another segment), the effort
+// typed or the factor, silver and gold DR per Brut Win; the rest worked out.
+function SegmentsSheet({ state, change }) {
+  const rows = state.segments.map((seg, i) => ({ id: seg.key || `seg-${i}`, i, seg, w: workOut(state, seg) }))
+  const columns = [
+    { key: 'base', label: 'Base', width: 56, type: 'toggle', editable: true, value: (r) => state.baseIndex === r.i, align: 'right', title: () => 'The base: its prizes are the ones typed; Space to make a segment the base' },
+    { key: 'name', label: 'Segment', width: 240, value: (r) => r.seg.name, title: (r) => r.seg.condition || undefined, tone: () => 'font-semibold !text-slate-800' },
+    {
+      key: 'from',
+      label: 'Effort from',
+      sub: 'Enter to pick',
+      width: 210,
+      type: 'select',
+      editable: true,
+      value: (r) => r.seg.effortOf ?? '',
+      options: (r) => [{ value: '', label: 'Typed' }, ...state.segments.filter((o) => o.key !== r.seg.key).map((o) => ({ value: o.key, label: `x ${o.name}` }))],
+    },
+    { key: 'typed', label: 'Effort', sub: 'Brut Wins, typed', width: 96, type: 'number', align: 'right', editable: (r) => !r.seg.effortOf, value: (r) => (r.seg.effortOf ? null : r.seg.effortTyped) },
+    { key: 'factor', label: 'Factor', sub: 'x the segment', width: 80, type: 'number', align: 'right', editable: (r) => !!r.seg.effortOf, value: (r) => (r.seg.effortOf ? r.seg.effortFactor : null) },
+    { key: 'effort', label: 'Effort', sub: 'in force', width: 86, type: 'number', align: 'right', value: (r) => r.seg.effortBW, tone: (r) => (r.seg.effortProblem ? '!text-amber-700' : 'font-semibold !text-purple-700'), title: (r) => r.seg.effortProblem ?? undefined },
+    { key: 'silver', label: 'Silver DR', sub: 'per Brut Win', width: 90, type: 'number', align: 'right', editable: true, value: (r) => r.seg.silverPerBW },
+    { key: 'gold', label: 'Gold DR', sub: 'per Brut Win', width: 90, type: 'number', align: 'right', editable: true, value: (r) => r.seg.goldPerBW },
+    // (A lane's length needs no ROE: the easy lane is its share of the effort x silver, the hard lane the effort x gold.)
+    { key: 'easy', label: 'Easy lane', sub: 'silver DR', width: 84, type: 'number', align: 'right', value: (r) => (r.seg.effortBW > 0 && r.seg.silverPerBW > 0 && state.rules.easySize > 0 ? Math.round((state.rules.easySize / 100) * r.seg.effortBW * r.seg.silverPerBW) : null) },
+    { key: 'hard', label: 'Hard lane', sub: 'gold DR', width: 84, type: 'number', align: 'right', value: (r) => (r.seg.effortBW > 0 && r.seg.goldPerBW > 0 ? Math.round(r.seg.effortBW * r.seg.goldPerBW) : null) },
+    { key: 'worth', label: 'Worth', sub: 'allowance', width: 84, type: 'number', align: 'right', value: (r) => (r.seg.effortBW > 0 && state.rules.roe > 0 ? Math.round(r.seg.effortBW * state.rules.roe * 100) / 100 : null), title: () => 'Effort x ROE (step 2)' },
+  ]
+  const FIELD = { typed: 'effortTyped', factor: 'effortFactor', silver: 'silverPerBW', gold: 'goldPerBW' }
+  const commit = (changes) =>
+    change((s) => {
+      let out = s
+      for (const { row, key, value } of changes) {
+        if (key === 'base') {
+          if (value) out = { ...out, baseIndex: row.i }
+          continue
+        }
+        const patch = key === 'from' ? (value ? { effortOf: value, effortFactor: out.segments[row.i].effortFactor ?? 1 } : { effortOf: null, effortTyped: out.segments[row.i].effortBW ?? out.segments[row.i].effortTyped }) : FIELD[key] ? { [FIELD[key]]: value != null && value < 0 ? null : value } : null
+        if (patch) out = { ...out, segments: out.segments.map((x, j) => (j === row.i ? { ...x, ...patch } : x)) }
+      }
+      return out
+    })
+  return <SheetGrid testid="wt-segments" columns={columns} rows={rows} onCommit={commit} />
 }
 
 // ---------------------------------------------------------------- 2. Rules
@@ -404,235 +345,128 @@ function RulesStep({ state, change }) {
   )
 }
 
-// ---------------------------------------------------------------- 3. Tiers
-function TiersStep({ state, change, index, setShown }) {
-  const seg = state.segments[index]
-  const w = workOut(state, seg)
-  const setLane = (laneId, lane) => change((s) => ({ ...s, lanes: { ...s.lanes, [laneId]: lane } }))
-  return (
-    <>
-      <SegmentChips state={state} index={index} setShown={setShown} note="The shares are the same for every segment; the DR and worth shown are the segment picked." />
-      {w.lanes && (
-        <p className="text-sm text-slate-700" data-testid="wt-totals">
-          <span className="font-semibold">{seg.name}</span>: {fmt(w.E)} Brut Wins x ROE {fmt(state.rules.roe, 4)} = <span className="font-semibold">{fmt(w.total)}</span> allowance - the Final Prize&apos;s pool {fmt(w.pool)}, the tiers the rest.
-        </p>
-      )}
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-        {LANES.map((lane) => {
-          const l = state.lanes[lane.id]
-          const lw = w.lanes?.[lane.id]
-          return (
-            <Card
-              key={lane.id}
-              title={`${lane.label} (${lane.dr})`}
-              subtitle={lw ? `${fmt(lw.totalDR, 0)} ${lane.dr} over ${fmt(lw.doneAtBW)} Brut Wins; earns ${fmt(lw.earned)} allowance.` : 'Tiers as shares of the lane, adding up to 100%.'}
-              action={
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  Tiers
-                  <Num value={l.shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(l, v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
-                  <span className="font-normal text-slate-400">1 to {MAX_TIERS}</span>
-                </label>
-              }
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm" data-testid={`wt-lane-${lane.id}`} data-dense>
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className={TH}>Tier</th>
-                      <th className={TH} title="The tier's share of the lane; the shares add up to 100%">
-                        Share
-                        <span className={SUB}>(of the lane)</span>
-                      </th>
-                      <th className={TH} title={`The ${lane.dr} this tier asks for, on its own`}>
-                        DR
-                        <span className={SUB}>(this tier)</span>
-                      </th>
-                      <th className={TH} title={`The ${lane.dr} in all, to the end of this tier - the requirement Ops gets`}>
-                        DR
-                        <span className={SUB}>(in all)</span>
-                      </th>
-                      <th className={TH} title="The Brut Wins between the tier before and this one">
-                        Brut Wins
-                        <span className={SUB}>(from - to)</span>
-                      </th>
-                      <th className={TH} title="What the lane earns between the tier before and this one, in allowance">
-                        Earned
-                      </th>
-                      <th className={TH} title="Its target worth: what it earned less the lane's share to the Final Prize">
-                        Target
-                        <span className={SUB}>(allowance)</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {l.shares.map((share, i) => {
-                      const t = lw?.tiers[i]
-                      return (
-                        <tr key={i} className="border-b border-slate-100" data-tier={placeKey(lane.id, i)}>
-                          <td className={`${TD} font-semibold text-slate-700`}>{i + 1}</td>
-                          <td className={TD}>
-                            <Num value={share} onCommit={(v) => v != null && setLane(lane.id, { ...l, shares: l.shares.map((x, j) => (j === i ? v : x)) })} className="w-16" aria-label={`${lane.label} tier ${i + 1} share`} data-field="share" />
-                          </td>
-                          <td className={`${TD} tabular-nums`} data-field="dr">
-                            {t ? fmt(t.dr, 0) : '-'}
-                          </td>
-                          <td className={`${TD} tabular-nums text-slate-600`} data-field="dr-total">
-                            {t ? fmt(t.drTotal, 0) : '-'}
-                          </td>
-                          <td className={`${TD} whitespace-nowrap tabular-nums text-slate-600`}>{t ? `${fmt(t.bwFrom, 1)} - ${fmt(t.bwTo, 1)}` : '-'}</td>
-                          <td className={`${TD} tabular-nums text-slate-600`}>{t ? fmt(t.earned) : '-'}</td>
-                          <td className={`${TD} font-semibold tabular-nums text-purple-700`} data-field="target">
-                            {t ? fmt(t.target) : '-'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )
-        })}
-      </div>
-    </>
-  )
-}
-
-// ---------------------------------------------------------------- 4. Prizes
+// ---------------------------------------------------------------- 3. Tiers and prizes, one sheet
 function Gap({ check, target }) {
   if (!check) return <span className="text-slate-300">-</span>
   if (!check.ok) return <span className="text-rose-700">{check.issues.find((x) => x.level === 'error')?.message ?? 'Cannot be read'}</span>
-  if (check.worth == null) return <span className="text-amber-700" title={check.unknown.join(', ')}>A part has no worth yet{check.unknown.length ? `: ${check.unknown.join(', ')}` : ''}</span>
+  if (check.worth == null) return <span className="text-amber-700">no worth yet{check.unknown.length ? `: ${check.unknown.join(', ')}` : ''}</span>
   if (target == null) return <span>{fmt(check.worth)}</span>
   const pct = Math.abs(check.gapPct ?? 0)
   const tone = pct <= 5 ? 'text-emerald-700' : pct <= 15 ? 'text-amber-700' : 'text-rose-700'
   return (
     <span className={tone} data-gap-pct={check.gapPct}>
-      {fmt(check.worth)} <span className="text-[11px]">({check.gap > 0 ? '+' : ''}{fmt(check.gap)}, {check.gapPct > 0 ? '+' : ''}{check.gapPct}%)</span>
+      {`${fmt(check.worth)} (${check.gap > 0 ? '+' : ''}${fmt(check.gap)}, ${check.gapPct > 0 ? '+' : ''}${check.gapPct}%)`}
     </span>
   )
 }
 
-function PrizeField({ state, change, index, place, economy, target, limit, className = 'min-w-[16rem]' }) {
-  const p = prizeOf(state, index, place)
-  const isBase = index === state.baseIndex
-  const check = p.text ? prizeAgainstWorth(p.text, target, economy, { prizeMode: 'custom', prizeLimit: limit }) : null
-  const warn = check?.issues.filter((x) => x.level === 'warning') ?? []
-  const commit = (text) =>
-    change((s) => {
-      if (isBase) {
-        if (place === 'final') return { ...s, finalPrize: text.trim() }
-        const [laneId, i] = place.split('-')
-        return { ...s, lanes: { ...s.lanes, [laneId]: { ...s.lanes[laneId], prizes: s.lanes[laneId].prizes.map((x, j) => (j === Number(i) ? text.trim() : x)) } } }
-      }
-      return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: text.trim() } } : x)) }
-    })
-  const [open, setOpen] = useState(false)
-  return (
-    <div className={`flex ${className} flex-col gap-0.5`}>
-      <div className="flex items-start gap-2">
-        <code className={`min-w-0 flex-1 break-all rounded-lg px-2 py-1 font-mono text-[12px] ring-1 ${p.text ? 'bg-white text-slate-700 ring-slate-200' : 'bg-slate-50 text-slate-400 ring-slate-100'}`} data-prize-text={place}>
-          {p.text || 'no prize yet'}
-        </code>
-        <button type="button" onClick={() => setOpen((v) => !v)} className={`shrink-0 ${open ? PRIMARY : BUTTON} !py-1`} aria-expanded={open} data-prize-build={place}>
-          {open ? 'Done' : p.text ? 'Edit' : 'Build'}
-        </button>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
-        <span data-prize-gap={place}>
-          <Gap check={check} target={target} />
-        </span>
-        {!isBase && !p.own && p.text && <span className="text-purple-600" data-from-base>the base&apos;s x {fmt(p.factor, 3)}</span>}
-        {!isBase && p.own && String(baseText(state, place)).trim() && (
-          <button type="button" className="text-purple-700 hover:underline" onClick={() => commit('')} data-reset-to-base={place}>
-            Use the base&apos;s
-          </button>
-        )}
-        {warn.map((x) => (
-          <span key={x.message} className="text-amber-700">
-            {x.message}
-          </span>
-        ))}
-      </div>
-      {open && <PrizeBuilder value={p.text} onChange={commit} economy={economy} testid={place} />}
-    </div>
-  )
+// What a prize change does: on the base it is every segment's; on another segment it is that segment's own (empty:
+// the base's again).
+function prizeChange(s, index, place, text) {
+  const t = String(text ?? '').trim()
+  if (index === s.baseIndex) {
+    if (place === 'final') return { ...s, finalPrize: t }
+    const [laneId, i] = place.split('-')
+    return { ...s, lanes: { ...s.lanes, [laneId]: { ...s.lanes[laneId], prizes: s.lanes[laneId].prizes.map((x, j) => (j === Number(i) ? t : x)) } } }
+  }
+  return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t } } : x)) }
 }
 
-function PrizesStep({ state, change, index, setShown, economy }) {
+function TiersStep({ state, change, index, setShown, economy }) {
   const seg = state.segments[index]
   const w = workOut(state, seg)
+  const isBase = index === state.baseIndex
+  const [activePlace, setActivePlace] = useState(null)
+  const [building, setBuilding] = useState(null)
+  const setLane = (laneId, lane) => change((s) => ({ ...s, lanes: { ...s.lanes, [laneId]: lane } }))
+  const rows = [
+    ...LANES.flatMap((lane) =>
+      state.lanes[lane.id].shares.map((share, i) => {
+        const t = w.lanes?.[lane.id].tiers[i]
+        const place = placeKey(lane.id, i)
+        return { id: place, place, laneId: lane.id, lane: lane.label, tier: i + 1, share, t, target: t?.target ?? null, prize: prizeOf(state, index, place) }
+      }),
+    ),
+    { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', share: null, t: null, target: w.finalTarget, prize: prizeOf(state, index, 'final') },
+  ]
+  const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
+  const columns = [
+    { key: 'lane', label: 'Lane', width: 110, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
+    { key: 'tier', label: 'Tier', width: 50 },
+    { key: 'share', label: 'Share', sub: '% of the lane', width: 86, type: 'number', align: 'right', editable: (r) => r.place !== 'final', title: () => "The tier's share of the lane; a lane's shares add up to 100%" },
+    { key: 'dr', label: 'DR', sub: 'this tier', width: 80, type: 'number', align: 'right', value: (r) => r.t?.dr ?? null },
+    { key: 'drTotal', label: 'DR', sub: 'in all', width: 80, type: 'number', align: 'right', value: (r) => r.t?.drTotal ?? null, title: () => 'The DR in all to the end of the tier - what Ops gets' },
+    { key: 'bw', label: 'Brut Wins', sub: 'from - to', width: 100, align: 'right', value: (r) => (r.t ? `${fmt(r.t.bwFrom, 1)} - ${fmt(r.t.bwTo, 1)}` : '') },
+    { key: 'earned', label: 'Earned', width: 78, type: 'number', align: 'right', value: (r) => (r.place === 'final' ? w.pool : (r.t?.earned ?? null)), title: (r) => (r.place === 'final' ? 'The pool: what both lanes give the Final Prize' : 'What the lane earns between the tier before and this one') },
+    { key: 'target', label: 'Target', sub: 'allowance', width: 82, type: 'number', align: 'right', tone: () => 'font-semibold !text-purple-700' },
+    { key: 'prize', label: 'Prize', sub: isBase ? 'type it, or Ctrl+B to build it' : "the base's scaled - type to give it its own", width: 380, type: 'text', editable: true, value: (r) => r.prize.text, tone: (r) => `font-mono text-[12px] ${r.prize.own ? '' : 'italic !text-slate-400'}`, title: (r) => r.prize.text || undefined },
+    { key: 'worth', label: 'Its worth', sub: 'and how far from the target', width: 210, value: (r) => checkOf(r)?.worth ?? null, display: (r) => <Gap check={checkOf(r)} target={r.target} /> },
+  ]
+  const commit = (changes) =>
+    change((s) => {
+      let out = s
+      for (const { row, key, value } of changes) {
+        if (key === 'share' && row.laneId) {
+          const lane = out.lanes[row.laneId]
+          out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...lane, shares: lane.shares.map((x, j) => (j === row.tier - 1 ? (value ?? 0) : x)) } } }
+        }
+        if (key === 'prize') out = prizeChange(out, index, row.place, value)
+      }
+      return out
+    })
+  const openRow = rows.find((r) => r.place === building)
+
   return (
     <>
-      <SegmentChips state={state} index={index} setShown={setShown} note={index === state.baseIndex ? 'The base: the prizes typed here are every segment\'s, times its effort against the base\'s.' : 'This segment\'s prize is the base\'s times its effort against the base\'s - type one to give it its own.'} />
-      {w.problems.length > 0 && (
+      <SegmentChips state={state} index={index} setShown={setShown} note={isBase ? "The base: its prizes are every segment's, times its effort against the base's." : "Its prizes are the base's times its effort against the base's - type one to give it its own; Delete brings the base's back."} />
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2" data-testid="wt-tier-counts">
+        {LANES.map((lane) => (
+          <label key={lane.id} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            {lane.label} ({lane.dr}): tiers
+            <Num value={state.lanes[lane.id].shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(state.lanes[lane.id], v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
+            <span className="text-xs font-normal text-slate-400">1 to {MAX_TIERS}, split evenly</span>
+          </label>
+        ))}
+      </div>
+      {w.lanes ? (
+        <p className="text-sm text-slate-700" data-testid="wt-totals">
+          <span className="font-semibold">{seg.name}</span>: {fmt(w.E)} Brut Wins x ROE {fmt(state.rules.roe, 4)} = <span className="font-semibold">{fmt(w.total)}</span> allowance. The easy lane: {fmt(w.lanes.easy.totalDR, 0)} silver DR
+          over {fmt(w.lanes.easy.doneAtBW, 1)} Brut Wins; the hard lane: {fmt(w.lanes.hard.totalDR, 0)} gold DR over {fmt(w.lanes.hard.doneAtBW, 1)}. The Final Prize&apos;s pool <span data-field="pool">{fmt(w.pool)}</span>, counted at {fmt(state.rules.finalCounted)}%: its target{' '}
+          <span data-field="final-target">{fmt(w.finalTarget)}</span>.
+        </p>
+      ) : (
         <p className="rounded-lg bg-amber-50 px-2.5 py-1 text-sm text-amber-800" data-testid="wt-prizes-blocked">
           {seg.name} cannot be worked out yet: {w.problems.join(' ')}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {LANES.map((lane) => {
-          const lw = w.lanes?.[lane.id]
-          const take = lane.id === 'easy' ? state.rules.takeEasy : state.rules.takeHard
-          return (
-            <Card key={lane.id} title={`${lane.label} (${lane.dr})`} subtitle={`Each tier's target is what it earns less ${fmt(take)}% to the Final Prize. The last tier goes in a ${lane.id === 'easy' ? 'silver' : 'golden'} chest in the export.`}>
-              <table className="w-full border-collapse text-sm" data-testid={`wt-prizes-${lane.id}`} data-dense>
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className={TH}>Tier</th>
-                    <th className={TH} title={`The ${lane.dr} in all, to the end of the tier`}>
-                      DR
-                      <span className={SUB}>(in all)</span>
-                    </th>
-                    <th className={TH}>
-                      Target
-                      <span className={SUB}>(allowance)</span>
-                    </th>
-                    <th className={TH}>
-                      Prize
-                      <span className={SUB}>its worth and how far from the target</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.lanes[lane.id].shares.map((_, i) => {
-                    const t = lw?.tiers[i]
-                    return (
-                      <tr key={i} className="border-b border-slate-100" data-tier={placeKey(lane.id, i)}>
-                        <td className={`${TD} font-semibold text-slate-700`}>{i + 1}</td>
-                        <td className={`${TD} tabular-nums text-slate-600`}>{t ? fmt(t.drTotal, 0) : '-'}</td>
-                        <td className={`${TD} font-semibold tabular-nums text-purple-700`} data-field="target">
-                          {t ? fmt(t.target) : '-'}
-                        </td>
-                        <td className={`${TD} w-full`}>
-                          <PrizeField state={state} change={change} index={index} place={placeKey(lane.id, i)} economy={economy} target={t?.target ?? null} limit={PRIZE_LIMIT.tier} />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </Card>
-          )
-        })}
+      <SheetGrid
+        testid="wt-tiers"
+        columns={columns}
+        rows={rows}
+        onCommit={commit}
+        onActive={(row) => setActivePlace(row?.place ?? null)}
+        onKey={(e, row) => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B') && row) {
+            e.preventDefault()
+            setBuilding(row.place)
+          }
+        }}
+      />
+      <div className="flex flex-wrap items-center gap-2" data-testid="wt-builder-bar">
+        <button type="button" className={building ? PRIMARY : BUTTON} onClick={() => setBuilding((b) => (b ? null : activePlace))} disabled={!activePlace && !building} data-testid="wt-build-prize">
+          {building ? 'Done building' : 'Build the prize of the row picked (Ctrl+B)'}
+        </button>
+        {openRow && (
+          <span className="text-sm text-slate-600" data-testid="wt-building">
+            {openRow.place === 'final' ? 'The Final Prize' : `${openRow.lane}, tier ${openRow.tier}`} - target {fmt(openRow.target)}: <Gap check={checkOf(openRow)} target={openRow.target} />
+          </span>
+        )}
       </div>
-      <Card title="The Final Prize" subtitle={`For finishing both lanes. Its pool is what both lanes give it; it is counted at ${fmt(state.rules.finalCounted)}% of its worth against the pool, so its worth should be the pool / ${fmt(state.rules.finalCounted)}%.`}>
-        <div className="flex flex-wrap items-start gap-x-8 gap-y-3" data-testid="wt-final">
-          <div className="text-sm text-slate-700">
-            <div>
-              Pool: <span className="font-semibold tabular-nums" data-field="pool">{fmt(w.pool)}</span>
-            </div>
-            <div>
-              Target worth: <span className="font-semibold tabular-nums text-purple-700" data-field="final-target">{fmt(w.finalTarget)}</span>
-            </div>
-          </div>
-          <PrizeField state={state} change={change} index={index} place="final" economy={economy} target={w.finalTarget} limit={PRIZE_LIMIT.final} className="min-w-[20rem] max-w-3xl flex-1" />
-        </div>
-      </Card>
+      {openRow && <PrizeBuilder value={openRow.prize.text} onChange={(t) => change((s) => prizeChange(s, index, openRow.place, t))} economy={economy} testid={openRow.place} />}
       <p className="text-xs text-slate-500" data-note>
-        Worth is read by the Economy page, in allowance; a currency with no worth there makes a prize&apos;s worth unknown. Green within 5% of the target, amber within 15%
-        - this app&apos;s own reading, not a pass mark. The sheet&apos;s check: at most {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize. The trigger and
-        the chest are added in the export.
+        Worth is read by the Economy page, in allowance; a part with no worth there leaves the prize&apos;s worth unknown. Green within 5% of the target, amber within 15% -
+        this app&apos;s own reading. The sheet&apos;s check: at most {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize. The trigger, and the chest of each
+        lane&apos;s last tier, are added in the export.
       </p>
     </>
   )
