@@ -285,7 +285,8 @@ to these:
   its Off by is its worth against target + carry - the group so far (`carryThrough`); a tier with no prize gives 0, a
   worth not known stops the carry.
 - **The row we are on, live under the sheet** ("we will see under the events table a live syntax of the row we are
-  on"): written by the export's own builders, with copy buttons and the checker's findings.
+  on"): written by the export's own builders, with copy buttons and the checker's findings - Config OPS only (RC taken
+  out of the panel, asked; it stays in the export).
 - **Dropdown cells as Excel's data validation**: Ctrl+Down / Ctrl+Up go through the choices in place, Alt+Down opens.
 - **As little text and as few buttons as possible** ("this comments are not important, the page should be as clean
   and easy to use as possible. less buttons and text"): a step is one line - what it is for in its hover, "Still
@@ -822,7 +823,7 @@ without a rebuild). Before this the Twister's timing never failed a segment.
 ## The Build event flow (the main path)
 
 Six steps, ids `setup, layouts, rewards, build, prizes, finalize`, shown as:
-Segments · Board layouts · Rewards and Twister · Build · Prizes · Test and
+Segments Â· Board layouts Â· Rewards and Twister Â· Build Â· Prizes Â· Test and
 export. Two
 former steps are folded sections now: the generator, lucky drops, dates and CC
 at the bottom of step 1 (`setup-generator`), the effort shape in step 4 beside

@@ -161,7 +161,7 @@ ok(`5 over on tier 1 is carried: tier 2 has 5 less to give (carry ${await val('e
 await at('easy-0', 'tier').click()
 await page.waitForTimeout(200)
 const syn = (which = 'ops', column) => text(page.locator(`[data-testid="wt-row-syntax"] [data-syntax-column="${column}"] [data-syntax="${which}"]`))
-ok(`under the sheet: the row we are on, as Ops gets it (${await text(page.getByTestId('wt-row-syntax-title'))}: ${await syn('ops', '$_Script->RightMilestone_0_Res')})`, (await text(page.getByTestId('wt-row-syntax-title'))) === 'Easy lane, tier 1' && (await syn('ops', '$_Script->RightMilestone_0_Res')) === 'trigger:wicked_trails_silver_tier1+free_wild:2+free_undo:40' && (await syn('ops', '$_Script->RightMilestone_0_Req')) === '50' && (await syn('rc', '$_Script->RightMilestone_0_Req')) === '75')
+ok(`under the sheet: the row we are on, as Ops gets it (${await text(page.getByTestId('wt-row-syntax-title'))}: ${await syn('ops', '$_Script->RightMilestone_0_Res')})`, (await text(page.getByTestId('wt-row-syntax-title'))) === 'Easy lane, tier 1' && (await syn('ops', '$_Script->RightMilestone_0_Res')) === 'trigger:wicked_trails_silver_tier1+free_wild:2+free_undo:40' && (await syn('ops', '$_Script->RightMilestone_0_Req')) === '50' && (await page.locator('[data-testid="wt-row-syntax"] [data-syntax="rc"]').count()) === 0)
 await at('easy-1', 'tier').click()
 await page.waitForTimeout(200)
 ok(`moving to the lane's last tier: its syntax, in its chest (${await syn('ops', '$_Script->RightMilestone_1_Res')})`, (await text(page.getByTestId('wt-row-syntax-title'))) === 'Easy lane, tier 2' && (await syn('ops', '$_Script->RightMilestone_1_Res')) === 'chest:silver(trigger:wicked_trails_silver_tier2)')

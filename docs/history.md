@@ -8710,3 +8710,6 @@ feature"). verify-sheet-grid 22, e2e wicked-trails 45.
   short labels and a one-line total.
 verify-wicked-trails 42, verify-prize-parts 18, verify-economy 316, e2e
 wicked-trails 55, economy-page 111, merge-prizes 18.
+26 Nov 2026, of the "As Ops gets it" panel: "lets leave the RC sytnax in the
+AS OPS GETS IT" - asked which way, "Take RC out": the panel shows Config OPS
+only; Config RC OPS stays in the export. e2e wicked-trails 55.
