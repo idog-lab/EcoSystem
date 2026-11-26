@@ -21,7 +21,9 @@ import { inRect, move, parseNumber, parseTsv, pasteTargets, rectOf, toTsv } from
 const fmtNumber = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 const TRUE_TEXT = /^(true|yes|y|1|x|✓|v)$/i
 
-export default function SheetGrid({ columns, rows, onCommit, onActive = null, onKey = null, testid = 'sheet', help = true, className = '' }) {
+// rowTone(row) => { edit, fixed, edge }: a group's colour - the cells typed in, the cells worked out (solid: a sticky cell
+// sits on it) and the first cell's edge - so the rows of one lane, say, read apart from another's.
+export default function SheetGrid({ columns, rows, onCommit, onActive = null, onKey = null, rowTone = null, testid = 'sheet', help = true, className = '' }) {
   const box = useRef(null)
   const [active, setActive] = useState({ r: 0, c: 0 })
   const [anchor, setAnchor] = useState({ r: 0, c: 0 })
@@ -318,7 +320,11 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                       }}
                       onMouseEnter={() => dragging.current && setActive({ r, c })}
                       onDoubleClick={() => startEdit(r, c, 'edit')}
-                      className={`relative h-8 overflow-hidden border-b border-r border-slate-100 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${canEdit ? 'bg-white text-slate-800' : lefts[c] != null ? 'bg-slate-50 text-slate-500' : 'bg-slate-50/70 text-slate-500'} ${selected ? '!bg-purple-50' : ''} ${col.tone?.(row) ?? ''}`}
+                      className={`relative h-8 overflow-hidden border-b border-r border-slate-100 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${(() => {
+                        const tone = rowTone?.(row)
+                        if (tone) return `${canEdit ? `${tone.edit} text-slate-800` : `${tone.fixed} text-slate-500`} ${c === 0 ? `border-l-4 ${tone.edge}` : ''}`
+                        return canEdit ? 'bg-white text-slate-800' : lefts[c] != null ? 'bg-slate-50 text-slate-500' : 'bg-slate-50/70 text-slate-500'
+                      })()} ${selected ? '!bg-purple-50' : ''} ${col.tone?.(row) ?? ''}`}
                     >
                       {isEditing && col.type !== 'select' && (
                         <input

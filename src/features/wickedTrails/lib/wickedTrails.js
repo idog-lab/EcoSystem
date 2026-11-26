@@ -132,7 +132,10 @@ export function ruleProblems(state) {
   for (const lane of LANES) {
     const shares = state.lanes[lane.id].shares
     const sum = round2(shares.reduce((a, b) => a + b, 0))
-    if (shares.some((s) => !(s > 0))) out.push(`${lane.label}: every tier needs a share above 0%.`)
+    // The last tier is the rest of the lane: when the ones before take it all, the last has nothing.
+    const before = round2(shares.slice(0, -1).reduce((a, b) => a + b, 0))
+    if (shares.length > 1 && !(shares.at(-1) > 0)) out.push(`${lane.label}: the tiers before the last take ${before}% - the last has nothing left.`)
+    else if (shares.some((s) => !(s > 0))) out.push(`${lane.label}: every tier needs a share above 0%.`)
     if (Math.abs(sum - 100) > 0.01) out.push(`${lane.label}: the tiers add up to ${sum}%, not 100%.`)
   }
   return [...new Set(out)]

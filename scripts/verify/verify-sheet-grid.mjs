@@ -1,7 +1,7 @@
 // THE SHEET'S LOGIC (src/lib/sheetGrid.js): a block pasted from Excel, a block copied out, numbers as typed, where a
 // key moves the active cell, where a pasted block lands.
 //   npx vite-node scripts/verify/verify-sheet-grid.mjs
-import { inRect, move, parseNumber, parseTsv, pasteTargets, rectOf, toTsv } from '../../src/lib/sheetGrid.js'
+import { inRect, move, parseNumber, parseTsv, pasteTargets, rectOf, toTsv, withRest } from '../../src/lib/sheetGrid.js'
 
 let fails = 0
 let total = 0
@@ -42,6 +42,13 @@ const at = { r: 1, c: 2 }
 check('a block lands from the active cell, cut at the sheet\'s edges', same(pasteTargets([['a', 'b', 'c'], ['d', 'e', 'f'], ['g']], at, null, size), [{ r: 1, c: 2, text: 'a' }, { r: 1, c: 3, text: 'b' }, { r: 2, c: 2, text: 'd' }, { r: 2, c: 3, text: 'e' }]))
 check('one value pasted on a selection fills all of it', pasteTargets([['7']], { r: 0, c: 0 }, rectOf({ r: 0, c: 0 }, { r: 1, c: 1 }), size).length === 4)
 check('one value on one cell is one cell', pasteTargets([['7']], { r: 0, c: 0 }, rectOf({ r: 0, c: 0 }, { r: 0, c: 0 }), size).length === 1)
+
+// Shares of a whole: the last is the rest.
+check('a share typed: the last becomes the rest (30, 30 -> 40)', same(withRest([33.33, 33.33, 33.34], 0, 30), [30, 33.33, 36.67]) && same(withRest([30, 33.33, 36.67], 1, 30), [30, 30, 40]))
+check('the last itself is never typed: it stays the rest', same(withRest([50, 50], 1, 80), [50, 50]))
+check('the ones before take more than the whole: the last goes below 0 (and the feature says so)', same(withRest([50, 50], 0, 110), [110, -10]))
+check('one place only: it is the whole', same(withRest([40], 0, 40), [100]))
+check('a whole other than 100', same(withRest([1, 1], 0, 3, 10), [3, 7]))
 
 console.log(`\nSHEET GRID: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

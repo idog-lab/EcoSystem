@@ -259,6 +259,23 @@ the old sheet's Allocation. Held by
 `verify-wicked-trails.mjs` and `scripts/e2e/wicked-trails.mjs`. A rule of the economy said while teaching a feature
 is asked about and then put in the Economy (economist: "if i do, u can ask and then insert it into the economy").
 
+## Tables, in every feature (economist's standing rules)
+
+"we need the tables to be as easy to read and to handle as it can be" (26 Nov 2026) - a feature built from now on
+holds its rows of numbers in the sheet (`src/components/SheetGrid.jsx`, logic in `src/lib/sheetGrid.js`), and keeps
+to these:
+- **Keyboard first**: arrows, Tab, Enter, typing over a cell, Ctrl+C / Ctrl+V with Excel, Delete, undo - never a form
+  of separate fields where a row of cells will do; a prize is typed in the row, a part a column, not in a builder.
+- **Shares of a whole: the last is the rest** ("where we are looking at shares of a 100%, i want the last tier to add
+  up to the 100% also ... this rules should apply to other features also"): `withRest` - the last place is worked out
+  (grey, marked "rest"), never typed, so the shares always add up; when the ones before take it all, say so.
+- **Groups in colour** ("maybe to have coloring to differ between the lanes"): rows of one group (a lane, a phase)
+  share a tint and an edge (`rowTone`), the cells typed in lighter than the worked-out ones.
+- **The calculation beside what is typed**: the target and how far the value is from it sit next to the row's first
+  columns, in sight without scrolling (Wicked Trails: The tier | Against the target | The prize).
+- Worked-out cells are grey and refuse typing with a word; a value refused says why under the sheet; columns that are
+  seldom needed sit behind a tick that turns itself on when a row uses them.
+
 ## Repository map
 
 ```
