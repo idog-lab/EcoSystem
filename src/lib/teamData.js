@@ -26,6 +26,7 @@ export const SHARED_ITEMS = [
   { key: 'economy-segment-sets', path: 'economy/segment-sets.json', label: 'Segment sets (Economy page)' },
   { key: 'merge-mania-chef', path: 'chef/chefs.json', label: 'Chef' },
   { key: 'merge-mania-diamond-mine', path: 'diamond-mine/state.json', label: 'Diamond Mine' },
+  { key: 'superplay-wicked-trails', path: 'wicked-trails/state.json', label: 'Wicked Trails' },
 ]
 const EVENTS_DIR = 'merge/saved-events'
 const EVENTS_INDEX = 'merge-mania-saved-events'

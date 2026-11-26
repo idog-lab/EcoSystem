@@ -11,11 +11,12 @@
 // Recompletion's; one playthrough runs through both, so a Recompletion rank's effort carries on from the normal
 // event's. Every other segment's prize is the base segment's times its multiplier against the base, unless typed.
 import { simulatePlaythrough } from '../simulation/mergeSimulation'
-import { formatReward, parseReward, checkReward, rewardWorth } from '../../../../lib/economy/parse'
+import { scaleReward } from '../../../../lib/economy/prizeWorth'
+// (A prize's worth and a scaled prize are shared by every feature: lib/economy/prizeWorth.js.)
+export { scaleReward, prizeAgainstWorth } from '../../../../lib/economy/prizeWorth'
 import { MAX_RANK, RC_MAX_RANK } from '../core/ranks'
 
 const round2 = (x) => Math.round(x * 100) / 100
-const NUMBER = /^\d+(?:\.\d+)?$/
 
 // The paid DR at which the player first reaches each rank (1-14), in the playthrough of step 4's effort chart:
 // one deterministic run of the boards in use, the normal event and then Recompletion when it has boards.
@@ -67,34 +68,6 @@ export function rankWorths(reachedAt, ranks, drWorth) {
 // A segment's multiplier against the base (the "reward size", x Segment 1; Segment 1's own is 1).
 export const segmentMultiplier = (segment, index) => (index === 0 ? 1 : Number(segment?.segmentFactor) > 0 ? Number(segment.segmentFactor) : 1)
 
-// A prize text with every amount times `factor`: coins to 2 decimals, a resource or a currency to a whole number of
-// at least 1; a preset, a pack, a chest's name or a trigger as it is. A text that cannot be read comes back as is.
-export function scaleReward(text, factor) {
-  const src = String(text ?? '').trim()
-  if (!src || !(factor > 0) || factor === 1) return src
-  const { node } = parseReward(src)
-  if (!node) return src
-  const whole = (v) => (NUMBER.test(v) ? String(Math.max(1, Math.round(Number(v) * factor))) : v)
-  const walk = (n) => {
-    switch (n.type) {
-      case 'all':
-        return { ...n, parts: n.parts.map(walk) }
-      case 'first':
-        return { ...n, options: n.options.map(walk) }
-      case 'chest':
-        return { ...n, inner: walk(n.inner) }
-      case 'allowance':
-        return NUMBER.test(n.coins) ? { ...n, coins: String(Math.max(0.01, round2(Number(n.coins) * factor))) } : n
-      case 'resource':
-      case 'dynamic':
-        return { ...n, amount: whole(n.amount) }
-      default:
-        return n
-    }
-  }
-  return formatReward(walk(node))
-}
-
 // Each segment's ladder: { [rank]: { text, own } } - its own prize where typed, else the base segment's times its
 // multiplier against the base (the base's own when it is the base). segments: [{ segmentFactor, prizeLadder }].
 export function segmentLadder(segments, index, baseIndex, ranks) {
@@ -139,16 +112,4 @@ export function withLadder(boards, ladder, phase) {
   const texts = Object.fromEntries(Object.entries(ladder ?? {}).filter(([rank]) => phaseOfRank(Number(rank)) === phase).map(([rank, v]) => [rank, v.text]))
   if (!boards?.length || !Object.keys(texts).length) return boards
   return boards.map((b, i) => (i === 0 ? { ...b, rewardSyntax: { ...(b.rewardSyntax ?? {}), ...texts } } : b))
-}
-
-// How far a typed prize is from the worth it should have: { ok (readable), issues, worth (null when a part has no
-// worth), known, gap, gapPct }.
-export function prizeAgainstWorth(text, target, economy, { date = null } = {}) {
-  const src = String(text ?? '').trim()
-  if (!src) return null
-  const check = checkReward(src, { economy, prizeMode: 'normal' })
-  const w = check.node ? rewardWorth(check.node, economy, { date }) : null
-  const worth = w?.worth ?? null
-  const gap = worth != null && target != null ? round2(worth - target) : null
-  return { ok: check.ok, issues: check.issues, worth, known: w?.known ?? null, unknown: w?.unknown ?? [], gap, gapPct: gap != null && target > 0 ? Math.round((gap / target) * 1000) / 10 : null }
 }
