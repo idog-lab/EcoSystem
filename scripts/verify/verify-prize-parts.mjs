@@ -1,7 +1,7 @@
 // A PRIZE AS PARTS (src/lib/economy/prizeParts.js): the economist's real prizes read into parts and written back the
 // same; parts picked give the text the Economy page would build.
 //   npx vite-node scripts/verify/verify-prize-parts.mjs
-import { emptyParts, readPrize, writePrize } from '../../src/lib/economy/prizeParts.js'
+import { emptyParts, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../src/lib/economy/prizeParts.js'
 
 let fails = 0
 let total = 0
@@ -36,7 +36,9 @@ check(`parts picked give the text (${writePrize(picked)})`, writePrize(picked) =
 check('no pack counter when it is switched off', !writePrize({ ...picked, packCounter: false }).includes('dr-pack-counter'))
 check('0 or nothing gives no part, never a broken one', writePrize({ ...emptyParts(), coins: 0, wild: 0, currencies: [{ name: 'dr-puzzle', amount: 0 }] }) === '')
 check('a chest around the parts', writePrize({ ...emptyParts(), undo: 2, chest: 'silver' }) === 'chest:silver(free_undo:2)')
-check('a trigger typed by hand is kept as it was', writePrize(readPrize('trigger:x+free_wild:1').parts) === 'free_wild:1+trigger:x')
+check('a trigger is read and written first', readPrize('free_wild:1+trigger:x').parts.triggers[0] === 'x' && writePrize(readPrize('trigger:x+free_wild:1').parts) === 'trigger:x+free_wild:1')
+const kinds = presetsByKind(['mf_25_gameplay_undo', 'puzzle_gameplay_20', 'mini_game_5_gameplay_allowance', 'puzzle_gameplay_10'])
+check('presets by kind: the puzzle, the mini game, the others', kinds.puzzle.amount === 20 && kinds.mini.amount === 5 && kinds.mini.kind === 'allowance' && kinds.others.join() === 'mf_25_gameplay_undo,puzzle_gameplay_10' && presetsFromKinds(kinds).join() === 'puzzle_gameplay_20,mini_game_5_gameplay_allowance,mf_25_gameplay_undo,puzzle_gameplay_10')
 check('a text that cannot be read is kept whole', readPrize('free_wild:(').readable === false && writePrize(readPrize('free_wild:(').parts) === 'free_wild:(')
 
 console.log(`\nPRIZE PARTS: ${total - fails} of ${total} checks passed`)

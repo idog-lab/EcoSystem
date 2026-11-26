@@ -8641,3 +8641,24 @@ shown before the ROE is typed), and Tiers and Prizes became one step with one
 sheet - both lanes' tiers and the Final Prize - Ctrl+B opening the prize
 builder for the row picked. verify-sheet-grid 17, e2e wicked-trails 33 (the
 sheets driven with the keyboard, a block pasted, a block copied, undo).
+## Wicked Trails: the prize typed in the sheet, a part a column
+
+26 Nov 2026: "the UI is good but the functionallity is not so good. we need
+to be able in the table to insert the prizes, not in the prize builder. i
+think the best way is to have in the table the core resources, with presets
+and stickers options, puzzle and mini games, and to ahve an option to add DRs
+and triggers if needed, and then wrap it with chests if needed also. we are
+suppos to also see as we said the calculation of the tier vs the amount that
+should actually be there". The tiers and prizes sheet now has, per row: The
+tier (lane, tier, share, DR in all; DR this tier, Brut Wins and earned on a
+tick), Against the target (target, worth, off by - first put at the far right,
+where it scrolled out of sight, then moved beside the tier), The prize (coins,
+Wild, Extra stock, Undo, Free round, Puzzle pieces and Mini game amount taken
+as the nearest preset on the Economy page, what the mini game gives, other
+presets and a sticker pack with suggestions - refused when not listed - and a
+chest), and More on a tick (DRs, triggers, the pack's coin alternative, the
+whole text, which can be pasted). The grid gained a column's own check, typing
+suggestions, sticky leading columns and group headings; the prize parts read
+triggers and presets by kind. The prize builder left Wicked Trails (Merge
+keeps it). A segment's prize put back to the base's scaled one follows the
+base again. verify-prize-parts 14, e2e wicked-trails 41.

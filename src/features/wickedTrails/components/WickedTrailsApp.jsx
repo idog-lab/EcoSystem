@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Download, Map as MapIcon } from 'lucide-react'
 import Card from '../../../components/ui/Card'
-import PrizeBuilder from '../../../components/PrizeBuilder'
 import SheetGrid from '../../../components/SheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
+import { currencyChoices } from '../../../lib/economy/economyModel'
+import { presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
+import { presetFor } from '../../../lib/economy/syntax'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
 import { setForFeature, useSegmentSets } from '../../../lib/economy/segmentSets'
 import { teamData } from '../../../lib/teamData'
@@ -346,18 +348,15 @@ function RulesStep({ state, change }) {
 }
 
 // ---------------------------------------------------------------- 3. Tiers and prizes, one sheet
-function Gap({ check, target }) {
+// How far a prize is from its target, in words and colour.
+function OffBy({ check, target }) {
   if (!check) return <span className="text-slate-300">-</span>
   if (!check.ok) return <span className="text-rose-700">{check.issues.find((x) => x.level === 'error')?.message ?? 'Cannot be read'}</span>
   if (check.worth == null) return <span className="text-amber-700">no worth yet{check.unknown.length ? `: ${check.unknown.join(', ')}` : ''}</span>
-  if (target == null) return <span>{fmt(check.worth)}</span>
+  if (target == null) return <span className="text-slate-400">no target</span>
   const pct = Math.abs(check.gapPct ?? 0)
   const tone = pct <= 5 ? 'text-emerald-700' : pct <= 15 ? 'text-amber-700' : 'text-rose-700'
-  return (
-    <span className={tone} data-gap-pct={check.gapPct}>
-      {`${fmt(check.worth)} (${check.gap > 0 ? '+' : ''}${fmt(check.gap)}, ${check.gapPct > 0 ? '+' : ''}${check.gapPct}%)`}
-    </span>
-  )
+  return <span className={`font-semibold ${tone}`} data-gap-pct={check.gapPct}>{`${check.gap > 0 ? '+' : ''}${fmt(check.gap)} (${check.gapPct > 0 ? '+' : ''}${check.gapPct}%)`}</span>
 }
 
 // What a prize change does: on the base it is every segment's; on another segment it is that segment's own (empty:
@@ -369,39 +368,210 @@ function prizeChange(s, index, place, text) {
     const [laneId, i] = place.split('-')
     return { ...s, lanes: { ...s.lanes, [laneId]: { ...s.lanes[laneId], prizes: s.lanes[laneId].prizes.map((x, j) => (j === Number(i) ? t : x)) } } }
   }
-  return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t } } : x)) }
+  // The base's prize, scaled for this segment, is not "its own": it follows the base again.
+  const scaled = prizeOf({ ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: '' } } : x)) }, index, place).text
+  return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t === scaled ? '' : t } } : x)) }
 }
 
+// A list typed in one cell: "a, b" -> ['a', 'b'].
+const listOf = (v) =>
+  String(v ?? '')
+    .split(/[,\n]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+const MINI_KINDS = [
+  { value: 'allowance', label: 'Coins' },
+  { value: 'undo', label: 'Undo' },
+  { value: 'es', label: 'Extra stock' },
+  { value: 'wild', label: 'Wild' },
+  { value: 'entry', label: 'Free round' },
+]
+const RESOURCE_COLUMNS = [
+  { key: 'wild', label: 'Wild' },
+  { key: 'stock', label: 'Extra stock' },
+  { key: 'undo', label: 'Undo' },
+  { key: 'entry', label: 'Free round' },
+]
+
+// THE PRIZE IN THE TABLE (economist: "we need to be able in the table to insert the prizes, not in the prize builder.
+// i think the best way is to have in the table the core resources, with presets and stickers options, puzzle and mini
+// games, and to have an option to add DRs and triggers if needed, and then wrap it with chests if needed also. we are
+// supposed to also see as we said the calculation of the tier vs the amount that should actually be there"): one
+// column a part, the text written from them (lib/economy/prizeParts.js), the target, the worth and how far it is.
 function TiersStep({ state, change, index, setShown, economy }) {
   const seg = state.segments[index]
   const w = workOut(state, seg)
   const isBase = index === state.baseIndex
-  const [activePlace, setActivePlace] = useState(null)
-  const [building, setBuilding] = useState(null)
+  const keys = (list) => (economy?.keys?.[list] ?? []).map((k) => k.key).filter(Boolean)
+  const presetKeys = keys('presets')
+  const packKeys = keys('packs')
+  const chestKeys = keys('chests')
+  const currencyNames = [...new Set([...(economy?.currencies ?? []).map((c) => c.name), ...currencyChoices(economy ?? {})])].filter((n) => n && n !== 'dr-hidden' && n !== 'dr-pack-counter')
   const setLane = (laneId, lane) => change((s) => ({ ...s, lanes: { ...s.lanes, [laneId]: lane } }))
   const rows = [
     ...LANES.flatMap((lane) =>
       state.lanes[lane.id].shares.map((share, i) => {
         const t = w.lanes?.[lane.id].tiers[i]
         const place = placeKey(lane.id, i)
-        return { id: place, place, laneId: lane.id, lane: lane.label, tier: i + 1, share, t, target: t?.target ?? null, prize: prizeOf(state, index, place) }
+        const prize = prizeOf(state, index, place)
+        const parts = readPrize(prize.text).parts
+        return { id: place, place, laneId: lane.id, lane: lane.label, tier: i + 1, last: i === state.lanes[lane.id].shares.length - 1, share, t, target: t?.target ?? null, prize, parts, kinds: presetsByKind(parts.presets) }
       }),
     ),
-    { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', share: null, t: null, target: w.finalTarget, prize: prizeOf(state, index, 'final') },
+    (() => {
+      const prize = prizeOf(state, index, 'final')
+      const parts = readPrize(prize.text).parts
+      return { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', last: false, share: null, t: null, target: w.finalTarget, prize, parts, kinds: presetsByKind(parts.presets) }
+    })(),
   ]
   const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
+  const anyMore = rows.some((r) => r.parts.currencies.length || r.parts.triggers.length || r.parts.extra.length || r.parts.packCoins != null)
+  const [showLane, setShowLane] = useState(false)
+  const [showMore, setShowMore] = useState(anyMore)
+  const more = showMore || anyMore
+  const own = (r) => (r.prize.own ? '' : 'italic !text-slate-400')
+  const whole = (_, v) => (v != null && !Number.isInteger(v) ? 'a whole number' : null)
+
   const columns = [
-    { key: 'lane', label: 'Lane', width: 110, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
-    { key: 'tier', label: 'Tier', width: 50 },
-    { key: 'share', label: 'Share', sub: '% of the lane', width: 86, type: 'number', align: 'right', editable: (r) => r.place !== 'final', title: () => "The tier's share of the lane; a lane's shares add up to 100%" },
-    { key: 'dr', label: 'DR', sub: 'this tier', width: 80, type: 'number', align: 'right', value: (r) => r.t?.dr ?? null },
-    { key: 'drTotal', label: 'DR', sub: 'in all', width: 80, type: 'number', align: 'right', value: (r) => r.t?.drTotal ?? null, title: () => 'The DR in all to the end of the tier - what Ops gets' },
-    { key: 'bw', label: 'Brut Wins', sub: 'from - to', width: 100, align: 'right', value: (r) => (r.t ? `${fmt(r.t.bwFrom, 1)} - ${fmt(r.t.bwTo, 1)}` : '') },
-    { key: 'earned', label: 'Earned', width: 78, type: 'number', align: 'right', value: (r) => (r.place === 'final' ? w.pool : (r.t?.earned ?? null)), title: (r) => (r.place === 'final' ? 'The pool: what both lanes give the Final Prize' : 'What the lane earns between the tier before and this one') },
-    { key: 'target', label: 'Target', sub: 'allowance', width: 82, type: 'number', align: 'right', tone: () => 'font-semibold !text-purple-700' },
-    { key: 'prize', label: 'Prize', sub: isBase ? 'type it, or Ctrl+B to build it' : "the base's scaled - type to give it its own", width: 380, type: 'text', editable: true, value: (r) => r.prize.text, tone: (r) => `font-mono text-[12px] ${r.prize.own ? '' : 'italic !text-slate-400'}`, title: (r) => r.prize.text || undefined },
-    { key: 'worth', label: 'Its worth', sub: 'and how far from the target', width: 210, value: (r) => checkOf(r)?.worth ?? null, display: (r) => <Gap check={checkOf(r)} target={r.target} /> },
+    { key: 'lane', group: 'The tier', label: 'Lane', width: 96, sticky: true, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
+    { key: 'tier', group: 'The tier', label: 'Tier', width: 44, sticky: true },
+    { key: 'share', group: 'The tier', label: 'Share', sub: '% of lane', width: 72, type: 'number', align: 'right', editable: (r) => r.place !== 'final', title: () => "The tier's share of the lane; a lane's shares add up to 100%" },
+    { key: 'drTotal', group: 'The tier', label: 'DR', sub: 'in all', width: 72, type: 'number', align: 'right', value: (r) => r.t?.drTotal ?? null, title: () => 'The DR in all to the end of the tier - what Ops gets' },
+    ...(showLane
+      ? [
+          { key: 'dr', group: 'The tier', label: 'DR', sub: 'this tier', width: 72, type: 'number', align: 'right', value: (r) => r.t?.dr ?? null },
+          { key: 'bw', group: 'The tier', label: 'Brut Wins', sub: 'from - to', width: 90, align: 'right', value: (r) => (r.t ? `${fmt(r.t.bwFrom, 1)} - ${fmt(r.t.bwTo, 1)}` : '') },
+          { key: 'earned', group: 'The tier', label: 'Earned', width: 70, type: 'number', align: 'right', value: (r) => (r.place === 'final' ? w.pool : (r.t?.earned ?? null)) },
+        ]
+      : []),
+    { key: 'target', group: 'Against the target', label: 'Target', sub: 'allowance', width: 76, type: 'number', align: 'right', tone: () => 'font-semibold !text-purple-700' },
+    { key: 'worth', group: 'Against the target', label: 'Worth', sub: 'of the prize', width: 70, type: 'number', align: 'right', value: (r) => checkOf(r)?.worth ?? null },
+    { key: 'off', group: 'Against the target', label: 'Off by', width: 130, value: (r) => checkOf(r)?.gap ?? null, title: (r) => (checkOf(r)?.unknown?.length ? 'No worth yet on the Economy page: ' + checkOf(r).unknown.join(', ') : undefined), display: (r) => <OffBy check={checkOf(r)} target={r.target} /> },
+    { key: 'coins', group: 'The prize', label: 'Coins', sub: 'allowance', width: 76, type: 'number', align: 'right', editable: true, value: (r) => r.parts.coins, tone: own },
+    ...RESOURCE_COLUMNS.map((c) => ({ key: c.key, group: 'The prize', label: c.label, width: c.key === 'stock' || c.key === 'entry' ? 70 : 58, type: 'number', align: 'right', editable: true, value: (r) => r.parts[c.key], check: whole, tone: own })),
+    {
+      key: 'puzzle',
+      group: 'The prize',
+      label: 'Puzzle',
+      sub: 'pieces',
+      width: 66,
+      type: 'number',
+      align: 'right',
+      editable: true,
+      value: (r) => r.kinds.puzzle?.amount ?? null,
+      check: (_, v) => (v != null && !presetFor('puzzle', v, '', economy) ? 'no puzzle preset on the Economy page' : null),
+      title: (r) => r.kinds.puzzle?.key ?? 'A puzzle preset: the nearest amount on the Economy page is taken',
+      tone: own,
+    },
+    {
+      key: 'mini',
+      group: 'The prize',
+      label: 'Mini game',
+      sub: 'amount',
+      width: 70,
+      type: 'number',
+      align: 'right',
+      editable: true,
+      value: (r) => r.kinds.mini?.amount ?? null,
+      check: (r, v) => (v != null && !presetFor('mini_game', v, r.kinds.mini?.kind ?? 'allowance', economy) ? 'no mini game preset on the Economy page' : null),
+      title: (r) => r.kinds.mini?.key ?? 'A mini game preset: the nearest amount on the Economy page is taken',
+      tone: own,
+    },
+    { key: 'miniKind', group: 'The prize', label: 'Mini game', sub: 'gives', width: 92, type: 'select', editable: (r) => !!r.kinds.mini, value: (r) => r.kinds.mini?.kind ?? '', options: () => MINI_KINDS, tone: own },
+    {
+      key: 'presets',
+      group: 'The prize',
+      label: 'Other presets',
+      sub: 'type to search; a, b',
+      width: 190,
+      type: 'text',
+      editable: true,
+      value: (r) => r.kinds.others.join(', '),
+      suggestions: () => presetKeys,
+      check: (_, v) => listOf(v).find((k) => !presetKeys.includes(k)) && `"${listOf(v).find((k) => !presetKeys.includes(k))}" is not a preset on the Economy page`,
+      title: (r) => r.kinds.others.join(', ') || undefined,
+      tone: (r) => `font-mono text-[11.5px] ${own(r)}`,
+    },
+    {
+      key: 'pack',
+      group: 'The prize',
+      label: 'Sticker pack',
+      sub: 'type to search',
+      width: 220,
+      type: 'text',
+      editable: true,
+      value: (r) => r.parts.pack,
+      suggestions: () => packKeys,
+      check: (_, v) => (v && !packKeys.includes(v) ? `"${v}" is not a sticker pack on the Economy page` : null),
+      title: (r) => r.parts.pack || undefined,
+      tone: (r) => `font-mono text-[11.5px] ${own(r)}`,
+    },
+    {
+      key: 'chest',
+      group: 'The prize',
+      label: 'Chest',
+      sub: 'wraps it',
+      width: 92,
+      type: 'select',
+      editable: true,
+      value: (r) => r.parts.chest,
+      options: () => [{ value: '', label: '-' }, ...chestKeys.map((k) => ({ value: k, label: k }))],
+      display: (r) => r.parts.chest || (r.last ? <span className="text-slate-300" title="The export puts the lane's last tier in its chest">{r.laneId === 'easy' ? 'silver*' : 'golden*'}</span> : ''),
+      tone: own,
+    },
+    ...(more
+      ? [
+          {
+            key: 'drs',
+            group: 'More',
+            label: 'DRs',
+            sub: 'dr-name:amount, ...',
+            width: 200,
+            type: 'text',
+            editable: true,
+            value: (r) => r.parts.currencies.map((c) => `${c.name}:${c.amount}`).join(', '),
+            suggestions: () => currencyNames.map((n) => `${n}:`),
+            check: (_, v) => {
+              for (const item of listOf(v)) {
+                const [name, amount] = item.split(':').map((x) => x.trim())
+                if (!currencyNames.includes(name)) return `"${name}" is not a currency on the Economy page`
+                if (!(Number(amount) >= 1) || !Number.isInteger(Number(amount))) return `${name}: a whole amount of 1 or more`
+              }
+              return null
+            },
+            tone: (r) => `font-mono text-[11.5px] ${own(r)}`,
+          },
+          { key: 'triggers', group: 'More', label: 'Triggers', sub: 'a, b - the export adds the tier\'s own', width: 170, type: 'text', editable: true, value: (r) => r.parts.triggers.join(', '), check: (_, v) => listOf(v).find((t) => !/^[a-z0-9_]+$/.test(t)) && 'a trigger is lower case letters, digits and "_"', tone: (r) => `font-mono text-[11.5px] ${own(r)}` },
+          { key: 'packCoins', group: 'More', label: 'Pack or coins', sub: 'allowance', width: 80, type: 'number', align: 'right', editable: (r) => !!r.parts.pack, value: (r) => r.parts.packCoins, title: () => 'Coins given instead of the pack when the player cannot get it', tone: own },
+          { key: 'text', group: 'More', label: 'The text', sub: 'as Ops gets it; can be pasted whole', width: 380, type: 'text', editable: true, value: (r) => r.prize.text, title: (r) => r.prize.text || undefined, tone: (r) => `font-mono text-[11.5px] ${own(r)}` },
+        ]
+      : []),
   ]
+
+  // A cell of the prize changed: the text is written again from its parts.
+  function withPart(parts, key, value) {
+    const p = { ...parts, presets: [...parts.presets] }
+    const kinds = presetsByKind(p.presets)
+    if (key === 'coins') p.coins = value == null ? null : Math.round(value * 100) / 100
+    else if (['wild', 'stock', 'undo', 'entry'].includes(key)) p[key] = value
+    else if (key === 'puzzle') p.presets = presetsFromKinds({ ...kinds, puzzle: value == null ? null : (presetFor('puzzle', value, '', economy) ?? kinds.puzzle) })
+    else if (key === 'mini') p.presets = presetsFromKinds({ ...kinds, mini: value == null ? null : (presetFor('mini_game', value, kinds.mini?.kind ?? 'allowance', economy) ?? kinds.mini) })
+    else if (key === 'miniKind' && kinds.mini) p.presets = presetsFromKinds({ ...kinds, mini: presetFor('mini_game', kinds.mini.amount, value, economy) ?? kinds.mini })
+    else if (key === 'presets') p.presets = presetsFromKinds({ ...kinds, others: listOf(value) })
+    else if (key === 'pack') {
+      p.pack = value || ''
+      if (!value) p.packCoins = null
+      else if (!parts.pack) p.packCounter = true
+    } else if (key === 'packCoins') p.packCoins = value
+    else if (key === 'chest') p.chest = value || ''
+    else if (key === 'triggers') p.triggers = listOf(value)
+    else if (key === 'drs')
+      p.currencies = listOf(value).map((item) => {
+        const [name, amount] = item.split(':').map((x) => x.trim())
+        return { name, amount: Number(amount) }
+      })
+    return p
+  }
   const commit = (changes) =>
     change((s) => {
       let out = s
@@ -409,24 +579,34 @@ function TiersStep({ state, change, index, setShown, economy }) {
         if (key === 'share' && row.laneId) {
           const lane = out.lanes[row.laneId]
           out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...lane, shares: lane.shares.map((x, j) => (j === row.tier - 1 ? (value ?? 0) : x)) } } }
+          continue
         }
-        if (key === 'prize') out = prizeChange(out, index, row.place, value)
+        const current = prizeOf(out, index, row.place).text
+        const text = key === 'text' ? value : writePrize(withPart(readPrize(current).parts, key, value))
+        out = prizeChange(out, index, row.place, text)
       }
       return out
     })
-  const openRow = rows.find((r) => r.place === building)
 
   return (
     <>
-      <SegmentChips state={state} index={index} setShown={setShown} note={isBase ? "The base: its prizes are every segment's, times its effort against the base's." : "Its prizes are the base's times its effort against the base's - type one to give it its own; Delete brings the base's back."} />
+      <SegmentChips state={state} index={index} setShown={setShown} note={isBase ? "The base: its prizes are every segment's, times its effort against the base's." : "Its prizes are the base's times its effort against the base's (grey) - type in a row to give it its own."} />
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2" data-testid="wt-tier-counts">
         {LANES.map((lane) => (
           <label key={lane.id} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             {lane.label} ({lane.dr}): tiers
             <Num value={state.lanes[lane.id].shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(state.lanes[lane.id], v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
-            <span className="text-xs font-normal text-slate-400">1 to {MAX_TIERS}, split evenly</span>
+            <span className="text-xs font-normal text-slate-400">1 to {MAX_TIERS}</span>
           </label>
         ))}
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <input type="checkbox" checked={showLane} onChange={(e) => setShowLane(e.target.checked)} className="accent-purple-600" data-testid="wt-show-lane" />
+          the lane&apos;s numbers (DR this tier, Brut Wins, earned)
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-600" title={anyMore ? 'Shown: a prize here has DRs, triggers or a part with no column' : undefined}>
+          <input type="checkbox" checked={more} disabled={anyMore} onChange={(e) => setShowMore(e.target.checked)} className="accent-purple-600" data-testid="wt-show-more" />
+          DRs, triggers and the text
+        </label>
       </div>
       {w.lanes ? (
         <p className="text-sm text-slate-700" data-testid="wt-totals">
@@ -439,34 +619,12 @@ function TiersStep({ state, change, index, setShown, economy }) {
           {seg.name} cannot be worked out yet: {w.problems.join(' ')}
         </p>
       )}
-      <SheetGrid
-        testid="wt-tiers"
-        columns={columns}
-        rows={rows}
-        onCommit={commit}
-        onActive={(row) => setActivePlace(row?.place ?? null)}
-        onKey={(e, row) => {
-          if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B') && row) {
-            e.preventDefault()
-            setBuilding(row.place)
-          }
-        }}
-      />
-      <div className="flex flex-wrap items-center gap-2" data-testid="wt-builder-bar">
-        <button type="button" className={building ? PRIMARY : BUTTON} onClick={() => setBuilding((b) => (b ? null : activePlace))} disabled={!activePlace && !building} data-testid="wt-build-prize">
-          {building ? 'Done building' : 'Build the prize of the row picked (Ctrl+B)'}
-        </button>
-        {openRow && (
-          <span className="text-sm text-slate-600" data-testid="wt-building">
-            {openRow.place === 'final' ? 'The Final Prize' : `${openRow.lane}, tier ${openRow.tier}`} - target {fmt(openRow.target)}: <Gap check={checkOf(openRow)} target={openRow.target} />
-          </span>
-        )}
-      </div>
-      {openRow && <PrizeBuilder value={openRow.prize.text} onChange={(t) => change((s) => prizeChange(s, index, openRow.place, t))} economy={economy} testid={openRow.place} />}
+      <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} />
       <p className="text-xs text-slate-500" data-note>
-        Worth is read by the Economy page, in allowance; a part with no worth there leaves the prize&apos;s worth unknown. Green within 5% of the target, amber within 15% -
-        this app&apos;s own reading. The sheet&apos;s check: at most {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize. The trigger, and the chest of each
-        lane&apos;s last tier, are added in the export.
+        Puzzle and mini game take the nearest amount that has a preset on the Economy page. Worth is read by the Economy page, in allowance; a part with no worth there
+        (most presets, for now) leaves the prize&apos;s worth unknown. Off by: green within 5% of the target, amber within 15% - this app&apos;s own reading. At most{' '}
+        {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize (the sheet&apos;s check). * The export puts each lane&apos;s last tier in its chest and adds each
+        tier&apos;s trigger.
       </p>
     </>
   )

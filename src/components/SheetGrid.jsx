@@ -12,7 +12,10 @@ import { inRect, move, parseNumber, parseTsv, pasteTargets, rectOf, toTsv } from
 //
 // columns: [{ key, label, sub, width, type: 'number' | 'text' | 'select' | 'toggle', editable: bool | (row) => bool,
 //   options: (row) => [{ value, label }], value: (row) => raw (what is edited and copied; row[key] by default),
-//   display: (row) => node, align: 'left' | 'right', tone: (row) => className, title: (row) => text }]
+//   display: (row) => node, align: 'left' | 'right', tone: (row) => className, title: (row) => text,
+//   check: (row, value) => why or null (a value refused, with the reason), suggestions: (row) => [text] (offered while
+//   typing), sticky: true (stays in sight when the sheet scrolls sideways - the leading columns), group: a heading over
+//   the columns that share it }]
 // rows: [{ id, ... }]. onCommit([{ row, key, value }]) - a number is a number or null, a text a string, a tick a boolean.
 // onActive(row, column) when the active cell moves; onKey(event, row, column) for the keys the sheet does not use.
 const fmtNumber = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }))
@@ -80,6 +83,12 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
       const v = 'value' in cell ? { ok: true, value: cell.value } : convert(row, col, cell.text)
       if (!v.ok) {
         refused.push(v.why)
+        continue
+      }
+      // A column's own check (a key not on its list, an amount with no preset near it): refused, and why.
+      const why = col.check?.(row, v.value) ?? null
+      if (why) {
+        refused.push(why)
         continue
       }
       const old = valueOf(row, col) ?? null
@@ -226,6 +235,25 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
     return v ?? ''
   }
 
+  // The leading sticky columns stay in sight: each one's distance from the left edge.
+  const lefts = []
+  columns.reduce((x, col, i) => {
+    lefts[i] = col.sticky ? x : null
+    return col.sticky ? x + (col.width ?? 120) : x
+  }, 0)
+  const stick = (i, z) => (lefts[i] == null ? undefined : { position: 'sticky', left: lefts[i], zIndex: z })
+  // Headings over groups of columns, when the columns say so.
+  const groups = columns.some((c) => c.group)
+    ? columns.reduce((out, col) => {
+        const last = out.at(-1)
+        if (last && last.group === (col.group ?? '')) last.span += 1
+        else out.push({ group: col.group ?? '', span: 1, key: col.key })
+        return out
+      }, [])
+    : null
+  const editCol = editing ? columns[editing.c] : null
+  const suggestions = editing && editCol?.suggestions ? editCol.suggestions(rows[editing.r]) : null
+
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
       <div
@@ -246,9 +274,18 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
             ))}
           </colgroup>
           <thead>
+            {groups && (
+              <tr className="bg-slate-50">
+                {groups.map((g) => (
+                  <th key={g.key} colSpan={g.span} className="border-b border-r border-slate-200 px-2 pt-1.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-purple-700" data-sheet-group={g.group}>
+                    {g.group}
+                  </th>
+                ))}
+              </tr>
+            )}
             <tr className="border-b border-slate-200 bg-slate-50/80">
-              {columns.map((c) => (
-                <th key={c.key} className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 align-bottom ${c.align === 'right' ? 'text-right' : 'text-left'}`} title={c.title ? undefined : c.hint}>
+              {columns.map((c, i) => (
+                <th key={c.key} style={stick(i, 3)} className={`bg-slate-50 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 align-bottom ${c.align === 'right' ? 'text-right' : 'text-left'}`} title={c.title ? undefined : c.hint}>
                   {c.label}
                   {c.sub && <span className="block font-normal normal-case tracking-normal text-slate-400">{c.sub}</span>}
                 </th>
@@ -266,6 +303,7 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                   return (
                     <td
                       key={col.key}
+                      style={stick(c, 2)}
                       data-cell={`${r}:${c}`}
                       data-col={col.key}
                       data-editable={canEdit ? 'true' : undefined}
@@ -280,11 +318,12 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                       }}
                       onMouseEnter={() => dragging.current && setActive({ r, c })}
                       onDoubleClick={() => startEdit(r, c, 'edit')}
-                      className={`relative h-8 overflow-hidden border-b border-r border-slate-100 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${canEdit ? 'bg-white text-slate-800' : 'bg-slate-50/70 text-slate-500'} ${selected ? '!bg-purple-50' : ''} ${col.tone?.(row) ?? ''}`}
+                      className={`relative h-8 overflow-hidden border-b border-r border-slate-100 px-2 py-1 align-middle ${col.align === 'right' ? 'text-right tabular-nums' : 'text-left'} ${canEdit ? 'bg-white text-slate-800' : lefts[c] != null ? 'bg-slate-50 text-slate-500' : 'bg-slate-50/70 text-slate-500'} ${selected ? '!bg-purple-50' : ''} ${col.tone?.(row) ?? ''}`}
                     >
                       {isEditing && col.type !== 'select' && (
                         <input
                           autoFocus
+                          list={suggestions ? `${testid}-suggest` : undefined}
                           value={editing.text}
                           onChange={(e) => setEdit({ ...editRef.current, text: e.target.value })}
                           onKeyDown={(e) => {
@@ -333,6 +372,13 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
             ))}
           </tbody>
         </table>
+        {suggestions && (
+          <datalist id={`${testid}-suggest`}>
+            {suggestions.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+        )}
       </div>
       {help && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500" data-sheet-help={testid}>
