@@ -150,7 +150,8 @@ section('3a. The validator\'s rules (Reward Scanner Pro; economist: "The validat
   check('a trigger is lower case letters, digits and "_"; upper case only when allowed', codes('trigger:Pity').includes('trigger-name') && codes('trigger:sugar-rush').includes('trigger-name') && ok('trigger:Pity', { allowUppercaseTrigger: true }) && ok('trigger:_diamond_mine_tier_3'))
   check('a currency the game is known to have, though not in the table, is known (the game\'s list, the validator\'s)', ok('[dynamic(dr-villains-queen:1)]') && ok('[dynamic(dr-snowflake:1)]'))
   check('an allowance bucket not known is an error; pricing and milestone are known (the validator\'s)', codes('allowance:mystery(coins:1)').includes('unknown-key') && ok('allowance:pricing(coins:1)') && ok('allowance:milestone(coins:1)'))
-  check('a pack or a trigger off the list stays a warning - the validator does not check those', ok('sticker_pack:Unknown_Pack_X') && codes('sticker_pack:Unknown_Pack_X').includes('unknown-key') && ok('trigger:some_new_trigger'))
+  check('a pack off the list stays a warning - the validator does not check those', ok('sticker_pack:Unknown_Pack_X') && codes('sticker_pack:Unknown_Pack_X').includes('unknown-key'))
+  check('any trigger may be added ("those are used by the analysts"): one off the list is not a finding', ok('trigger:some_new_trigger') && !codes('trigger:some_new_trigger').includes('unknown-key'))
   check('where the validator is looser the app\'s own rule stays: an amount of 0', codes('free_wild:0').includes('amount-below-1'))
   check('Missing(...) and Duplicate(...) are read, with a note that the validator reads them only if added there', ok('Missing(bucket,1)') && codes('Missing(bucket,1)').includes('draw-validator'))
   // The prize count.

@@ -116,6 +116,40 @@ export function buildExport(state) {
   return { segments, ops, rc, problems }
 }
 
+// ONE ROW OF THE SHEET AS OPS GETS IT (economist, 26 Nov 2026: "we will see under the events table a live syntax of
+// the row we are on"): for a tier, its Req and Res columns in Config OPS and Config RC OPS; for the Final Prize, its
+// Res. The same builders the export uses, so what is shown is what is written.
+// { title, cells: [{ column, ops, rc }] } or null when the place is not in the sheet.
+export function rowSyntax(state, index, place) {
+  const seg = state.segments[index]
+  if (!seg) return null
+  const prize = prizeOf(state, index, place).text
+  if (place === 'final') {
+    return {
+      title: 'The Final Prize',
+      cells: [
+        { column: '$_Script->FinalPrize_Res', ops: milestoneRes(FINAL_TRIGGER, prize), rc: milestoneRes(FINAL_TRIGGER, scaleCoins(prize, RC_FINAL_COINS)) },
+        { column: '$_Script->FinalPrize_Res_Filter', ops: FINAL_FILTER, rc: FINAL_FILTER },
+      ],
+    }
+  }
+  const [laneId, at] = place.split('-')
+  const i = Number(at)
+  const lane = LANES.find((l) => l.id === laneId)
+  const shares = state.lanes[laneId]?.shares ?? []
+  if (!lane || i >= shares.length) return null
+  const t = workOut(state, seg).lanes?.[laneId]?.tiers[i]
+  const s = SIDE[laneId]
+  const res = milestoneRes(triggerOf(laneId, i), prize, i === shares.length - 1 ? CHEST[laneId] : null)
+  return {
+    title: `${lane.label}, tier ${i + 1}`,
+    cells: [
+      { column: `$_Script->${s}Milestone_${i}_Req`, ops: t ? Math.round(t.drTotal) : null, rc: t ? Math.round(t.drTotal * RC_TIER_EFFORT) : null },
+      { column: `$_Script->${s}Milestone_${i}_Res`, ops: res, rc: res },
+    ],
+  }
+}
+
 // The file's name, as the example's: t_Promo_st_WickedTrail_n_WickedTrail_d_<yyyymmdd>.xlsx (the event's first day).
 export const exportFileName = (date) => `t_Promo_st_WickedTrail_n_WickedTrail_d_${String(date ?? '').replace(/-/g, '') || 'date'}.xlsx`
 

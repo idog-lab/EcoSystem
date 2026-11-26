@@ -167,6 +167,16 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
       setAnchor({ r: 0, c: 0 })
       return setActive({ r: nRows - 1, c: nCols - 1 })
     }
+    // A dropdown cell, as Excel's data validation: Ctrl+Down / Ctrl+Up go through its choices in place; Alt+Down opens it.
+    if (col?.type === 'select' && editable(row, col) && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && (ctrl || e.altKey)) {
+      e.preventDefault()
+      if (e.altKey) return startEdit(at.r, at.c, 'edit')
+      const opts = optionsOf(row, col)
+      if (!opts.length) return
+      const now = opts.findIndex((o) => o.value === (valueOf(row, col) ?? ''))
+      const next = opts[(now + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length]
+      return write([{ r: at.r, c: at.c, value: next.value }])
+    }
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
       e.preventDefault()
       return go(move(at, e.key, { rows: nRows, cols: nCols }), e.shiftKey)
@@ -267,6 +277,7 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
         className="overflow-x-auto rounded-xl border border-slate-200 bg-white outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
         role="grid"
         aria-label={testid}
+        title="Arrows move · type to replace · F2 or double click edits · Enter down, Tab right · Shift+arrows select · Ctrl+C / Ctrl+V with Excel · Delete clears · Ctrl+Z undo · a dropdown: Ctrl+Down / Ctrl+Up go through it, Alt+Down opens it"
         data-sheet={testid}
       >
         <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: columns.reduce((s, c) => s + (c.width ?? 120), 0) }}>
@@ -386,14 +397,12 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
           </datalist>
         )}
       </div>
-      {help && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500" data-sheet-help={testid}>
-          <span>Arrows move · type to replace · F2 or double click to edit · Enter down, Tab right · Shift+arrows select · Ctrl+C / Ctrl+V with Excel · Delete clears · Ctrl+Z undo</span>
-          {note && (
-            <span className={/not taken|cannot/.test(note) ? 'text-amber-700' : 'text-emerald-700'} data-sheet-note={testid}>
-              {note}
-            </span>
-          )}
+      {/* Only what happened is said under the sheet; the keys are in the sheet's hover (economist: "less buttons and text"). */}
+      {help && note && (
+        <div className="text-[11px]" data-sheet-help={testid}>
+          <span className={/not taken|cannot/.test(note) ? 'text-amber-700' : 'text-emerald-700'} data-sheet-note={testid}>
+            {note}
+          </span>
         </div>
       )}
     </div>

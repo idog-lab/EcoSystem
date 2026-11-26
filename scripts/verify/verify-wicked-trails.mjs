@@ -1,8 +1,8 @@
 // WICKED TRAILS (src/features/wickedTrails/lib/wickedTrails.js): two lanes filled together from Brut Wins, the ROE of
 // each BW split between them until the easy lane is done, tiers as shares of a lane, the Final Prize from the takes.
 //   npx vite-node scripts/verify/verify-wicked-trails.mjs
-import { createState, normalizeState, prizeOf, progressAt, resolveEfforts, ruleProblems, stepStatus, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
-import { OPS_HEADERS, buildExport, exportFileName } from '../../src/features/wickedTrails/lib/wickedTrailsExport.js'
+import { carryThrough, createState, normalizeState, prizeOf, progressAt, resolveEfforts, ruleProblems, stepStatus, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
+import { OPS_HEADERS, buildExport, exportFileName, rowSyntax } from '../../src/features/wickedTrails/lib/wickedTrailsExport.js'
 
 let fails = 0
 let total = 0
@@ -97,6 +97,20 @@ check(`RC: every tier 50% more, the Final Prize's coins 40% more (${col('$_Scrip
 check('every row has the example\'s 42 columns', OPS_HEADERS.length === 42 && out.ops[0].length === 42 && out.rc[0].length === 42)
 check(`the file is named as the example (${exportFileName('2026-11-16')})`, exportFileName('2026-11-16') === 't_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx')
 check('a segment not worked out is left out and named', buildExport({ ...ex, segments: [{ ...ex.segments[0], goldPerBW: null }] }).problems.some((p) => /left out/.test(p)))
+
+// The carry along a lane: what a tier leaves goes to the next.
+const cr = carryThrough([{ target: 10, worth: 9 }, { target: 10, worth: 11 }, { target: 10, worth: 12 }])
+check(`1 short on tier 1: tier 2 has 1 more to give; off by is the lane so far (${cr.map((x) => `${x.carry}/${x.aim}/${x.off}`).join(' ')})`, cr[0].off === -1 && cr[1].carry === 1 && cr[1].aim === 11 && cr[1].off === 0 && cr[2].carry === 0 && cr[2].off === 2)
+const ce = carryThrough([{ target: 10, worth: 0 }, { target: 10, worth: 20 }])
+check('a tier with no prize passes its whole target on', ce[1].carry === 10 && ce[1].aim === 20 && ce[1].off === 0)
+const cu = carryThrough([{ target: 10, worth: null }, { target: 10, worth: 10 }])
+check('a worth not known: its off and the carry after it are not known', cu[0].off === null && cu[1].carry === null && cu[1].off === null)
+
+// The row we are on, as Ops gets it.
+const rs = rowSyntax(ex, 0, 'easy-1')
+check(`a lane's last tier, as Ops gets it: its Req (and RC's) and its Res in the chest (${rs.cells[1].ops})`, rs.title === 'Easy lane, tier 2' && rs.cells[0].column === '$_Script->RightMilestone_1_Req' && rs.cells[0].ops === 100 && rs.cells[0].rc === 150 && rs.cells[1].ops === 'chest:silver(trigger:wicked_trails_silver_tier2+free_wild:2)')
+const rf = rowSyntax(ex, 0, 'final')
+check(`the Final Prize, as Ops gets it: RC's coins 40% more (${rf.cells[0].rc})`, rf.cells[0].ops === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:4)+free_entry:1' && rf.cells[0].rc === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:5.6)+free_entry:1')
 
 console.log(`\nWICKED TRAILS: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

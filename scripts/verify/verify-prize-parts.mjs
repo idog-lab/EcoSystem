@@ -1,7 +1,7 @@
 // A PRIZE AS PARTS (src/lib/economy/prizeParts.js): the economist's real prizes read into parts and written back the
 // same; parts picked give the text the Economy page would build.
 //   npx vite-node scripts/verify/verify-prize-parts.mjs
-import { emptyParts, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../src/lib/economy/prizeParts.js'
+import { emptyParts, fallbackText, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../src/lib/economy/prizeParts.js'
 
 let fails = 0
 let total = 0
@@ -40,6 +40,13 @@ check('a trigger is read and written first', readPrize('free_wild:1+trigger:x').
 const kinds = presetsByKind(['mf_25_gameplay_undo', 'puzzle_gameplay_20', 'mini_game_5_gameplay_allowance', 'puzzle_gameplay_10'])
 check('presets by kind: the puzzle, the mini game, the others', kinds.puzzle.amount === 20 && kinds.mini.amount === 5 && kinds.mini.kind === 'allowance' && kinds.others.join() === 'mf_25_gameplay_undo,puzzle_gameplay_10' && presetsFromKinds(kinds).join() === 'puzzle_gameplay_20,mini_game_5_gameplay_allowance,mf_25_gameplay_undo,puzzle_gameplay_10')
 check('a text that cannot be read is kept whole', readPrize('free_wild:(').readable === false && writePrize(readPrize('free_wild:(').parts) === 'free_wild:(')
+
+// Fallbacks for puzzle, mini game and packs.
+const fb = readPrize('[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|[dynamic(dr-hidden:1)]]+[sticker_pack:Golden_T1_1_3G_high_Vague_Game|free_undo:2]').parts
+check(`a pack's fallback is read - a hidden one, a resource (${JSON.stringify(fb.packAlt)})`, fb.packAlt?.kind === 'hidden' && fb.packCounter === false && fb.extra.length === 1)
+check(`and written back the same (${writePrize({ ...emptyParts(), pack: 'X_Pack', packAlt: { kind: 'undo', amount: 2 }, packCounter: true })})`, writePrize(fb).startsWith('[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|[dynamic(dr-hidden:1)]]') && writePrize({ ...emptyParts(), pack: 'X_Pack', packAlt: { kind: 'undo', amount: 2 }, packCounter: true }) === '[sticker_pack:X_Pack|free_undo:2]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]')
+check('a puzzle\'s fallback is in its preset\'s name: puzzle_gameplay_20_undo', presetsByKind(['puzzle_gameplay_20_undo']).puzzle?.fallback === 'undo' && presetsByKind(['puzzle_gameplay_20']).puzzle?.fallback === '')
+check('a fallback with no amount is not written (a hidden one needs none)', writePrize({ ...emptyParts(), pack: 'X_Pack', packAlt: { kind: 'wild', amount: null }, packCounter: false }) === '[sticker_pack:X_Pack]' && fallbackText({ kind: 'hidden' }) === '[dynamic(dr-hidden:1)]')
 
 console.log(`\nPRIZE PARTS: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

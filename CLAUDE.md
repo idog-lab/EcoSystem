@@ -221,7 +221,12 @@ are supposed to also see ... the calculation of the tier vs the amount that shou
 tier, always in sight), The prize (coins, Wild, Extra stock, Undo, Free round, Puzzle and Mini game as amounts taken as
 the nearest preset on the Economy page, what a mini game gives, other presets and a sticker pack typed with suggestions
 and refused when not listed, a chest), More on a tick (DRs, triggers, the pack's coin alternative, the whole text -
-pasteable). The text is written from the parts (`prizeParts.js`: triggers first now). On another segment a part typed
+pasteable). The text is written from the parts (`prizeParts.js`: triggers first now). **Fallbacks** ("we need to have
+fallbacks for puzzle mini game and packs"): a puzzle's and a mini game's is the ending of its preset's name ("the
+puzzle and mini game has the fallback logic in the text of the preset": puzzle_gameplay_20_undo,
+mini_game_5_gameplay_wild - a dropdown cell, the nearest preset that has it), never `[preset:...|...]` (the validator
+refuses a preset in brackets); a pack's is `[sticker_pack:...|<fallback>]` - Coins, Wild, Extra stock, Undo, Free round
+or Hidden (`[dynamic(dr-hidden:1)]`), with its amount. Under the sheet the row we are on as Ops gets it (`rowSyntax`). On another segment a part typed
 makes the prize its own; put back to the base's scaled prize, it follows the base again. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
 and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
 Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of
@@ -275,6 +280,16 @@ to these:
   columns, in sight without scrolling (Wicked Trails: The tier | Against the target | The prize).
 - Worked-out cells are grey and refuse typing with a word; a value refused says why under the sheet; columns that are
   seldom needed sit behind a tick that turns itself on when a row uses them.
+- **Off by runs on** ("the off by also, should be cumulative, if we are -1 from the last tier, we got 1 more allowance
+  to give in the next tier"): a tier's Carry is what the tiers before it in its group left (+ more to give, - less),
+  its Off by is its worth against target + carry - the group so far (`carryThrough`); a tier with no prize gives 0, a
+  worth not known stops the carry.
+- **The row we are on, live under the sheet** ("we will see under the events table a live syntax of the row we are
+  on"): written by the export's own builders, with copy buttons and the checker's findings.
+- **Dropdown cells as Excel's data validation**: Ctrl+Down / Ctrl+Up go through the choices in place, Alt+Down opens.
+- **As little text and as few buttons as possible** ("this comments are not important, the page should be as clean
+  and easy to use as possible. less buttons and text"): a step is one line - what it is for in its hover, "Still
+  needed" in a few words with the list in its hover; no explanatory notes on the page; keys in the sheet's hover.
 
 ## Repository map
 

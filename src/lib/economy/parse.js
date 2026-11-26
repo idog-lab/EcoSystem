@@ -257,7 +257,8 @@ function validate(node, options, add) {
       case 'trigger':
         if (!n.name) once('error', 'trigger: with no name.', 'trigger-name')
         else if (!(options.allowUppercaseTrigger ? TRIGGER_UPPER : TRIGGER).test(n.name)) once('error', `trigger:${n.name}: a trigger is ${options.allowUppercaseTrigger ? '' : 'lower case '}letters, digits and "_".`, 'trigger-name')
-        else if (economy && !findKey(economy, 'triggers', n.name)) once('warning', `The trigger "${n.name}" is not on the Economy page's list.`, 'unknown-key')
+        // Any trigger may be added - they are the analysts' (economist, 26 Nov 2026: "any trigger can be added, those are
+        // used by the analysts"): one off the Economy page's list is not a finding.
         break
       case 'draw':
         if (!n.bucket || !/^\d+$/.test(n.index)) once('error', `${n.fn}(${n.bucket},${n.index}): a draw takes a bucket and a whole number.`, 'draw')
