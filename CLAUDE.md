@@ -57,8 +57,10 @@ When this file and the history disagree, this file wins.
   `docs/history.md` change in almost every piece of work, so expect to merge
   them by hand.
 - Artwork is prototype concept art made by the economist, not studio artwork.
-- **Puzzle** (`src/features/puzzle`, `/models/puzzle`) is the first model whose
-  events are stored on the toolkit server. **Read `docs/puzzle-overview.md`
+- **Puzzle** (`src/features/puzzle`, `/models/puzzle`) keeps its events on the
+  toolkit server where one runs, and otherwise - the live site - in the browser,
+  shared with the team through Team data (`ui/localBackend.ts`, the same routes
+  and rules as the server; `superplay-puzzle` -> `puzzle/events.json`). **Read `docs/puzzle-overview.md`
   before a Puzzle task**: the rules in force, where the approved requirements
   override the workbook, and what is not confirmed. Its engines are ported from
   the workbook with parity tests (`tests/puzzle`, reading the ignored
@@ -1157,7 +1159,7 @@ Diamond Mine). `src/lib/teamData.js`: every tool still saves in the browser,
 and a connected browser copies each save to the private repository
 **`idog-lab/EcoSystem-data`** (one file a thing: `economy/economy.json`,
 `economy/segment-plan.json`, `chef/chefs.json`, `diamond-mine/state.json`,
-`merge/saved-events/<id>.json`), and brings the team's newest in when the app
+`merge/saved-events/<id>.json`, `puzzle/events.json`), and brings the team's newest in when the app
 opens (`main.tsx`, at most 8 s; never on a play link) or on "Get the team's
 latest". Every save is a commit by who made it. A save that finds the file
 changed by someone since is never written over it: the person chooses (the

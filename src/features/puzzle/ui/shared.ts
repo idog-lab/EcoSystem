@@ -18,6 +18,10 @@ export type PuzzleCtx = {
   revision: number | null
   dirty: boolean
   base: string | null
+  /** The server, or this browser's stand-in for it (localBackend.ts): every request goes here. */
+  call: typeof import('../../../platform/api/client').api
+  /** 'server' or 'browser': where the events are kept. */
+  where: 'server' | 'browser'
 }
 
 export const Ctx = createContext<PuzzleCtx | null>(null)

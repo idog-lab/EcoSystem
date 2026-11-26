@@ -5,7 +5,7 @@
 // newer one. A newer revision saved elsewhere is noticed by polling.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../../../platform/api/client'
+import type { api } from '../../../platform/api/client'
 import { createDefaultEvent, type PuzzleEvent } from '../engine/model'
 import { PUZZLE_SCHEMA_VERSION } from '../engine/schema'
 import { newOrders } from '../engine/shuffle'
@@ -18,24 +18,31 @@ const POLL_MS = 10_000
 const DRAFT_KEY = (id: string) => `puzzle-draft:${id}`
 const toOpen = (d: DocDto): OpenDoc => ({ id: d.id, title: d.title, revision: d.revision, payload: d.payload as PuzzleEvent, updatedAt: d.updatedAt })
 
-function readDraft(id: string): PuzzleEvent | null {
+/** Unsaved edits kept in this browser, with the revision they were made from (base). */
+type StoredDraft = { base: number; payload: PuzzleEvent }
+function readDraft(id: string): StoredDraft | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY(id))
-    return raw ? (JSON.parse(raw) as PuzzleEvent) : null
+    if (!raw) return null
+    const v = JSON.parse(raw) as StoredDraft | PuzzleEvent
+    // (A draft kept before the base was recorded: its revision is unknown.)
+    return 'payload' in v && 'base' in v ? v : { base: -1, payload: v as PuzzleEvent }
   } catch {
     return null
   }
 }
-function writeDraft(id: string, ev: PuzzleEvent | null) {
+function writeDraft(id: string, ev: PuzzleEvent | null, base = -1) {
   try {
-    if (ev) localStorage.setItem(DRAFT_KEY(id), JSON.stringify(ev))
+    if (ev) localStorage.setItem(DRAFT_KEY(id), JSON.stringify({ base, payload: ev }))
     else localStorage.removeItem(DRAFT_KEY(id))
   } catch {
     // A browser without storage still works; the draft just does not survive a reload.
   }
 }
 
-export function usePuzzleEvents(workspaceId: string | null) {
+export type Call = typeof api
+
+export function usePuzzleEvents(workspaceId: string | null, api: Call) {
   const [list, setList] = useState<DocSummary[]>([])
   const [doc, setDoc] = useState<OpenDoc | null>(null)
   const [draft, setDraftState] = useState<PuzzleEvent | null>(null)
@@ -45,6 +52,8 @@ export function usePuzzleEvents(workspaceId: string | null) {
   const base = workspaceId ? `/workspaces/${workspaceId}/documents` : null
   const docRef = useRef(doc)
   docRef.current = doc
+  // The revision the edits on screen were made from: a save names it, and a draft kept for later records it.
+  const draftBase = useRef(-1)
 
   const dirty = !!doc && !!draft && JSON.stringify(draft) !== JSON.stringify(doc.payload)
 
@@ -53,7 +62,7 @@ export function usePuzzleEvents(workspaceId: string | null) {
     const res = await api<{ documents: (DocSummary & { modelId: string })[] }>(`${base}?modelId=puzzle`)
     if (res.ok) setList(res.data.documents)
     else setStatus({ kind: 'error', message: res.message })
-  }, [base])
+  }, [base, api])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading from the server on mount
@@ -64,7 +73,7 @@ export function usePuzzleEvents(workspaceId: string | null) {
     setDraftState((cur) => {
       if (!cur) return cur
       const value = typeof next === 'function' ? next(cur) : next
-      if (docRef.current) writeDraft(docRef.current.id, value)
+      if (docRef.current) writeDraft(docRef.current.id, value, draftBase.current)
       return value
     })
   }, [])
@@ -76,12 +85,25 @@ export function usePuzzleEvents(workspaceId: string | null) {
       if (!res.ok) return setStatus({ kind: 'error', message: res.message })
       const d = toOpen(res.data.document)
       setDoc(d)
-      // Unsaved edits of this event in this browser come back.
-      setDraftState(readDraft(id) ?? d.payload)
-      setConflict(null)
       setNewer(null)
+      // Unsaved edits of this event in this browser come back. Made from an older revision (saved since, here or by
+      // someone else), they are never slipped in as current: the newer one is shown as a conflict to choose.
+      const kept = readDraft(id)
+      if (kept && kept.base === d.revision) {
+        draftBase.current = d.revision
+        setDraftState(kept.payload)
+        setConflict(null)
+      } else if (kept && JSON.stringify(kept.payload) !== JSON.stringify(d.payload)) {
+        draftBase.current = kept.base
+        setDraftState(kept.payload)
+        setConflict(d)
+      } else {
+        draftBase.current = d.revision
+        setDraftState(d.payload)
+        setConflict(null)
+      }
     },
-    [base],
+    [base, api],
   )
 
   const create = useCallback(
@@ -97,7 +119,7 @@ export function usePuzzleEvents(workspaceId: string | null) {
       await refreshList()
       await open(res.data.document.id)
     },
-    [base, open, refreshList],
+    [base, api, open, refreshList],
   )
 
   /** A copy of the open event (its saved shuffle included) as a new shared event. */
@@ -119,6 +141,7 @@ export function usePuzzleEvents(workspaceId: string | null) {
       })
       if (res.ok) {
         const d = toOpen(res.data.document)
+        draftBase.current = d.revision
         setDoc(d)
         setDraftState(d.payload)
         writeDraft(d.id, null)
@@ -137,16 +160,18 @@ export function usePuzzleEvents(workspaceId: string | null) {
       setStatus({ kind: 'error', message: res.message })
       return false
     },
-    [base, doc, refreshList],
+    [base, api, doc, refreshList],
   )
 
-  const save = useCallback(() => (doc && draft ? saveAt(doc.revision, draft) : Promise.resolve(false)), [doc, draft, saveAt])
+  // A save names the revision the edits were made from - never simply the newest one.
+  const save = useCallback(() => (doc && draft ? saveAt(draftBase.current, draft) : Promise.resolve(false)), [doc, draft, saveAt])
   /** Keep my edits: save them on top of the newer revision (it stays in the history). */
   const keepMine = useCallback(() => (conflict && draft ? saveAt(conflict.revision, draft) : Promise.resolve(false)), [conflict, draft, saveAt])
   /** Take the newer revision; my edits are dropped. */
   const takeTheirs = useCallback(() => {
     const theirs = conflict ?? newer
     if (!theirs) return
+    draftBase.current = theirs.revision
     setDoc(theirs)
     setDraftState(theirs.payload)
     writeDraft(theirs.id, null)
@@ -170,12 +195,13 @@ export function usePuzzleEvents(workspaceId: string | null) {
           setNewer(d)
           return dr
         }
+        draftBase.current = d.revision
         setDoc(d)
         return d.payload
       })
     }, POLL_MS)
     return () => clearInterval(t)
-  }, [base, doc])
+  }, [base, api, doc])
 
   /** Back to the list; unsaved edits stay in this browser for the next open. */
   const close = useCallback(() => {
@@ -186,5 +212,5 @@ export function usePuzzleEvents(workspaceId: string | null) {
     void refreshList()
   }, [refreshList])
 
-  return { list, doc, draft, setDraft, dirty, open, close, create, clone, save, keepMine, takeTheirs, conflict, newer, status, refreshList, base }
+  return { call: api, list, doc, draft, setDraft, dirty, open, close, create, clone, save, keepMine, takeTheirs, conflict, newer, status, refreshList, base }
 }

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api } from '../../../platform/api/client'
 import { ENGINE_VERSION, computeAll, fingerprint } from '../engine/compute'
 import { buildExportPlan, exportTitle, TEMPLATES, type ExportPlan } from '../engine/exportPlan'
 import type { PuzzleEvent } from '../engine/model'
@@ -12,7 +11,7 @@ import { usePuzzle } from './shared'
 type ExportRow = { id: string; revision: number; kind: string; target: { url?: string; title?: string }; fingerprint: string; by: string; createdAt: string }
 
 export function StepReview() {
-  const { ev, results, docId, revision, dirty, base } = usePuzzle()
+  const { ev, results, docId, revision, dirty, base, call } = usePuzzle()
   const blocks = results.problems.filter((p) => p.level === 'block')
   const warns = results.problems.filter((p) => p.level === 'warn')
   const plan = useMemo(() => buildExportPlan(ev, results), [ev, results])
@@ -25,13 +24,13 @@ export function StepReview() {
 
   const load = useCallback(async () => {
     if (!docBase) return
-    const r = await api<{ exports: ExportRow[] }>(`${docBase}/exports`)
+    const r = await call<{ exports: ExportRow[] }>(`${docBase}/exports`)
     if (r.ok) setExports(r.data.exports)
     if (revision && revision > 1) {
-      const p = await api<{ revision: { payload: PuzzleEvent } }>(`${docBase}/revisions/${revision - 1}`)
+      const p = await call<{ revision: { payload: PuzzleEvent } }>(`${docBase}/revisions/${revision - 1}`)
       if (p.ok) setPrev(p.data.revision.payload)
     }
-  }, [docBase, revision])
+  }, [docBase, revision, call])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading from the server
     void load()
@@ -50,7 +49,7 @@ export function StepReview() {
       // The plan is rebuilt from the saved event, so what is sent is exactly the revision it names.
       const fresh = buildExportPlan(ev, computeAll(ev)) as ExportPlan
       const out = await exportToGoogleSheets(fresh, id, name.trim() || fresh.title)
-      await api(`${docBase}/exports`, {
+      await call(`${docBase}/exports`, {
         method: 'POST',
         body: { revision, kind: 'google-sheets', target: { url: out.url, title: out.title, folderId: id, template: TEMPLATES[fresh.template].url }, engineVersion: ENGINE_VERSION, fingerprint: current, snapshot: fresh },
       })
