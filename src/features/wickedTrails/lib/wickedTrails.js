@@ -51,6 +51,10 @@ export function createState() {
     baseIndex: 0,
     segmentSet: null,
     startDate: '',
+    // The feature's days, from its first day (DR values that change over them are averaged); this app's own start: 2.
+    days: 2,
+    // The mini game it uses when the calendar does not say ('merge' | 'diamond-mine').
+    miniGame: '',
   }
 }
 function normalizeLane(raw) {
@@ -83,6 +87,8 @@ export function normalizeState(raw) {
     baseIndex: Number.isInteger(raw.baseIndex) ? raw.baseIndex : 0,
     segmentSet: raw.segmentSet && typeof raw.segmentSet === 'object' ? raw.segmentSet : null,
     startDate: typeof raw.startDate === 'string' ? raw.startDate : '',
+    days: Number.isInteger(raw.days) && raw.days >= 1 ? raw.days : 2,
+    miniGame: raw.miniGame === 'merge' || raw.miniGame === 'diamond-mine' ? raw.miniGame : '',
   })
 }
 
@@ -242,7 +248,8 @@ export function stepStatus(state, readable = () => true) {
   }
   const problems = ruleProblems(state)
   const laneProblem = (p) => LANES.some((l) => p.startsWith(`${l.label}:`))
-  const rulesMissing = problems.filter((p) => !laneProblem(p))
+  // The first day: the DR values (puzzle, pet, the mini game) are read from the calendar on the feature's days.
+  const rulesMissing = [...(state.startDate ? [] : ["Pick the first day: the DR values are read on the feature's days."]), ...problems.filter((p) => !laneProblem(p))]
   const tiersMissing = problems.filter(laneProblem)
   const prizesMissing = []
   const places = [...LANES.flatMap((l) => state.lanes[l.id].shares.map((_, i) => placeKey(l.id, i))), 'final']

@@ -78,7 +78,8 @@ check('a factor not typed is asked for', eff.F.effortBW === null && /factor of A
 check('an old save (effortBW only) reads as typed', normalizeState({ segments: [{ name: 'X', key: 'x', effortBW: 42 }] }).segments[0].effortTyped === 42)
 
 // What each step still needs.
-const st = stepStatus(normalizeState(state))
+check('the rules ask for the first day: the DR values are read on the feature\'s days', stepStatus(normalizeState(state)).rules.missing.some((m) => /Pick the first day/.test(m)) && normalizeState(state).days === 2)
+const st = stepStatus(normalizeState({ ...state, startDate: '2026-12-01' }))
 check(`steps: segments, rules and tiers are done; prizes name what is missing (${st.prizes.missing.length})`, st.segments.done && st.rules.done && st.tiers.done && !st.prizes.done && st.prizes.missing.some((m) => /Hard lane, tier 1: no prize yet/.test(m)) && st.prizes.missing.some((m) => /Final Prize/.test(m)))
 check('a new feature: every step says what it needs', !stepStatus(createState()).segments.done && stepStatus(createState()).rules.missing.some((m) => /ROE/.test(m)))
 

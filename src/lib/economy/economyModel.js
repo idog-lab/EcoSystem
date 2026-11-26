@@ -350,8 +350,34 @@ export function createEconomy(overrides = {}) {
     currencies,
     keys,
     chefBaskets: { ...DEFAULT_CHEF_BASKET_VALUES, ...(overrides.chefBaskets ?? {}) },
+    calendar: normalizeCalendar(overrides.calendar),
     updatedAt: overrides.updatedAt ?? null,
   })
+}
+
+// THE CALENDAR (economist, 26 Nov 2026: "we need that the system will hold some kind of a calendar, that he will know
+// the prices of specific DRs with the calendar when we create features"; "the mini game should show the specific merge
+// or diamond mine that is live. when we will have the full system, it will know which one is live in the same days").
+// The DR values by date are the currencies' own (dr-puzzle a day, dr-pet a week); the calendar adds which mini game is
+// live in a period ("Which one is live, by day"): [{ from, to, game }].
+export const MINI_GAMES = [
+  { id: 'merge', label: 'Merge', currency: 'dr-merge' },
+  { id: 'diamond-mine', label: 'Diamond Mine', currency: 'dr-pickaxe' },
+]
+export const miniGameOf = (id) => MINI_GAMES.find((g) => g.id === id) ?? null
+export function normalizeCalendar(raw) {
+  const miniGames = (Array.isArray(raw?.miniGames) ? raw.miniGames : [])
+    .filter((p) => p && isRealDate(p.from) && isRealDate(p.to) && p.from <= p.to && miniGameOf(p.game))
+    .map((p) => ({ from: p.from, to: p.to, game: p.game }))
+    .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
+  return { miniGames }
+}
+// The mini game live on a date: its id, or null when the calendar does not say.
+export const liveMiniGame = (economy, date) => (date ? (economy?.calendar?.miniGames ?? []).find((p) => p.from <= date && date <= p.to)?.game ?? null : null)
+// The days of a feature: its first day and the next ones, [YYYY-MM-DD].
+export function featureDays(from, days = 1) {
+  if (!isRealDate(from)) return []
+  return Array.from({ length: Math.max(1, Math.round(days) || 1) }, (_, i) => addDays(from, i))
 }
 
 // A currency always in the game saved with values by date in the older writing (`daily`, dr-puzzle's): each date
@@ -390,6 +416,7 @@ export function normalizeEconomy(raw) {
     currencies: Array.isArray(raw.currencies) ? upgrade(raw.currencies, Number(raw.version) || 1) : undefined,
     keys: upgradeKeys(raw.keys, Number(raw.version) || 1),
     chefBaskets: raw.chefBaskets,
+    calendar: raw.calendar,
     updatedAt: raw.updatedAt ?? null,
   })
 }
@@ -459,14 +486,32 @@ const KNOWN_CURRENCY_NAMES = new Set([...GAME_CURRENCIES, ...VALIDATOR_CURRENCIE
 export const isKnownCurrencyName = (name) => KNOWN_CURRENCY_NAMES.has(name)
 export const findKey = (economy, listId, key) => (economy?.keys?.[listId] ?? []).find((k) => k.key === key) ?? null
 
-// A preset's worth: a listed one's value, or a Chef basket's tier value.
-export function presetValue(economy, key) {
+// A preset's worth: a listed one's value, a Chef basket's tier value, or - for a puzzle, a pet or a mini game preset -
+// its amount x its DR's value on the date (economist, 26 Nov 2026: "Amount x the DR's value"): puzzle_gameplay_<n>...
+// x dr-puzzle, mf_<n>_... x dr-pet, mini_game_<n>_... x the live mini game's (dr-merge for Merge, dr-pickaxe for
+// Diamond Mine - `miniGame`, or the calendar's on the date). The fallback ending does not change the worth.
+// { value, from, note } or null (with `why` when the rule could not be read).
+const PRESET_DR = [
+  { re: /^puzzle_gameplay_(\d+)(?:_[a-z]+)?$/, currency: () => 'dr-puzzle', label: 'puzzle' },
+  { re: /^mf_(\d+)_[a-z_]+$/, currency: () => 'dr-pet', label: 'pet' },
+  { re: /^mini_game_(\d+)_gameplay_[a-z]+$/, currency: (economy, date, miniGame) => miniGameOf(miniGame ?? liveMiniGame(economy, date))?.currency ?? null, label: 'mini game' },
+]
+export function presetValue(economy, key, { date = null, miniGame = null } = {}) {
   const listed = findKey(economy, 'presets', key)
   if (listed && listed.value != null && listed.value !== '') return { value: Number(listed.value), from: 'list' }
   const m = String(key).match(CHEF_BASKET_TIER)
   if (m) {
     const v = economy?.chefBaskets?.[m[1]]
     return v == null ? null : { value: Number(v), from: 'chef-basket', tier: m[1] }
+  }
+  for (const rule of PRESET_DR) {
+    const hit = String(key).match(rule.re)
+    if (!hit) continue
+    const name = rule.currency(economy, date, miniGame)
+    if (!name) return { value: null, why: `which mini game is live${date ? ` on ${date}` : ''} is not known` }
+    const v = currencyValue(findCurrency(economy, name), { date })
+    if (!v) return { value: null, why: `${name} has no value${date ? ` on ${date}` : ''}` }
+    return { value: Number(hit[1]) * v.value, from: 'dr', note: `${hit[1]} x ${name} ${v.value}` }
   }
   return null
 }

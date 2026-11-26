@@ -8713,3 +8713,26 @@ wicked-trails 55, economy-page 111, merge-prizes 18.
 26 Nov 2026, of the "As Ops gets it" panel: "lets leave the RC sytnax in the
 AS OPS GETS IT" - asked which way, "Take RC out": the panel shows Config OPS
 only; Config RC OPS stays in the export. e2e wicked-trails 55.
+## A calendar: DR values by date, and the mini game live
+
+26 Nov 2026, three asks in a row: "the mini game should show the specific
+merge or diamond mine that is live. when we will ahve the full system, it
+will know which one is live in the same days, as for now we need to make sure
+the model knows which mini game it uses"; "we got to have the date of the
+feature, this is the only way it will know the values of resources like pet
+and puzzle and later mini game"; "we need that the system will hold some kind
+of a calendare, that he will know the prices of specific DRs with the
+calendare when we create features". Asked: a preset's worth - "Amount x the
+DR's value" (puzzle x dr-puzzle, mf x dr-pet, mini game x dr-merge or
+dr-pickaxe); which day - "if there is a change in values of DRs we take the
+average of them"; the mini game - "Which one is live, by day".
+Built: the Economy page's Calendar tab (a month of days with the puzzle and
+pet values and the live mini game; mini game periods added, an overlap
+refused); presetValue reads a puzzle, pet or mini game preset by the rule (so
+those prizes have a worth when the values are typed); prizeAgainstWorth
+averages over a feature's days. Wicked Trails: Rules opens with When - the
+first day (asked for), the days (2), the mini game (the calendar's, else
+picked) - and the prize sheet's mini game column is headed Merge or Diamond
+Mine. verify-calendar 13, verify-wicked-trails 43, e2e wicked-trails 59,
+economy-page 111. (A test edit removed the wrong date line once; found with a
+probe - the app was right.)

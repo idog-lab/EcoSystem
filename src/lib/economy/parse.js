@@ -332,7 +332,9 @@ export function checkReward(text, options = {}) {
 // worth is the first's, the others are listed. A part whose worth is not
 // known makes the total unknown (null) - `known` is what could be added up.
 // { worth, known, lines: [{ text, worth, note }], unknown: [text] }
-export function rewardWorth(textOrNode, economy, { date = null } = {}) {
+// `miniGame` ('merge' | 'diamond-mine'): the mini game a feature uses, for a mini game preset's worth when the
+// calendar does not say (economyModel presetValue).
+export function rewardWorth(textOrNode, economy, { date = null, miniGame = null } = {}) {
   const node = typeof textOrNode === 'string' ? parseReward(textOrNode, { economy }).node : textOrNode
   const lines = []
   const unknown = []
@@ -384,8 +386,9 @@ export function rewardWorth(textOrNode, economy, { date = null } = {}) {
         return line(n, v == null || v === '' ? null : Number(v), v == null || v === '' ? 'no pack allowance given' : 'pack allowance')
       }
       case 'preset': {
-        const v = presetValue(economy, n.key)
-        return line(n, v ? v.value : null, v ? (v.from === 'chef-basket' ? `a ${v.tier} Chef basket` : '') : 'no worth given for it')
+        const v = presetValue(economy, n.key, { date, miniGame })
+        if (v?.value == null) return line(n, null, v?.why ?? 'no worth given for it')
+        return line(n, v.value, v.from === 'chef-basket' ? `a ${v.tier} Chef basket` : (v.note ?? ''))
       }
       case 'trigger':
         return line(n, 0, 'no value')

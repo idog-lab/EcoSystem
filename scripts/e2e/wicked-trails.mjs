@@ -61,6 +61,25 @@ const effort = (id) => page.locator(`[data-set-segment="${id}"] [data-set-effort
 await set(effort('BW_0_9'), 100)
 await set(effort('BW_9_18'), 200)
 await set(effort('BW_18_Plus'), 300)
+// The calendar: Merge is live on the feature's days.
+await page.locator('[data-tab="calendar"]').click()
+await page.waitForTimeout(250)
+await page.getByTestId('calendar-from').fill('2026-11-16')
+await page.getByTestId('calendar-to').fill('2026-11-17')
+await page.getByTestId('calendar-game').selectOption('merge')
+await page.getByTestId('calendar-add-period').click()
+await page.waitForTimeout(250)
+await page.getByTestId('calendar-next').click()
+await page.getByTestId('calendar-prev').click()
+for (let i = 0; i < 12 && !(await page.locator('[data-day="2026-11-16"]').count()); i += 1) {
+  await page.getByTestId('calendar-next').click()
+  await page.waitForTimeout(60)
+}
+ok(`the Economy page's calendar holds which mini game is live (${await text(page.locator('[data-day="2026-11-16"]'))})`, (await page.locator('[data-period]').count()) === 1 && (await page.locator('[data-day="2026-11-16"] [data-day-game="merge"]').count()) === 1 && (await page.locator('[data-day="2026-11-18"] [data-day-game]').count()) === 0)
+await page.getByTestId('calendar-from').fill('2026-11-17')
+await page.getByTestId('calendar-to').fill('2026-11-20')
+await page.getByTestId('calendar-add-period').click()
+ok(`a period that overlaps one is refused, and why (${await text(page.getByTestId('calendar-message'))})`, /overlaps Merge/.test(await text(page.getByTestId('calendar-message'))) && (await page.locator('[data-period]').count()) === 1)
 
 // Step 1: the segments, as a sheet.
 await page.goto(BASE, { waitUntil: 'networkidle' })
@@ -111,8 +130,13 @@ ok('a worked-out cell cannot be typed over', (await cellText('wt-segments', 0, 9
 // Step 2: the rules, reached with Next.
 await page.getByTestId('wt-next').click()
 await page.waitForTimeout(250)
-ok('Next leads to the rules, which ask for the ROE', (await page.locator('[data-step="rules"]').getAttribute('aria-current')) === 'step' && /ROE/.test(await text(page.getByTestId('wt-step-missing'))))
+ok('Next leads to the rules, which ask for the ROE', (await page.locator('[data-step="rules"]').getAttribute('aria-current')) === 'step' && /ROE/.test(await page.getByTestId('wt-step-missing').getAttribute('title')))
 await set(page.locator('[data-rule="roe"]'), 1)
+ok('the rules ask for the first day', /first day/.test(await page.getByTestId('wt-step-missing').getAttribute('title')))
+await page.waitForTimeout(250)
+await page.getByTestId('wt-start-date').fill('2026-11-16')
+await page.waitForTimeout(250)
+ok(`the first day picked: the calendar says Merge is live (${await text(page.getByTestId('wt-mini-game'))})`, (await page.getByTestId('wt-mini-game').getAttribute('data-mini-game')) === 'merge' && /Merge/.test(await text(page.getByTestId('wt-mini-game'))) && (await page.getByTestId('wt-days').inputValue()) === '2')
 await set(page.locator('[data-rule="easyShare"]'), 50)
 
 // Step 3: tiers and prizes, one sheet, the prize in columns. Rows: easy-0, easy-1, hard-0, hard-1, final; a cell is
@@ -135,7 +159,7 @@ ok(`"Still needed" in a few words, the whole list in its hover (${await text(pag
 const groups = await sheet(T).locator('[data-sheet-group]').allInnerTexts()
 ok(`one sheet: both lanes' tiers and the Final Prize, under The tier / Against the target / The prize - the target in sight beside the tier (${groups.join(' | ')})`, (await sheet(T).locator('tbody tr').count()) === 5 && (await val('final', 'lane')) === 'Final Prize' && groups.join('|').toLowerCase() === 'the tier|against the target|the prize')
 const prizeCols = await sheet(T).locator('thead tr').last().locator('th').allInnerTexts()
-ok(`the prize's columns: the core resources, puzzle, mini game, presets, a sticker pack, a chest (${prizeCols.map((c) => c.split('\n')[0]).join(', ')})`, ['COINS', 'WILD', 'EXTRA STOCK', 'UNDO', 'FREE ROUND', 'PUZZLE', 'MINI GAME', 'OTHER PRESETS', 'STICKER PACK', 'CHEST'].every((c) => prizeCols.some((h) => h.toUpperCase().startsWith(c))))
+ok(`the prize's columns: the core resources, puzzle, mini game, presets, a sticker pack, a chest (${prizeCols.map((c) => c.split('\n')[0]).join(', ')})`, ['COINS', 'WILD', 'EXTRA STOCK', 'UNDO', 'FREE ROUND', 'PUZZLE', 'MERGE', 'OTHER PRESETS', 'STICKER PACK', 'CHEST'].every((c) => prizeCols.some((h) => h.toUpperCase().startsWith(c))))
 ok('easy tiers: 50 silver each, 80% kept: 10', (await val('easy-0', 'drTotal')) === '50' && (await val('easy-0', 'target')) === '10' && (await val('easy-1', 'target')) === '10')
 ok('hard tiers: 150 gold each; 60% kept: 15 and 30', (await val('hard-0', 'drTotal')) === '150' && (await val('hard-0', 'target')) === '15' && (await val('hard-1', 'target')) === '30')
 ok(`the Final Prize: pool 35, target 70 (${await text(page.locator('[data-field="pool"]'))}, ${await val('final', 'target')})`, (await text(page.locator('[data-field="pool"]'))) === '35' && (await val('final', 'target')) === '70')
@@ -241,7 +265,6 @@ ok('after the whole effort both lanes are done: 2/2', (await text(page.getByTest
 // Step 5: the export.
 await page.getByTestId('wt-next').click()
 await page.waitForTimeout(250)
-await page.getByTestId('wt-start-date').fill('2026-11-16')
 await page.waitForTimeout(200)
 ok(`the file is named as the example (${await text(page.getByTestId('wt-file-name'))})`, (await text(page.getByTestId('wt-file-name'))) === 't_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx')
 const col = (column, which = 'ops') => text(page.locator(`[data-export-column="${column}"] [data-export-${which}]`))
