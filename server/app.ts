@@ -9,6 +9,8 @@ import { devSignInRoutes, meRoutes, requireIdentity, requireMembership, sessionR
 import { organizationRoutes } from './modules/organization/routes'
 import { createDocumentService } from './modules/documents/service'
 import { documentRoutes } from './modules/documents/routes'
+import { createRecordService } from './modules/records/service'
+import { recordRoutes } from './modules/records/routes'
 import { DOCUMENT_SCHEMAS, type PayloadSchemaRegistry } from './modules/documents/schemas'
 import { createAssumptionService } from './modules/assumptions/service'
 import { assumptionRoutes } from './modules/assumptions/routes'
@@ -50,6 +52,7 @@ export function createApp({ db, config, auth = createAuth(db, config), documentS
   const resolveIdentity: IdentityResolver = createIdentityResolver(db, auth, config)
   const documents = createDocumentService(db, documentSchemas)
   const assumptions = createAssumptionService(db, assumptionSchemas)
+  const records = createRecordService(db)
 
   const app = new Hono<AppEnv>().basePath('/api')
   app.onError(errorResponse)
@@ -71,6 +74,7 @@ export function createApp({ db, config, auth = createAuth(db, config), documentS
 
   app.use('/workspaces/:workspaceId/*', requireIdentity(resolveIdentity), requireMembership(db))
   app.route('/workspaces/:workspaceId', organizationRoutes(db))
+  app.route('/workspaces/:workspaceId/documents/:documentId', recordRoutes(records))
   app.route('/workspaces/:workspaceId/documents', documentRoutes(documents))
   app.route('/workspaces/:workspaceId/assumptions', assumptionRoutes(assumptions))
 

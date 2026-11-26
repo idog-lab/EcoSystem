@@ -19,5 +19,5 @@
     "resolveJsonModule": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src/platform", "src/models", "server", "tests", "prisma.config.ts", "vitest.config.ts", "src/main.tsx"]
+  "include": ["src/platform", "src/models", "src/features/puzzle", "server", "tests", "prisma.config.ts", "vitest.config.ts", "src/main.tsx"]
 }

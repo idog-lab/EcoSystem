@@ -68,8 +68,8 @@ export const MODEL_CATALOG = [
     slug: 'puzzle',
     displayName: 'Puzzle',
     iconKey: 'puzzle',
-    moduleKey: 'not-migrated',
-    status: 'not-migrated',
+    moduleKey: 'puzzle',
+    status: 'available',
     sources: [{ kind: 'workbook-sheet-family', family: 'Puzzle', status: 'name-unverified' }],
   },
   // Added on request (25 Nov 2026): listed, not built yet. No workbook

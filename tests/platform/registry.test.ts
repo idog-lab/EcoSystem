@@ -41,7 +41,7 @@ describe('the model registry', () => {
     }
   }, 120_000)
 
-  it('the existing tools stay available, Wicked Trails is built; every other new one says it is not migrated', () => {
+  it('the existing tools stay available, Wicked Trails and Puzzle are built; every other new one says it is not migrated', () => {
     const status = Object.fromEntries(MODEL_CATALOG.map((m) => [m.id, m.status]))
     expect(status).toEqual({
       'merge-mania': 'available',
@@ -52,7 +52,7 @@ describe('the model registry', () => {
       'wicked-trails': 'available',
       momentum: 'not-migrated',
       challenge: 'not-migrated',
-      puzzle: 'not-migrated',
+      puzzle: 'available',
     })
     for (const m of MODEL_CATALOG) expect(m.moduleKey === 'not-migrated').toBe(m.status === 'not-migrated')
   })

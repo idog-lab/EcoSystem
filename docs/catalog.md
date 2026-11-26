@@ -12,7 +12,7 @@ work, and nothing about a model's economics is inferred from sheet names.
 | Economy | `/models/economy` | existing page | none recorded | no verified one-to-one mapping |
 | Momentum | `/models/momentum` | Model not migrated yet | its own family ("Momentum"?) | name not checked |
 | Challenge | `/models/challenge` | Model not migrated yet | Challenges | stated |
-| Puzzle | `/models/puzzle` | Model not migrated yet | its own family ("Puzzle"?) | name not checked |
+| Puzzle | `/models/puzzle` | **Built 26 Nov 2026** (docs/puzzle-overview.md) | sheets Puzzle, Puzzle - Pieces Cost / Rewards / Config / RC Simulator, RC config new, RC Segments Generator, Maleficent (+ Configs), Puzzle CC Management | read and ported |
 
 "Name not checked": the brief says these have corresponding sheet families,
 and the family name is assumed to be the model's name until someone checks it

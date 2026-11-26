@@ -39,7 +39,8 @@ const vite = await createServer({
 })
 await vite.listen()
 
-const browser = await chromium.launch()
+// E2E_CHROMIUM_PATH: a Chromium of this machine when the pinned Playwright's own is not installed.
+const browser = await chromium.launch(process.env.E2E_CHROMIUM_PATH ? { executablePath: process.env.E2E_CHROMIUM_PATH } : {})
 const pageErrors = []
 async function person(email) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
@@ -192,9 +193,9 @@ try {
   // A click (not a drag) opens the model; Back returns to the same view.
   await ana.goto(`${BASE}?q=pu`, { waitUntil: 'networkidle' })
   await ana.getByRole('link', { name: 'Puzzle' }).click()
-  await ana.getByRole('heading', { name: 'Model not migrated yet' }).waitFor()
+  await ana.getByTestId('puzzle-page').waitFor()
   ok('a click opens the model at its own address', url(ana).pathname === '/EcoSystem/models/puzzle')
-  await ana.getByRole('button', { name: 'All models' }).click()
+  await ana.getByRole('button', { name: 'Models' }).click()
   ok('"All models" goes back to the home page as it was left', url(ana).searchParams.get('q') === 'pu' && JSON.stringify(await cardNames(ana)) === '["Puzzle"]')
 
   await ana.goto(`${BASE}?folder=no-such-folder`, { waitUntil: 'networkidle' })

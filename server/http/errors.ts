@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'unknown_model'
   | 'validation'
   | 'invalid_folder'
+  | 'invalid_revision'
   | 'duplicate_name'
   | 'conflict'
   | 'no_schema'

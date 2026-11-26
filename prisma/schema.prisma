@@ -30,6 +30,9 @@ model User {
   memberships         Membership[]
   documentRevisions   DocumentRevision[]
   assumptionRevisions AssumptionRevision[]
+  documentExports     DocumentExport[]
+  liveRuns            LiveRun[]
+  observedResults     ObservedResult[]
 
   @@map("user")
 }
@@ -166,6 +169,9 @@ model ModelDocument {
   updatedAt     DateTime @updatedAt
 
   revisions DocumentRevision[]
+  exports   DocumentExport[]
+  liveRuns  LiveRun[]
+  results   ObservedResult[]
 
   @@index([workspaceId, modelId])
 }
@@ -220,4 +226,69 @@ model AssumptionRevision {
   createdAt       DateTime      @default(now())
 
   @@unique([assumptionSetId, revision])
+}
+
+// ---- What happened to a document after it was saved --------------------
+// All three are append-only (a trigger refuses UPDATE and DELETE): an export,
+// which revision really ran live, and results measured afterwards are history.
+
+// One output made from one saved revision (a Google Sheet, a text copy).
+model DocumentExport {
+  id            String        @id @default(cuid())
+  documentId    String
+  document      ModelDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  revision      Int
+  kind          String
+  target        Json
+  engineVersion String
+  fingerprint   String
+  /** The cell writes or text as sent, so an export can be read again exactly. */
+  snapshot      Json
+  actorId       String
+  actor         User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt     DateTime      @default(now())
+
+  @@index([documentId, createdAt])
+}
+
+// "From this moment, this revision is live for this event" - a change in the
+// middle of an event is a new row. revision null = the event ended.
+model LiveRun {
+  id            String        @id @default(cuid())
+  documentId    String
+  document      ModelDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  eventId       String
+  revision      Int?
+  effectiveFrom DateTime
+  note          String        @default("")
+  actorId       String
+  actor         User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt     DateTime      @default(now())
+
+  @@index([documentId, eventId, effectiveFrom])
+}
+
+// One measured number (from Looker or an import), joined to the live
+// revision(s) of its measurement window when it was stored.
+model ObservedResult {
+  id              String        @id @default(cuid())
+  documentId      String
+  document        ModelDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  eventId         String
+  segment         Int?
+  metric          String
+  value           Float?
+  sampleSize      Int?
+  population      String
+  windowStart     DateTime
+  windowEnd       DateTime
+  source          String
+  refreshedAt     DateTime
+  /** The live revisions in force during the window ([] = no recorded run: never a training label). */
+  liveRevisions   Json
+  actorId         String
+  actor           User          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@index([documentId, eventId])
 }
