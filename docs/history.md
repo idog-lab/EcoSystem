@@ -8603,3 +8603,18 @@ makes every later part of each mode split follow the part before it. A
 feature that takes the set gets the efforts worked out (Merge: 50, 75, 100,
 150 in the test); Wicked Trails keeps the link by its own keys.
 verify-segment-sets 29, e2e segment-sets 25.
+## Prizes built from parts
+
+26 Nov 2026: "as for the prizes. we need to have a better way to create the
+prizes. its too hard to just write syntax." A prize builder, shared by every
+feature (src/components/PrizeBuilder.jsx, lib/economy/prizeParts.js): coins in
+allowance with an optional bucket, Wild, Extra stock, Undo, Free round,
+presets and a sticker pack searched on the Economy page's own lists (only a
+listed key is taken), the pack counter and a coin alternative, currencies, a
+chest - the text written by the Economy page's syntax builders in the order
+of 2.3, shown under it, and "Write the text myself" for the rest. An existing
+prize is read back into its parts; what has no field is kept as written, so
+the four real prizes of the economist's Wicked Trails export come back whole.
+In Wicked Trails each prize shows its text and worth with Build / Edit; in
+Merge's Prizes step a "Build" button sits beside the text field.
+verify-prize-parts 13, e2e wicked-trails 28, merge-prizes 18.

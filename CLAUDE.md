@@ -183,7 +183,17 @@ amounts, lower case triggers, an unknown currency, bucket or preset an
 error, and its prize count with its limits; where the validator is looser the
 app's stricter rule stays (economist: "keep both") - docs/economy-rules.md, "The validator's
 rules". Merge's Syntax tab reads its item text with the checker
-(a reading only). Diamond Mine is not connected. Open questions are listed in
+(a reading only). **Prizes are built, not typed** (economist, 26 Nov 2026: "we
+need to have a better way to create the prizes. its too hard to just write
+syntax"): `src/components/PrizeBuilder.jsx` and `lib/economy/prizeParts.js` -
+coins (and a bucket), Wild, Extra stock, Undo, Free round, presets and a
+sticker pack searched on the Economy page's lists (a key not on them is not
+taken), its pack counter and coin alternative, currencies, a chest; the text
+is written by the syntax builders and shown, "Write the text myself" stays.
+A text is read back into parts (what has no field, a trigger say, is kept as
+written), so the economist's real prizes come back whole. Wicked Trails'
+Prizes step and Merge's Prizes step ("Build" beside the field) use it.
+Diamond Mine is not connected. Open questions are listed in
 that file.
 
 ## Wicked Trails (the first level feature)

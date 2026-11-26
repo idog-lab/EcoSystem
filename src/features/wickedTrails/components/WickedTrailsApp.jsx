@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Download, Map as MapIcon } from 'lucide-react'
 import Card from '../../../components/ui/Card'
+import PrizeBuilder from '../../../components/PrizeBuilder'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
@@ -51,12 +52,6 @@ function Num({ value, onCommit, className = 'w-20', ...props }) {
     else setText(value == null ? '' : String(value))
   }
   return <input inputMode="decimal" value={text} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} className={`${INPUT} ${className} tabular-nums`} {...props} />
-}
-// A text field that takes its value on leaving it.
-function Text({ value, onCommit, className = '', ...props }) {
-  const [text, setText] = useState(value ?? '')
-  useEffect(() => setText(value ?? ''), [value])
-  return <input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== (value ?? '') && onCommit(text)} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} className={`${INPUT} ${className}`} {...props} />
 }
 
 export default function WickedTrailsApp({ onHome }) {
@@ -532,9 +527,17 @@ function PrizeField({ state, change, index, place, economy, target, limit, class
       }
       return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: text.trim() } } : x)) }
     })
+  const [open, setOpen] = useState(false)
   return (
     <div className={`flex ${className} flex-col gap-0.5`}>
-      <Text value={p.text} onCommit={commit} placeholder={isBase ? 'Type the prize: free_undo:5+allowance(coins:2)' : 'The base\'s, scaled'} className="w-full font-mono text-[12.5px]" aria-label={`Prize ${place}`} data-prize-input={place} />
+      <div className="flex items-start gap-2">
+        <code className={`min-w-0 flex-1 break-all rounded-lg px-2 py-1 font-mono text-[12px] ring-1 ${p.text ? 'bg-white text-slate-700 ring-slate-200' : 'bg-slate-50 text-slate-400 ring-slate-100'}`} data-prize-text={place}>
+          {p.text || 'no prize yet'}
+        </code>
+        <button type="button" onClick={() => setOpen((v) => !v)} className={`shrink-0 ${open ? PRIMARY : BUTTON} !py-1`} aria-expanded={open} data-prize-build={place}>
+          {open ? 'Done' : p.text ? 'Edit' : 'Build'}
+        </button>
+      </div>
       <div className="flex flex-wrap items-center gap-x-2 text-[11px]">
         <span data-prize-gap={place}>
           <Gap check={check} target={target} />
@@ -551,6 +554,7 @@ function PrizeField({ state, change, index, place, economy, target, limit, class
           </span>
         ))}
       </div>
+      {open && <PrizeBuilder value={p.text} onChange={commit} economy={economy} testid={place} />}
     </div>
   )
 }
