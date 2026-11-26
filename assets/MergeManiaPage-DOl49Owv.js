@@ -1,0 +1,1 @@
+import{l as e}from"./index-D6DbPA01.js";import{EditorApp as t}from"./App-CmF_Aam2.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
