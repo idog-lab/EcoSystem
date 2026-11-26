@@ -760,7 +760,18 @@ and then the item ladder is created from the base on the others").
   each segment's effort (`effortBW`, a column in the demand table; Segment 1
   keeps `segmentSet`: id, name, time); when the set changes later, step 1
   says so and offers "Take its new numbers". The effort is not turned into a
-  DR demand - not taught yet. Shared with the team
+  DR demand - not taught yet. **The feature typed in the flow when a set is
+  saved is its name placeholder** (economist: "if we make generic 2d_levels
+  segments, we will hold the 2D_LEVELS as a name placeholder that changes
+  between features"): the set shows `2D_Levels_BW_0_9` with `2D_Levels_`
+  marked, a set saved with no name is named after it (`setPlaceholder`), and
+  a feature that takes the set puts its own name there. **The Segments tab
+  shows one view at a time** (economist: "too scrollable. and u need to
+  search for things"): Build segments (steps 1-3 on the left, the segments
+  on the right in sight, with "Save as a set" on them; a condition on one
+  line, its full text in the hover and the copied table, a short "Who"
+  column), Segment sets (side by side), Read a condition, Functions - the
+  one open remembered in the browser (`economy-segments-view`). Shared with the team
   (`economy/segment-sets.json`). Held by `verify-segment-sets.mjs` and
   `scripts/e2e/segment-sets.mjs`.
 

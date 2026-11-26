@@ -11,14 +11,19 @@
 //     when its set has changed since and offers the new numbers.
 // A set keeps its flow (the plan) and its segments by their name WITHOUT the feature (BW_0_2500, BW_0_2500_Mode_0_3),
 // so the same set serves every feature: picked in Merge, its segments are named Merge_..., in Disco Disco_...
+// The feature typed in the flow when the set was saved is the set's NAME PLACEHOLDER (economist: "if we make generic
+// 2d_levels segments, we will hold the 2D_LEVELS as a name placeholder that changes between features that use the
+// segments"): the set shows 2D_Levels_BW_0_9, a feature that takes it puts its own name there.
 import { useEffect, useState } from 'react'
 import { buildPlan } from './segmentFlow'
 
 export const SEGMENT_SETS_KEY = 'economy-segment-sets'
 const EVENT = 'economy-segment-sets-changed'
 
-const featureOf = (plan) => String(plan?.feature ?? '').trim().replace(/\s+/g, '_') || 'Feature'
+export const featureOf = (plan) => String(plan?.feature ?? '').trim().replace(/\s+/g, '_') || 'Feature'
 // A segment's name without its feature: "Disco_BW_0_2500" -> "BW_0_2500".
+// The set's name placeholder: the feature typed when it was saved ("2D_Levels").
+export const setPlaceholder = (set) => featureOf(set?.plan)
 export function setSegmentId(name, plan) {
   const prefix = `${featureOf(plan)}_`
   return String(name).startsWith(prefix) ? String(name).slice(prefix.length) : String(name)
@@ -51,7 +56,8 @@ export function setSegmentsOf(plan, before = []) {
 // Saves the flow as a set: a new one, or the set of that name brought up to the flow (its efforts kept by segment).
 // Returns { sets, set, created } or { error }.
 export function saveFlowAsSet(sets, plan, name, now = new Date().toISOString()) {
-  const clean = String(name ?? '').trim()
+  // No name typed: the set is named after its placeholder (the feature typed in the flow).
+  const clean = String(name ?? '').trim() || String(plan?.feature ?? '').trim()
   if (!clean) return { error: 'Type a name for the set.' }
   const existing = sets.find((s) => s.name.toLowerCase() === clean.toLowerCase())
   const { errors, segments } = setSegmentsOf(plan, existing?.segments ?? [])

@@ -2,7 +2,7 @@
 // any feature with the feature's own names, a save of the same name keeping the efforts by segment.
 //   npx vite-node scripts/verify/verify-segment-sets.mjs
 import { createPlan } from '../../src/lib/economy/segmentFlow.js'
-import { editSet, normalizeSets, saveFlowAsSet, setEffort, setForFeature, setSegmentId } from '../../src/lib/economy/segmentSets.js'
+import { editSet, normalizeSets, saveFlowAsSet, setEffort, setForFeature, setPlaceholder, setSegmentId } from '../../src/lib/economy/segmentSets.js'
 
 let fails = 0
 let total = 0
@@ -16,7 +16,7 @@ const plan = { ...createPlan(), feature: 'Disco', cuts: '1000, 2500' }
 check('a segment is kept by its name without the feature', setSegmentId('Disco_BW_0_1000', plan) === 'BW_0_1000' && setSegmentId('Other_X', plan) === 'Other_X')
 
 const t1 = '2026-11-26T10:00:00.000Z'
-check('a set needs a name', !!saveFlowAsSet([], plan, '  ').error)
+check('a set needs a name - typed, or the feature typed in the flow', !!saveFlowAsSet([], { ...plan, feature: '' }, '  ').error && saveFlowAsSet([], plan, '  ').set?.name === 'Disco')
 const first = saveFlowAsSet([], plan, 'Level features, 2 days', t1)
 check(`the flow saved as a set: three bands, no effort yet (${first.set?.segments.map((s) => s.id).join(', ')})`, first.created && first.set.segments.length === 3 && first.set.segments.every((s) => s.effort === null) && first.set.updatedAt === t1)
 let sets = setEffort(first.sets, first.set.id, 'BW_0_1000', 40, '2026-11-26T11:00:00.000Z')
@@ -37,6 +37,9 @@ check('another name is another set', two.created && two.sets.length === 2)
 check('a flow with something to fix is not saved', !!saveFlowAsSet([], { ...plan, feature: '' }, 'X').error)
 check('rename through editSet', editSet(two.sets, first.set.id, () => ({ name: 'Renamed' }))[0].name === 'Renamed')
 
+const generic = saveFlowAsSet([], { ...plan, feature: '2D_Levels' }, '')
+check(`no name typed: the set is named after its placeholder, the feature typed (${generic.set?.name})`, generic.set?.name === '2D_Levels' && setPlaceholder(generic.set) === '2D_Levels' && generic.set.segments[0].id === 'BW_0_1000')
+check('the placeholder changes with the feature that takes the set', setForFeature(generic.set, 'Disco').segments[0].name === 'Disco_BW_0_1000' && setForFeature(generic.set, 'Merge').segments[0].name === 'Merge_BW_0_1000')
 const read = normalizeSets(JSON.parse(JSON.stringify({ sets: two.sets })))
 check('a stored list reads back the same', JSON.stringify(read) === JSON.stringify(two.sets))
 check('nothing stored, or something else, reads as no set', normalizeSets(null).length === 0 && normalizeSets({ sets: [{ name: 'no plan' }] }).length === 0)

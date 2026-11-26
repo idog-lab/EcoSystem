@@ -605,7 +605,7 @@ function SetupStep(props) {
                       )}
                     </td>
                     <td className="py-1.5 pr-4">
-                      <CommitNumber value={seg.effortBW} allowEmpty min={0} onCommit={(v) => seg.setEffortBW(v)} className="w-24" placeholder="not given" aria-label={`${name} effort in Brut Wins`} data-field="effort-bw" />
+                      <CommitNumber value={seg.effortBW} allowEmpty min={0} onCommit={(v) => seg.setEffortBW(v)} className="w-24" placeholder="-" aria-label={`${name} effort in Brut Wins`} data-field="effort-bw" />
                     </td>
                     <td className="py-1.5 pr-6">
                       <CommitNumber
