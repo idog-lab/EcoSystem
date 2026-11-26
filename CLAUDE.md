@@ -241,7 +241,7 @@ fallbacks for puzzle mini game and packs"): a puzzle's and a mini game's is the 
 puzzle and mini game has the fallback logic in the text of the preset": puzzle_gameplay_20_undo,
 mini_game_5_gameplay_wild - a dropdown cell, the nearest preset that has it), never `[preset:...|...]` (the validator
 refuses a preset in brackets); a pack's is `[sticker_pack:...|<fallback>]` - Coins, Wild, Extra stock, Undo, Free round
-or Hidden (`[dynamic(dr-hidden:1)]`), with its amount. **Fallbacks start as coins** ("make the default value of fallbacks to be coins"): a new pack's is Coins 0.25 (the economist's number), a puzzle's plain preset reads "Coins", a mini game starts on `_allowance`. Under the sheet the row we are on as Ops gets it (`rowSyntax`). On another segment a part typed
+or Hidden (`[dynamic(dr-hidden:1)]`), with its amount. **Fallbacks start as coins** ("make the default value of fallbacks to be coins"): a new pack's is Coins 0.25 (the economist's number), a puzzle's plain preset reads "Coins", a mini game starts on `_allowance`; **Delete on a fallback takes it back to coins** ("the fallbacks should support using delete on them that will take it back to coins"; the sheet's `clearTo`; a pack's amount back to 0.25). Under the sheet the row we are on as Ops gets it (`rowSyntax`). On another segment a part typed
 makes the prize its own; put back to the base's scaled prize, it follows the base again. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
 and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
 Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of

@@ -633,6 +633,8 @@ function TiersStep({ state, change, index, setShown, economy }) {
     },
     {
       key: 'puzzleFallback',
+      // Delete brings a fallback back to coins (economist: "the fallbacks should support using delete on them that will take it back to coins").
+      clearTo: '',
       group: 'The prize',
       label: 'Fallback',
       sub: 'puzzle',
@@ -661,6 +663,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
     },
     {
       key: 'miniKind',
+      clearTo: 'allowance',
       group: 'The prize',
       label: 'Fallback',
       sub: 'mini game',
@@ -702,6 +705,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
     },
     {
       key: 'packAlt',
+      clearTo: 'coins',
       group: 'The prize',
       label: 'Fallback',
       sub: 'pack',
@@ -759,8 +763,10 @@ function TiersStep({ state, change, index, setShown, economy }) {
   function withPart(parts, key, value) {
     const p = { ...parts, presets: [...parts.presets] }
     const kinds = presetsByKind(p.presets)
-    const setAlt = (cur, kind) => (kind ? { kind, amount: kind === 'hidden' ? null : (cur?.amount ?? 1) } : null)
-    const setAltN = (cur, n) => (n == null ? (cur?.kind === 'hidden' ? cur : null) : { kind: cur?.kind ?? 'coins', amount: n })
+    // A fallback changed to another kind starts at its default amount: coins 0.25, a resource 1; Delete on its amount
+    // brings it back to coins 0.25.
+    const setAlt = (cur, kind) => (kind ? { kind, amount: kind === 'hidden' ? null : cur?.kind === kind ? cur.amount : kind === 'coins' ? PACK_FALLBACK_COINS : 1 } : null)
+    const setAltN = (cur, n) => (n == null ? { kind: 'coins', amount: PACK_FALLBACK_COINS } : { kind: cur?.kind ?? 'coins', amount: n })
     if (key === 'packAlt') {
       p.packAlt = setAlt(parts.packAlt, value)
       p.packCoins = null
