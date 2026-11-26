@@ -99,7 +99,7 @@ export default function BuildSummary({ result, shownSegments = null, phase, acti
                   ? tested
                     ? 'This build is in use: the Play tester and Syntax use it.'
                     : 'This build is in use: the Play tester and Syntax use it. Next: test it on players with real luck, or play it yourself.'
-                  : 'This build is not in use - step 5 can put it in use.'}
+                  : 'This build is not in use - step 6 can put it in use.'}
           </div>
         </div>
         {!running &&
@@ -237,7 +237,7 @@ export default function BuildSummary({ result, shownSegments = null, phase, acti
         </p>
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-slate-500" data-testid="build-summary-legend">
-        Every figure is the average of {players ?? 'the'} simulated players with average luck - one player differs from the next. Step 5 plays players with their own luck and says how many of
+        Every figure is the average of {players ?? 'the'} simulated players with average luck - one player differs from the next. Step 6 plays players with their own luck and says how many of
         them land near. Point at a chip to see what Close, Within margin and Off target mean.
       </p>
     </Panel>

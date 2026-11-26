@@ -37,8 +37,12 @@ When this file and the history disagree, this file wins.
   urself" - it replaces "Pull request, you approve"): when a piece of work is
   done and its checks pass, commit, push the branch, open the pull request,
   wait for GitHub's "Build and lint" check and merge it - then say what went
-  live. Never merge with a failing check, and never merge the coworker's
-  branches (theirs are theirs to merge). Pull requests are opened and merged
+  live. Never merge with a failing check. **A coworker's branch is merged
+  only when the economist asks** (25 Nov 2026, `architecture/foundation`:
+  "we got 1 of my cororker that we need to push"): tested first on a copy -
+  today's master merged in, built, opened as GitHub Pages serves it, the
+  checks run - then on a branch of its own (`merge/<their branch>`), their
+  branch left as it is. Pull requests are opened and merged
   with GitHub's `gh` tool, signed in by the economist; never read a token out
   of git's saved logins. **A merge into master publishes the site by itself**
   (`.github/workflows/deploy.yml`: lint, build, write `gh-pages`); nobody
@@ -109,7 +113,7 @@ When this file and the history disagree, this file wins.
 The home page and everything around the tools is the **platform**
 (`docs/architecture.md`, setup in `docs/setup.md`, the model list and its
 workbook-source uncertainties in `docs/catalog.md`). In short: the catalog is
-`src/platform/registry/catalog.ts` (22 models, 17 of them not built yet; add one there plus a loader
+`src/platform/registry/catalog.ts` (22 models, 16 of them not built yet; add one there plus a loader
 in `modules.ts`, never by editing the home page); every model opens at
 `/models/<slug>` as a lazily loaded module that owns its page; the home page
 searches display names only and filters by shared folders, both kept in the
@@ -150,14 +154,60 @@ of their own; **a date with no value is unknown**, never the nearest one, for
 every dated currency. Other currencies are added from a
 drop list (`GAME_CURRENCIES`: the economist's list of the game's currencies,
 copied as given; dr-basket-counter on it is never offered - removed by them).
+**Segments are being taught function by function** (economist, 25 Nov 2026;
+"the BW and avg mode are very very important"): `segmentFunctions.js` is the
+dictionary (Brut Wins and the mode multiplier - modes x1, x2, x4, x8 -,
+`CoinsInAllowance` and `CurrentLevel` without brackets, `fn_Avg_winrate(days)`
+(a share, written `0.9` with no m - confirmed by the economist), a cohort
+`PjCohorts.ContainsCohort(id)` (true or false), Chef dishes
+`(GetMTXEventDataListAsStr(<id>U, "CompletedItems")?.Count() > N)`, Diamond Mine and
+Merge progression by event id), with their words. **Parts of a condition
+are joined with `&&`**. The Segments tab is a flow (`segmentFlow.js`,
+economist): the feature, the base (the bands of one rule, toggled - Brut
+Wins most of the time; each rule named by its fixed code, BW, Level, ...,
+ChefDishes - the last this app's own), specifics (parts
+added to the segments picked, a typed tag in their names) and mode splits
+(duplication of the segments picked); it also reads any condition in words,
+naming a function it does not know. Add a function only as explained in chat.
 **These rules are for prizes on a feature's tiers only** (economist: "all the
 rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the
 Twister's price stays any whole number. Chef's grand prize follows RoundReward;
 Chef's value table comes from the economy (a chef keeps its own copy, step 2
-says when it differs). Merge's Syntax tab reads its item text with the checker
+says when it differs). **The checker holds the rules of the economist's own
+validator, "Reward Scanner Pro"** (economist: where the two disagree, "The
+validator's"): dynamic in brackets, what a [ ] group may hold, whole currency
+amounts, lower case triggers, an unknown currency, bucket or preset an
+error, and its prize count with its limits; where the validator is looser the
+app's stricter rule stays (economist: "keep both") - docs/economy-rules.md, "The validator's
+rules". Merge's Syntax tab reads its item text with the checker
 (a reading only). Diamond Mine is not connected. Open questions are listed in
 that file.
+
+## Wicked Trails (the first level feature)
+
+`src/features/wickedTrails/` (`lib/wickedTrails.js`, `WickedTrailsApp.jsx`), at `/models/wicked-trails`; economist,
+26 Nov 2026: "for each feature we build, we will need to have the place where we build the economy and a place we can
+see with our eyes some kind of a mock of the feature". Two lanes - Easy (silver DR) and Hard (gold DR) - and a Final
+Prize for finishing both. Three views: **Segments** (taken from a segment set, named `Wicked_Trails_...`, each with its
+effort in Brut Wins, its silver and gold DR per Brut Win - "Two per segment" - and the base), **Prizes** (the rules,
+both lanes' tiers and the Final Prize, each prize's worth by the economy beside its target), **Mock** (a sketch of the
+event for a segment, played Brut Win by Brut Win - not the game's artwork). The rules, all asked:
+- both lanes fill together; "first each BW will split the ROE between the 2 DRs" by a share typed, and "when one lane is
+  finished, the economy of the first one is given to the DR of the 2nd one"; the easy lane's length is a share of the
+  hard one's, typed; the hard lane lasts the segment's whole effort;
+- **ROE** ("rate of economy is the allowance worth of prizes a player gets from a BW") - "each feature gets a ROE";
+- a lane's tiers are shares of it adding up to 100%; a tier earns what its lane earned between the tier before and it;
+- **the Final Prize by the sheet's rule**: the easy lane gives 20% of what it earns to it, the hard lane 40%, the tiers
+  keep the rest; the Final Prize is counted at 50% of its worth, so its worth should be the pool / 50%;
+- prizes are typed on the base; another segment's are the base's x its effort against the base's, unless typed.
+The five shares start at the old sheet's values (33.33, 50, 20, 40, 50) and are typed over; tier DR is rounded to a
+whole DR (the sheet's "8Box rounding steps" are not taught); 1 to 8 tiers a lane (this app's own, the export's
+milestones 0-7); the sheet's prize count (4 a tier, 5 the Final Prize) is a warning. Kept in this browser under
+`superplay-wicked-trails` and shared with the team (`wicked-trails/state.json`). **Not built yet**: the export (OPS
+rows, syntax), Fu split, Sell DR. `dr-wicked-trails-dr-silver` is not on the game's currency list (gold is). Held by
+`verify-wicked-trails.mjs` and `scripts/e2e/wicked-trails.mjs`. A rule of the economy said while teaching a feature
+is asked about and then put in the Economy (economist: "if i do, u can ask and then insert it into the economy").
 
 ## Repository map
 
@@ -191,6 +241,7 @@ src/
     assets/game/     the artwork in use (copied and trimmed from art-source/)
     data/            the demo stage
   features/diamondMine/, features/chef/   other features (Chef: a six-step flow, see docs/chef-overview.md)
+  features/wickedTrails/            Wicked Trails: segments, prizes against ROE, a mock (section above)
 server/            the toolkit server (API, auth, folders, documents, assumptions)
 prisma/            database schema and migrations
 tests/             Vitest: platform logic, Puzzle parity, the server on a throw-away database (npm test)
@@ -308,7 +359,7 @@ the same subsidy gave 756 and 1,148 DR on two sets of boards, single builds),
 so no amount of subsidy lands in between and another build can; or
 **`not-settled`** - the passes ran out. `spendRange` is what the passes found
 a player paying. Step 4 shows demand, average and middle player, difference,
-completion and the signed calibration; step 5 shows the spread with real luck. Recompletion's demand is the normal event's, read-only
+completion and the signed calibration; step 6 shows the spread with real luck. Recompletion's demand is the normal event's, read-only
 (`rcSubsidyForMainSubsidy`). The last board is never typed: it closes the gap
 (`fillLastBoard`). Board 1 carries at most 150 DR (300 on Recompletion,
 `firstBoardCapFor`).
@@ -688,13 +739,99 @@ without a rebuild). Before this the Twister's timing never failed a segment.
 
 ## The Build event flow (the main path)
 
-Five steps, ids `setup, layouts, rewards, build, finalize`, shown as: DR
-demand · Board layouts · Rewards and Twister · Build · Test and export. Two
+Six steps, ids `setup, layouts, rewards, build, prizes, finalize`, shown as:
+Segments · Board layouts · Rewards and Twister · Build · Prizes · Test and
+export. Two
 former steps are folded sections now: the generator, lucky drops, dates and CC
 at the bottom of step 1 (`setup-generator`), the effort shape in step 4 beside
 the Build button (`build-effort-shape`); their old ids still lead there
 (`STEP_ALIAS`, `STEP_FOLD`, `goTo`). A step opens at its top (economist: "it
 should take me to the top part of the page and not make me scroll up").
+
+**Segments and prizes** (economist, 26 Nov 2026: "add segmentation into the
+merge and also the prizes ... the first tab as the segments, there we can also
+have the DR demand and the multipliers between segments. we should also give
+the value of a merge DR. then, the simulator should calculate the allowance
+worth of each rank in the prizes ladder. we should pick the base segments ...
+and then the item ladder is created from the base on the others").
+- **Step 1, Segments** (`SegmentsBuilder.jsx`): the Economy page's segment
+  flow (`SegmentPlanEditor`, exported from `SegmentsTab.jsx`), "Use these
+  segments" names Merge's segments from it, each with its condition and key
+  (at most the 8 segments Merge holds); the **worth of one merge DR** in
+  allowance, one per Merge event ("Per Merge event"); the demand and
+  multiplier table as before, plus "Prizes on": the base segment of the
+  prizes. The plan, the DR worth and the base are the event's, kept on
+  Segment 1 (`segmentPlan`, `drWorth`, `prizeBase`); `condition`,
+  `segmentKey` and `prizeLadder` are each segment's. All saved, backed up,
+  restored and cleared with the project.
+- **Where the DR demand comes from** (economist, 26 Nov 2026: "each feature
+  will need to be toggled between levels or events"; `lib/build/demandSource.js`,
+  `demandSource` on Segment 1, `drPerBW` per segment). **From levels**: "the
+  effort is driven from the BW, each segment get a BW dr multiplier ... the EV
+  of a BW will give 2.5 DRs. so the total effort will be BW*multiplier" -
+  demand = effort in Brut Wins x DR per Brut Win, the multiplier typed in the
+  feature per segment ("In each feature"), calculated and never typed.
+  **From events**: "do not get their effort from the BW, they get it from the
+  economist for the base segment" - the base's (Segment 1's) demand typed,
+  every other segment's the base's x its multiplier between segments, the
+  same one that sizes its rewards and prizes (the column reads "Multiplier"
+  then). Merge Mania is From events by default. A demand above the chase is
+  not taken and says why; Recompletion follows the normal demand as before.
+  A project saved before the switch has none: its demands stay as typed until
+  a kind is picked. Held by `verify-demand-source.mjs` and
+  `scripts/e2e/merge-demand-source.mjs`.
+- **Step 5, Prizes** (`PrizesStep.jsx`, `lib/build/prizeLadder.js`): the
+  ranks marked in step 3's milestone rewards ("The ones I mark"; 13-14 from
+  Recompletion's). One playthrough of the base segment's boards in use, as
+  step 4's effort chart plays them (normal then Recompletion when built); **a
+  marked rank is worth the DR paid since the marked rank before it** ("DR
+  paid since the rank before") times the DR worth. The economist types the
+  prize; its worth by the economy and the difference show live ("the app
+  should show the allowance worth of the rank, then i put prizes inside and
+  the app calculates live how far i am"; green within 5%, amber within 15% -
+  this app's own reading, not a pass mark). Another segment's worth is the
+  base's times its multiplier against the base, and so is its prize (coins to
+  hundredths, other amounts whole, at least 1) unless one is typed for it.
+  "Start from them" copies step 3's milestone texts into the base. The
+  Syntax tab's Item Ladder takes each segment's prizes (`laddersOfEvent` in
+  App.jsx); an event with nothing typed in step 5 exports exactly as before.
+  Held by `verify-prize-ladder.mjs` and `scripts/e2e/merge-prizes.mjs`.
+- **Segment sets** (economist, 26 Nov 2026: features "live for 2 days and
+  ... from levels ... hold the same segments with the same effort (each
+  segment gets a base of Brut Wins as the effort of the segment)"; "a memory
+  of segment chunks with their demand if given"; "pick the segments from a
+  drop list and ill get the effort also"; "edit those for all in one time").
+  `lib/economy/segmentSets.js`, `SegmentSetsCard.jsx` on the Economy page's
+  Segments tab: the flow is saved as a named set ("Save from the segment
+  flow"; the same name updates it, efforts kept by segment); every set is
+  edited on one card - name, delete, "Open in the flow", each segment's
+  effort **in Brut Wins** ("Brut Wins per segment"; optional). A set keeps
+  its segments without the feature in their names (`BW_0_1000`), so any
+  feature takes it under its own name. Merge's step 1 picks a set from a list
+  and **copies** it ("Copied when picked"): names, conditions, the flow and
+  each segment's effort (`effortBW`, a column in the demand table; Segment 1
+  keeps `segmentSet`: id, name, time); when the set changes later, step 1
+  says so and offers "Take its new numbers". The effort becomes the DR demand
+  only From levels (above), times the feature's own DR per Brut Win. **The feature typed in the flow when a set is
+  saved is its name placeholder** (economist: "if we make generic 2d_levels
+  segments, we will hold the 2D_LEVELS as a name placeholder that changes
+  between features"): the set shows `2D_Levels_BW_0_9` with `2D_Levels_`
+  marked, a set saved with no name is named after it (`setPlaceholder`), and
+  a feature that takes the set puts its own name there. **The feature may be
+  left empty on the Economy page: generic segments** (economist: "create a
+  generic segment that will be overriden with the features name. so i dont
+  have a feature name to put in"): the set's name typed beside "Save as a
+  set" stands in for it as it is typed (`namedPlan`, `namePlaceholder`:
+  letters, digits and "_"; `Feature_` until a name is typed) and is saved as
+  the set's placeholder. Merge's own flow always has its feature. **The Segments tab
+  shows one view at a time** (economist: "too scrollable. and u need to
+  search for things"): Build segments (steps 1-3 on the left, the segments
+  on the right in sight, with "Save as a set" on them; a condition on one
+  line, its full text in the hover and the copied table, a short "Who"
+  column), Segment sets (side by side), Read a condition, Functions - the
+  one open remembered in the browser (`economy-segments-view`). Shared with the team
+  (`economy/segment-sets.json`). Held by `verify-segment-sets.mjs` and
+  `scripts/e2e/segment-sets.mjs`.
 
 **The header** (economist: "the app is very heavy in text and buttons"; of the
 advanced tools: "i use only the builder as for the last runs"): the three
@@ -752,7 +889,7 @@ and know what to do next without reading documentation"):
   down (`pasteDemands`); a running build shows a progress bar.
 - A table of segments leaves out the ones that are not built (no DR demand)
   and says which; the reward size is typed in step 1 only.
-- Step 5 ("Test and export") says what is in use, then three buttons: test on
+- Step 6 ("Test and export") says what is in use, then three buttons: test on
   players, play it, go back to the previous build (what each does is in its
   hover). The table of the four kinds of player is folded and opens by itself
   when a tap pays more than a merge.
@@ -992,6 +1129,31 @@ tabs belong was answered (above).
 
 ## Persistence
 
+**Team data on GitHub** (economist, 26 Nov 2026: "i want the site to be live,
+with live data between all the users" - asked where: "i think we need to
+focus on the memory to live in github"; chose a private repository open to
+every collaborator; shared: the Economy page, saved Merge events, Chef,
+Diamond Mine). `src/lib/teamData.js`: every tool still saves in the browser,
+and a connected browser copies each save to the private repository
+**`idog-lab/EcoSystem-data`** (one file a thing: `economy/economy.json`,
+`economy/segment-plan.json`, `chef/chefs.json`, `diamond-mine/state.json`,
+`merge/saved-events/<id>.json`), and brings the team's newest in when the app
+opens (`main.tsx`, at most 8 s; never on a play link) or on "Get the team's
+latest". Every save is a commit by who made it. A save that finds the file
+changed by someone since is never written over it: the person chooses (the
+team's / mine over the team's). Each person connects once on the data page
+with a GitHub token (classic "repo" for a collaborator - a fine-grained one
+cannot reach another person's repository; the owner's can be fine-grained),
+kept in the browser under `ecotk-team-token` - a key "Download all my data"
+never takes. The open Merge project, Chef's runs, drafts and the Balance tab
+stay in the browser. Not instant: another person's change arrives at the next
+open or "Get the team's latest". The site's own repository is PUBLIC: never put
+shared data in it. The coworker's server (`server/`, PostgreSQL) stays unhosted.
+A save calls `teamData.changed(key)` / `eventChanged(id)` / `eventDeleted(id)`;
+a new shared thing goes in `SHARED_ITEMS`. Held by `verify-team-data.mjs` (two
+browsers, a stand-in GitHub: `scripts/verify/fakeGitHub.mjs`) and
+`scripts/e2e/team-data.mjs`.
+
 `localStorage` key `merge-mania-board-simulator`, `{ segments: [...] }`, written
 by Save only - the header says "Unsaved changes" while the project differs
 from what was saved or loaded. Separate entries: build drafts, the effort
@@ -1115,6 +1277,10 @@ segments, both phases, players the build never saw (an investigation, not a
 check; about 20 minutes). `twister-cadence.mjs` is the first investigation.
 `npm run e2e` warms the dev server up first (it compiles on first use and
 reloads the page it serves, which crashed whichever suite ran first).
+The browser suites need **Playwright, a devDependency pinned to 1.64.1** - the
+version of the Chromium build installed here (1248); a newer one asks for a
+new browser download. (It used to be installed on the side, and an
+`npm install` removed it as not listed, 25 Nov 2026.)
 `npm run e2e` - every browser suite
 (start `npm run dev` first; a suite can time out while the dev server is
 reloading after many file changes - rerun it alone before calling it a
@@ -1139,7 +1305,9 @@ simulator's rewards and 0.94 of its DR, against 1.00 alone), and
 verify-twister-cadence's "the build moves the subsidy until the average player
 pays the demand" (Segment 1's search did not settle, 268 of 298 DR, -10.1% -
 the build said "not settled"; alone it was 288, -3.4%). Neither code had
-changed. Because \`npm run verify\` stops at the first failing suite, a
+changed. economy-page's "the chests are the four" read an empty list once in a run of
+several suites (26 Nov 2026) and passed alone - a timing note, the Keys tab
+had not changed. Because \`npm run verify\` stops at the first failing suite, a
 draw-dependent failure hides the suites after it: run those alone. (verify-event-build once
 stopped a full run with a crash, not a failure: a check read the mark of a
 re-valued rank on a segment the build had given exactly the typed values,

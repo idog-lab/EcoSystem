@@ -88,9 +88,50 @@ another order, so **the checker never calls an order wrong**; the builders
 write this one.
 
 **Golden rules**: never invent a key (currency, pack, preset, chest, trigger,
-bucket - they come from the Economy page's lists; a key not on a list is a
-warning to check, not made up); empty or invalid input gives an empty string,
-never `dynamic(:0)`, `free_wild:0` or a stray `+` / `|`.
+bucket - they come from the Economy page's lists); empty or invalid input gives
+an empty string, never `dynamic(:0)`, `free_wild:0` or a stray `+` / `|`.
+
+**The validator's rules** (25 Nov 2026: the economist's own checker, "Reward
+Scanner Pro", a Google Apps Script, was given in chat; asked whose rule the
+app follows where the two disagree: "The validator's"). The checker
+(`checkReward`) holds, besides its own rules:
+- a `dynamic(...)` stands in brackets, `[dynamic(...)]` - bare, it must be
+  fixed, in a chest too;
+- a `[ ]` group starts with `dynamic(...)` or `sticker_pack:...`; one alone in
+  brackets is only one of those two; no `preset:` inside brackets; a second
+  `dynamic` goes in a group of its own, at the end
+  (`[dynamic(a)|[dynamic(b)|...]]`); no option twice; no `+` inside an option;
+- a currency amount is a whole number - only coins take decimals;
+- a trigger is lower case letters, digits and `_` (upper case only with "Allow
+  upper case triggers", the validator's option - `trigger:Pity`, on the
+  Economy page's list from the rules text, is to fix by default - asked, the
+  economist: "leave the pity", so it stays on the list as it is);
+- **a currency, an allowance bucket or a preset not known is an error** (it was
+  a warning). Known currencies: the Economy page's, the game's list and the
+  validator's own (`VALIDATOR_CURRENCIES`, 13 of them on no other list);
+  buckets: the page's, and `milestone` and `pricing` (the validator's). A pack
+  or a trigger off the list stays a warning - the validator does not check
+  those against a list.
+- **The prize count** (`prizeCount`, `prizeFindings`): every item is a prize but
+  triggers and the hidden counters (`NON_COUNTING_CURRENCIES`: dr-hidden,
+  dr-mission-1..5-hidden, dr-pack-counter, dr-basket-counter); a group is
+  hidden when every option is. Limits, as the validator's run options: normal
+  - more than 10 is worth a look; challenge - 3 or more; tournament - more than
+  3 must be fixed; a limit of your own; 0 prizes is worth a look. The real
+  examples count 5, 4, 1 and 5.
+Where the validator is looser, the app's own rule stays (the validator reads
+whatever the app calls fine): an amount of 0 or less, more than 2 decimals of
+coins (3 on Merge Mania's small rewards) - asked, the economist: "keep both".
+`Missing(...)` and `Duplicate(...)` (the rules text) are read with a note that
+the validator reads them only if added there as a key - asked: "keep that for
+now". The validator's
+`dr:<key>:<value>` and a bare `coins:N` stay unknown to the app: whether the
+game reads them, the economist is "Not sure" - **open**. Not built: the
+validator's sheet checks (a Syntax column's empty rows, Tier Points numbers,
+CSV user ids, Momentum triggers per tab, the currency-chain summary); not
+given: its preset allow-list and its check of a Segments sheet for forbidden
+functions. The app's builders write what it accepts ("Balance tiers" writes
+`[dynamic(...)]` now).
 
 Builders (`syntax.js`): `rewardSyntax`, `coinsSyntax`, `resourceSyntax`,
 `altReward` (DR_AltReward), `drSyntax` (DR_Syntax_V5), `counterSyntax`,
@@ -173,6 +214,21 @@ brought up to date when opened (a worth someone typed is kept).
   puzzle value over the event's days.
 - The keys lists on the Economy page are searched (a long list shows 12 at a
   time); a saved economy gets these keys added when opened, and keeps its own.
+- **The presets by feature** (26 Nov 2026: "i want us to break the options for
+  chef, stickers, puzzle, magical friend, diamond mine/merge and others. all
+  send u all presets names" - "the ones of the diamond/merge magical friends
+  and puzzle are important for data validation"): three lists copied as given
+  (`GAME_PRESETS_PUZZLE` 469 - `puzzle_pricing_700_entry` is on it twice;
+  `GAME_PRESETS_MINI_GAME` 342 - the mini games and `diamond_push`;
+  `GAME_PRESETS_MF` 1014). They are on every economy's preset list (economy
+  version 6 adds them to one saved before), so the checker knows them - a
+  preset not known is an error since the validator's rules. The Keys tab
+  shows one group at a time with its count (`PRESET_GROUPS`, read from the
+  name): Chef (`Chef...`, `chef_...`, and `joker_basket` - this app's
+  reading), Sticker packs, Puzzle (`puzzle...`), Magical friends (`mf_`),
+  Diamond Mine / Merge (`mini_game_`, `diamond_push_`), Other presets (the
+  rest: `pick_N`, `market_...`, mystery box, scene boosts), then chests,
+  triggers and buckets. Build a prize groups its preset list the same way.
 
 ## 4. Segments
 
@@ -184,6 +240,78 @@ end: first `BW <= max`, middle `BW > min && BW <= max`, last `BW > min`;
 optional `&& (MODE < 3m)` / `&& (MODE >= 3m)`. Name
 `<Feature>_BW_<min>_<max|Plus>[_Mode_0_3|_Mode_3_plus]`, key `def_<name>`.
 Bands must be contiguous, not overlap, and cover 0 to no end (`checkBands`).
+
+**The functions segments are made of** (economist, 25 Nov 2026: "the next
+thing i want us to do is to learn the logic of as many functions as we can
+that with them we create segments ... when building segments we will need
+to create the best flow to create them with different logics"; "the BW and
+avg mode are very very important"). A dictionary in the project,
+`segmentFunctions.js` (`SEGMENT_FUNCTIONS`), each function with the words it
+was explained in, an example, and what is not confirmed - never invented:
+- `fn_DailyBrutWins_m4(days,1m,2m,4m,8m)`, `fn_DailyAvgModeMultiplier_m4(...)`
+  (section 4 above; what 1m,2m,4m,8m stand for is not confirmed).
+- `fn_DiamondMine_Progression(<event id>U)`, `fn_Merge_Progression(<event id>U)`:
+  the player's progression in that event, in % ("the only thing important is
+  the event Id"); `fn_DiamondMine_Progression(57634U) > 95` = above 95%
+  (`progressionCondition`; a decimal % takes m).
+- **The modes and their multipliers** - the 1m,2m,4m,8m of Brut Wins
+  ("#m is the multiplier on the mode. each net win is a level win, each brut
+  win is the net win * mode multiplier"): mode 1 x1, mode 2 x2, mode 3 x4,
+  mode 4 x8 (`MODE_MULTIPLIERS`).
+- `CoinsInAllowance` (the balance, in allowance - "mostly when we will use the
+  balance to get a segment of users with low balance", OOC = out of coins) and
+  `CurrentLevel`: names alone, no brackets. Their example:
+  `CoinsInAllowance < 2 && CurrentLevel > 519`.
+- `PjCohorts.ContainsCohort(<cohort id>)`: "it just gives true or false if
+  the user is in the cohort" - it stands alone, no comparison; the id written
+  with no U, as the example. Read as "In cohort 1234".
+- `(GetMTXEventDataListAsStr(<event id>U, "CompletedItems")?.Count() > 10)`:
+  "a chef function ... returns how many dishes the user finished in the chef
+  feature"; the event id with U. Written as the example, in its brackets,
+  plain quotes (the chat's curly ones are read the same). Without ?.Count()
+  it must be fixed; another list than "CompletedItems" is named, not known.
+  Both are parts of a specific. **Not in a cohort** is used ("yes"):
+  `!PjCohorts.ContainsCohort(1234)`, "Not in cohort 1234". **Chef dishes is a
+  base rule too**, code `ChefDishes` - this app's own (economist: "no namds
+  for the chef. put someting looks good in the naming"); its bands keep each
+  comparison in brackets, as the example: `Disco_ChefDishes_10_30`.
+- **Parts are joined with `&&`** ("its another fucntions they are added up
+  with &&"): progression is a part like any other.
+**The flow of building segments** (`segmentFlow.js`; economist, 25 Nov 2026:
+"we need first to let the user give the feature name ... we pick the number of
+segments then we give the rule for each segment. we need to let the model be
+able to know the base of the segment. then specific, or duplication"):
+1. the feature's name; 2. **the base**: the bands of one rule, one segment a
+band, numbered - Brut Wins most of the time ("pretty nicelly built"), but
+**any rule can be toggled as the base** ("the base is not 100% of the time
+will be brutwins. a rule should be toggalable as base or not"; asked: one rule
+at a time, "Bands, like Brut Wins", "Fixed codes per rule" - "Use these
+codes"): Brut Wins `BW`, average mode `Mode`, balance `Balance`, level
+`Level`, win rate `WinRate` (its days; shares with no m), Diamond Mine
+progression `DMProg`, Merge progression `MergeProg` (their event id) -
+`Disco_Level_100_300` (`BASE_RULES`). A band end must fit its rule (a whole
+level, a win rate below 1, a progression below 100); the band ends typed for
+each rule are kept while another is the base; 3. **specifics**: a condition of parts
+added with && to the segments picked - its tag, typed, goes into their names
+(asked: "A tag I type is added": Disco_BW_0_9_OOC); 4. **duplications**, the
+average mode for now: the segments picked are split at the values typed - one
+value makes two of one (`_Mode_0_3`, `_Mode_3_plus`, to the character of the
+rules), two make three (`_Mode_2_4` between). A tag goes before the mode
+(this app's own order, said on screen). A segment can be in one mode split
+only. A specific leaves out the players of its segments who do not match it -
+a hole: **warned, nothing added** (economist: "it shouldnt add a segments for
+the rest, but it should warn when there are holes i nthe segments").
+- `fn_Avg_winrate(days)`: the player's average win rate over the last days,
+  a share ("fn_Avg_winrate(7) > 0.9 - in the last 7 days if the win rate is
+  more than 90%"). **Written `0.9` with no `m`** - unlike the other decimals
+  (0.7m, 3m); asked, the economist confirmed: "0.9 without m is right". Read as "Average win rate
+  over the last 7 days is above 0.9 (90%)". The plan is kept in this
+browser (`economy-segment-plan`); "Copy as a table" gives name, key, condition.
+The Segments tab lists the functions, and
+**reads any condition** (`readCondition`): in words, part by part; an event id
+without U, a wrong number of inputs or a bracket left open must be fixed; a
+function not in the dictionary is named "not known to the app yet", never
+guessed at. How the logics combine into a flow is the next step.
 Chef's live segments already follow this. Segment economics (multiplier,
 burnout, effective multiplier, Total DR, target points) are given but not yet
 built into a shared calculation.

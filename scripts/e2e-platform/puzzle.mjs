@@ -33,7 +33,8 @@ const vite = await createServer({
   logLevel: 'warn',
 })
 await vite.listen()
-const browser = await chromium.launch()
+// E2E_CHROMIUM_PATH: a Chromium of this machine when the pinned Playwright's own is not installed.
+const browser = await chromium.launch(process.env.E2E_CHROMIUM_PATH ? { executablePath: process.env.E2E_CHROMIUM_PATH } : {})
 const pageErrors = []
 
 async function person(email, width = 1500) {

@@ -396,7 +396,7 @@ export default function SyntaxPage({
           <TriangleAlert size={16} className="shrink-0" />
           <span className="flex-1 min-w-[16rem]">
             A build of the {pendingBuilds.join(' and ')} phase is kept in Build event and is <span className="font-semibold">not in use</span>. These sheets show
-            the event in use, so they do not show that build - its containers, rank values and prices are not here. Step 5 can put it in use.
+            the event in use, so they do not show that build - its containers, rank values and prices are not here. Step 6 can put it in use.
           </span>
           {onOpenBuild && (
             <Button variant="secondary" size="sm" onClick={onOpenBuild}>

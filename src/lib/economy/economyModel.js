@@ -13,10 +13,10 @@
 // What the economist TAUGHT is kept in the project (taught.js) and wins over a
 // browser's copy: every economy made or read here has it put in last.
 
-import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF } from './gameKeys'
+import { GAME_CURRENCIES, GAME_PACKS, GAME_PRESETS, GAME_PRESETS_CHEF, GAME_PRESETS_MF, GAME_PRESETS_MINI_GAME, GAME_PRESETS_PUZZLE, VALIDATOR_CURRENCIES } from './gameKeys'
 import { TAUGHT_CHEF_BASKETS, TAUGHT_CURRENCIES, TAUGHT_KEYS, TAUGHT_RESOURCES } from './taught'
 
-export const ECONOMY_VERSION = 5
+export const ECONOMY_VERSION = 6
 
 // The resources of the value table, with their syntax tokens and the names
 // the sheets use for them.
@@ -168,7 +168,8 @@ export const createKey = ({ key = '', value = null, note = '' } = {}) => ({ key,
 // given it is "not set".
 const EXAMPLE_PRESETS = ['mini_game_5_gameplay_es', 'mini_game_40_gameplay_es', 'puzzle_gameplay_250', 'mf_90_gameplay_entry_cross']
 const SEED_KEYS = {
-  presets: [...GAME_PRESETS, ...GAME_PRESETS_CHEF, ...EXAMPLE_PRESETS].map((key) => createKey({ key })),
+  // (The economist's lists by feature, 26 Nov 2026, too - each name once.)
+  presets: [...new Set([...GAME_PRESETS, ...GAME_PRESETS_CHEF, ...EXAMPLE_PRESETS, ...GAME_PRESETS_PUZZLE, ...GAME_PRESETS_MINI_GAME, ...GAME_PRESETS_MF])].map((key) => createKey({ key })),
   packs: GAME_PACKS.map((key) => createKey({ key, value: 0 })),
   // The four chests (taught.js); pink-chest and yellow-chest, once taken from the reward examples, are gone ("Only
   // the four").
@@ -181,6 +182,18 @@ const SEED_KEYS = {
 // not a pattern's: Basic is Undo, Allowance or Free round; Rare Allowance, Free round or Extra stock; Epic Extra
 // stock, Wild or Free_round3). Worth by tier, the same every day for now (economist: "as for now the basket values
 // are like i gave u, when the chef model in the app will be better we will change its value daily").
+// THE GROUPS OF KEYS the Keys tab shows one at a time (economist, 26 Nov 2026: "i want us to break the options for
+// chef, stickers, puzzle, magical friend, diamond mine/merge and others"). A preset's group is read from its name;
+// joker_basket is Chef's (a Chef joker).
+export const PRESET_GROUPS = [
+  { id: 'chef', label: 'Chef', test: (k) => /^chef/i.test(k) || k === 'joker_basket' },
+  { id: 'puzzle', label: 'Puzzle', test: (k) => /^puzzle/i.test(k) },
+  { id: 'mf', label: 'Magical friends', test: (k) => /^mf_/.test(k) },
+  { id: 'mini-game', label: 'Diamond Mine / Merge', test: (k) => /^mini_game_/.test(k) || /^diamond_push_/.test(k) },
+  { id: 'other', label: 'Other presets', test: () => true },
+]
+export const presetGroup = (key) => PRESET_GROUPS.find((g) => g.test(String(key ?? ''))).id
+
 export const CHEF_BASKET_TIERS = ['Basic', 'Rare', 'Epic']
 export const DEFAULT_CHEF_BASKET_VALUES = Object.fromEntries(CHEF_BASKET_TIERS.map((t) => [t, TAUGHT_CHEF_BASKETS[t]?.value ?? null]))
 export const CHEF_BASKET_TIER = /^Chef__(Basic|Rare|Epic)_Phase_/
@@ -354,10 +367,12 @@ function asCore(c) {
 // Version 5 (25 Nov 2026): the chests are the four the economist gave ("Only the four"): pink-chest and
 // yellow-chest come off a saved list (the four themselves are taught, so every list gets them).
 const DROPPED_CHESTS = new Set(['pink-chest', 'yellow-chest'])
+// Version 6 (26 Nov 2026): the presets by feature (puzzle, mini games, magical friends) are added to a saved list
+// the same way as the game's keys in version 4 - what it holds stays.
 function upgradeKeys(keys, version) {
-  if (!keys || version >= 5) return keys
+  if (!keys || version >= 6) return keys
   const out = { ...keys }
-  if (version < 4)
+  if (version < 6)
     for (const list of KEY_LISTS) {
       const have = new Map((keys[list.id] ?? []).map((k) => [k.key, k]))
       for (const k of SEED_KEYS[list.id] ?? []) if (!have.has(k.key)) have.set(k.key, k)
@@ -438,6 +453,10 @@ export function currencyValue(currency, { date = null } = {}) {
 }
 
 export const findCurrency = (economy, name) => (economy?.currencies ?? []).find((c) => c.name === name) ?? null
+// A currency name the game is known to have though it is not in the table: the economist's list (GAME_CURRENCIES) or
+// their validator's (VALIDATOR_CURRENCIES).
+const KNOWN_CURRENCY_NAMES = new Set([...GAME_CURRENCIES, ...VALIDATOR_CURRENCIES])
+export const isKnownCurrencyName = (name) => KNOWN_CURRENCY_NAMES.has(name)
 export const findKey = (economy, listId, key) => (economy?.keys?.[listId] ?? []).find((k) => k.key === key) ?? null
 
 // A preset's worth: a listed one's value, or a Chef basket's tier value.

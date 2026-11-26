@@ -8241,3 +8241,323 @@ wooden, silver,golden purple" - asked, written by the name alone ("here is an
 example chest:wooden(...") and "Only the four": taught (taught.js), pink-chest
 and yellow-chest off the list and off a saved one (economy version 5).
 verify-economy 235, economy-page 75.
+
+## Segments: the functions they are made of
+
+25 Nov 2026: "the next thing i want us to do is to learn the logic of as many
+functions as we can that with them we create segments. when building segments
+we will need to create the best flow to create them with different logics";
+"the BW and ang mode are very very important. ill try to teach u as many as i
+can". First taught: `fn_DiamondMine_Progression(####U)` and
+`fn_Merge_Progression(####U)` - "those fucntions return the progression in %
+of the user", e.g. `fn_DiamondMine_Progression(57634U) > 95`, "the only thing
+important is the event Id". A dictionary of functions in the project
+(`segmentFunctions.js`, with Brut Wins and the mode multiplier from the rules
+of 24 Nov), a progression writer and a reader of any condition on the
+Segments tab. verify-economy 246, economy-page 81.
+
+Then, answered: progression is "another fucntions they are added up with &&";
+the 1m,2m,4m,8m are "the multiplier on the mode. each net win is a level
+win, each brut win is the net win * mode multiplier" - mode 1 x1, mode 2 x2,
+mode 3 x4, mode 4 x8 (the "not confirmed" on Brut Wins is gone). Taught:
+`CoinsInAllowance` (the balance in allowance; OOC, out of coins - "logic is
+mostly when we will use the balance to get a segment of users with low
+balance") and `CurrentLevel`, names without brackets; their example
+`CoinsInAllowance < 2 && CurrentLevel > 519`. The progression card became
+"Build a condition": parts (progression, balance, level) joined with &&. The
+reader says when a name is written with brackets or a function without.
+verify-economy 254, economy-page 83.
+
+Then the flow: "the brut wins bands are pretty nicelly built ... we just need
+to be able to add more logics for the segments. we need first to let the user
+give the feature name, then ... we pick the number of segments then we give
+the rule for each segment. we need to let the model be able to know the base
+of the segment. then specific, or duplication. a specific will just be added
+to the specific segments that the user picks. duplications will be used for
+now with the average modes ... lets say we give the base of the segments the
+BW splits, then we say we want that the 3 first segmetns to get avg mode split
+so 3 new segmnets will be added". Asked how a specific is named: "A tag I type
+is added". Asked what to do with the players a specific leaves out: the answer
+came through empty - the flow says it, adds nothing; open. The Segments tab is
+four steps now (`segmentFlow.js`): the feature and the base, specifics, mode
+splits, the segments; the "Split each band by mode" box and the separate
+"Build a condition" card are folded into them. verify-economy 265,
+economy-page 88.
+
+Answered: "it shouldnt add a segments for the rest, but it should warn when
+there are holes i nthe segments" - the warning now says "A hole in
+<segment>". Taught: "another function to know is win rate function.
+fn_Avg_winrate(7) > 0.9 - here is an example of in the last 7 days if the win
+rate is more than 90%" - in the dictionary and as a part of the flow (last
+days, a share 0 to 1), written as the example, 0.9 with no m (asked whether
+that is so, as other decimals take m). verify-economy 268, economy-page 90.
+
+Asked whether the win rate is written `0.9` with no m (other decimals take m):
+"0.9 without m is right" - confirmed, nothing changed in what the app writes.
+
+Then: "the base is not 100% of the time will be brutwins. a rule should be
+toggalable as base or not, then we can go to specifics and then the
+duplicators." Asked: a base other than Brut Wins makes "Bands, like Brut
+Wins", one rule at a time; its segments are named by "Fixed codes per rule" -
+"Use these codes": BW, Mode, Balance, Level, WinRate, DMProg, MergeProg. Step 1
+picks the base rule (`BASE_RULES`, `withBaseRule`); a plan saved before is a
+Brut Wins base, as it was. verify-economy 278, economy-page 94.
+
+Taught: "a cohort function ... it just gives true or false if the user is in
+the cohort. example PjCohorts.ContainsCohort(####)"; and "(GetMTXEventDataListAsStr(53524U,
+"CompletedItems")?.Count() > 10) - this one is a chef function, the number
+with the U is the event number ... returns how many dishes the user finished
+in the chef feature". The reader learned names with a dot, text in quotes
+(curly ones from the chat read the same) and ?.Count(); both are parts of a
+specific (a cohort asks for its id only). Asked: whether Chef dishes should
+be a base rule, and whether "not in a cohort" (!) is used. verify-economy 286,
+economy-page 97.
+
+Answered: "no namds for the chef. put someting looks good in the naming" -
+Chef dishes is a base rule, code `ChefDishes` (this app's own), each
+comparison in brackets as the example; "yes as for the cohort" - a cohort part
+is "in" or "not in" (`!PjCohorts.ContainsCohort(1234)`). verify-economy 289,
+economy-page 99.
+
+## The coworker's platform merged
+
+25 Nov 2026: "i want us to look at the active branches. we got 3 live ones,
+and we got 1 of my cororker that we need to push". On GitHub: the coworker's
+`architecture/foundation` (their Claude, two commits: the platform - a new
+home page with search and folders, a catalog of 22 models, 15 of them "not
+migrated yet", the app in TypeScript, a toolkit server with PostgreSQL and
+Google sign-in) and two branches already merged (`feature/move-all-data`,
+`setup/auto-deploy`). Tested on a copy before anything: today's 16 merges of
+master went in with no conflict; lint, typecheck and build passed; the built
+site opened as GitHub Pages serves it, with no server - the home page says
+"Shared folders are off", Merge Mania, Chef, Economy and Diamond Mine open,
+a direct link to a model opens. One step of economy-page (added on master
+that day) clicked the old home page's button: fixed, 99/99 on the merged
+build. Asked, the economist chose to merge it now and delete the two
+finished branches. The rule "never merge the coworker's branches" became
+"only when the economist asks, tested first". The server half needs a host
+and a database: until then the live site runs without folders.
+
+After the merge, an `npm install` in the project folder (for the platform's
+new packages) removed Playwright: it had been installed on the side, never
+listed, and npm removes what is not listed. It is a devDependency now, pinned
+to 1.64.1 - the version whose Chromium (1248) is installed here; 1.65 asks
+for a new browser. economy-page 99/99 and browser-data 10/10 with it.
+
+## The validator's rules
+
+25 Nov 2026: "the next thing we are going to do is to learn the syntax
+validation. we already got some kind of validator" - the economist's "Reward
+Scanner Pro" (Google Apps Script, sent in two chunks). Compared with the
+app's checker: the four real examples pass both; the validator is stricter on
+brackets (dynamic in brackets, what a group starts with, no preset inside,
+nested fallbacks, no duplicates), whole currency amounts, lower case triggers
+and unknown keys (an error); looser on amounts of 0 and coin decimals; it
+reads dr:key:value and a bare coins:N, not Missing/Duplicate; it counts
+prizes. Asked: where they disagree "The validator's"; the prize count "Yes,
+with its limits"; dr:key:value and bare coins "Not sure". The checker took the
+validator's rules and its prize count (with its run options on Check a
+reward: the prize limits, upper case triggers); its currency list became a
+known list too; the app's stricter rules stay where the validator is looser
+(asked again); "Balance tiers" writes [dynamic(...)]. verify-economy 310,
+economy-page 104, chef-worth 10, verify-chef-prize-text 9, CC 15.
+
+Answered: where the validator is looser, the app's stricter rules stay
+("keep both": an amount of 0, more than 2 decimals of coins); Missing(...) and
+Duplicate(...) are still read with the note ("keep that for now");
+trigger:Pity stays on the list as it is ("leave the pity"). Nothing changed in
+what the checker does.
+
+## The presets by feature
+
+26 Nov 2026: "as for the keys tabs. i want us to break the options for chef,
+stickers, puzzle, magical friend, diamond mine/merge and others. all send u
+all presets names" - three lists (puzzle 469 with one name twice, mini games
+and diamond_push 342, magical friends 1014), "the ones of the diamond/merge
+magical friends and puzzle are important for data validation". Copied from
+the chat record as given (no hand copying), added to every preset list
+(economy version 6), so the checker knows them. The Keys tab shows one group
+at a time with its count; Build a prize groups its presets. presetFor's
+nearest amount now finds mf_80 for 85 where only mf_90 existed (a tie goes
+down; nothing in the app calls it yet). verify-economy 315, economy-page 110.
+
+## Team data on GitHub
+
+26 Nov 2026: "i want the site to be live, with live data between all the
+users. how can we make it happen ?" The coworker's platform has a server with
+Google sign-in and shared documents, but nowhere to run it and no tool saving
+to it. Asked where it should run: "i think we need to focus on the memory to
+live in github, can we do that?" - yes. The site's repository is public, so a
+private repository was created for the data, idog-lab/EcoSystem-data (asked:
+"Create idog-lab/EcoSystem-data"), and every collaborator invited with write
+("read and change all the collaborators": yaacovs-dot, moralf-hub). Shared
+first: the Economy page, saved Merge events, Chef, Diamond Mine.
+`src/lib/teamData.js` copies each save there and brings the team's newest in
+when the app opens; a save never writes over another person's change made
+since (they choose); each person connects once with a token on the data page;
+a dot in the corner says whether the last save reached the team (it covered a
+Chef field as a word tag at first - a dot in the margin now, words only when
+something needs the person). verify-team-data 24 (two browsers, a stand-in
+GitHub), e2e team-data 16; saved-events 20, browser-data 10 + 11, Chef 188,
+economy-page 110 unchanged.
+
+## Merge: segments and prizes
+
+26 Nov 2026: "with the logic we learned on segmnets building and on prize
+generation, i want u to add segmentation into the merge and also the prizes.
+u need to oipen 2 tabs for those in the flow. in the merge, we will have the
+first tab as the segments, there we can also have the DR demand and the
+multipliers between segments. we should also give the value of a merge DR.
+then, the simulator should calculate the allowance worth of each rank in the
+prizes ladder. we should pick the base segments that opon it we calculate all
+of those. and then the item ladder is created from the base on the others."
+Asked four things: a rank's worth - "DR paid since the rank before"; which
+ranks - "The ones I mark"; the prize - "the app should show the allowance
+worth of the rank, then i put prizes inside and the app calculates live how
+far i am from the prize that is suppos to be"; the DR worth - "Per Merge
+event".
+
+Built: step 1 became "Segments" (the Economy page's segment flow, now a
+component both pages use; "Use these segments" names Merge's segments with
+their conditions; the worth of one merge DR; a "Prizes on" choice of base in
+the demand table), and a new step 5, "Prizes", between Build and Test and
+export (which is step 6 now; every on-screen "step 5" that meant it says 6).
+One playthrough of the base segment's boards in use (step 4's effort chart's,
+normal then Recompletion), each marked rank's DR since the marked rank before
+times the DR worth; the typed prize read by the economy, its worth and the
+difference live. Other segments: the base's worth and prize times their
+multiplier against the base, their own prize where typed. The Item Ladder of
+each segment takes them; with nothing typed the export is what it was. This
+app's own: the colours of the difference (5% / 15%), how a scaled amount is
+rounded (coins to hundredths, others whole, at least 1), Segment 1 keeping
+the event-level fields. Opening a saved event or a backup, and Clear data,
+did not know the new fields at first (found while testing; fixed).
+verify-prize-ladder 24, e2e merge-prizes 17.
+
+## Segment sets
+
+26 Nov 2026: "we got features that are live for 2 days and are from levels.
+for those events we hold the same segments with the same effort (each
+segment gets a base of Brut Wins as the effort of the segment). i want us to
+create a memory of segment chunks with their demand if given. as an example
+of those. when lets say i go into the disco (which can be 2 days from level)
+i can pick the segments from a drop list and ill get the effort also for
+those segments. i need in the segments section in the economy to be able to
+edit those for all in one time. after we will have this anchor, we will be
+able to continue and learn how to start building features". Asked: the
+effort - "Brut Wins per segment"; an edit after a feature took a set -
+"Copied when picked"; how a set is made - "Save from the segment flow".
+
+Built: on the Economy page's Segments tab, "Save the flow above as a set"
+(a name; the same name updates the set and keeps its efforts by segment) and
+one card with every set (rename, delete, open in the flow, each segment's
+effort). A set's segments are kept without the feature's name, so Disco,
+Merge or any feature takes the same set under its own name. In Merge's step
+1, "Take the segments from a set" copies names, conditions, the flow and the
+efforts (a new "Effort (Brut Wins)" column); a set changed afterwards is
+said, with "Take its new numbers". This app's own: the efforts are kept by
+the segment's name without the feature; "Use these segments" from the flow
+keeps an effort by segment key and forgets the set. Nothing turns Brut Wins
+into a DR demand yet. Shared with the team (economy/segment-sets.json).
+verify-segment-sets 13, e2e segment-sets 14.
+
+## The Segments tab, one view at a time; a set's name placeholder
+
+26 Nov 2026: "the layout of the segments page is not so good. too scrollable.
+and u need to search for things". Measured at 1500 x 800: the Segments tab
+was 2,121 px (the flow, the read card, the segments, the sets and the
+functions one under the other). Now four views, one at a time: Build
+segments (steps 1-3 left, the segments right and in sight, "Save as a set"
+on them, each condition on one line with a short "Who" column - the shared
+Brut Wins formula hid the part that differs), Segment sets (small cards side
+by side), Read a condition, Functions. Tallest view 935 px. Merge's effort
+field showed "not giver" (cut): a dash now.
+
+Same day: "when we have a default segment like the 2D_levels to somehow hold
+in the segments name the (Name)_ ... so when we do each feature, the model of
+the feature will prefix the name of the feature to the segments. if we make
+generic 2d_levels segments, we will hold the 2D_LEVELS as a name placeholder
+that changes between features that use the segments". A set already kept its
+segments without the feature; now the feature typed when the set is saved is
+shown as its placeholder (2D_Levels_BW_0_9, the placeholder marked), a set
+saved with no name takes it as its name, and Merge's message says it named
+Merge_ in place of it. verify-segment-sets 15, e2e segment-sets 16,
+economy-page 111, merge-prizes 17.
+
+## Generic segments: no feature typed
+
+26 Nov 2026, with a picture of the flow refusing to save ("Type the feature's
+name") while 2D_Levels was typed as the set's name: "i want sometime like we
+talked to create a generic segment that will be overriden with the features
+name. so i dont have a feature name to put in". The flow asked for a feature
+before anything could be saved, so a generic set could only be made by
+typing a made-up feature. On the Economy page the feature may now be left
+empty ("Empty: generic"): the set's name typed beside "Save as a set" names
+the segments as it is typed (2D_Levels_BW_0_9, the placeholder marked;
+Feature_ until a name is typed; a name with spaces or signs is made into
+letters, digits and "_"), and it is saved as the set's placeholder, so any
+feature that takes the set puts its own name there. Merge's own flow still
+has its feature. verify-segment-sets 20, e2e segment-sets 21 (Merge takes
+the generic set as Merge_BW_...), economy-page 111.
+## Merge: the demand From levels or From events
+
+26 Nov 2026, answering what was open about effort: "the effort is driven
+from the BW, each segment get a BW dr multiplier. its a multiplier that we
+give on each brut win for the player, that means that the EV of a BW will
+give 2.5 DRs. so the total effort will be BW*multiplier", and then: "each
+feature will need to be toggled between levels or events. from events do not
+get their effort from the BW, they get it from the economist for the base
+segment". Asked: the multiplier is kept "In each feature" (not in the set);
+From events, the other segments are "Base x segment multiplier" - the
+multiplier between segments that already sized the rewards and prizes;
+From levels the demand is "Calculated, read-only"; Merge Mania is "From
+events" by default.
+
+Step 1 has the switch ("The demand comes From events / From levels").
+From events only the base's demand is a field; every other segment shows
+its demand worked out (base x 1.6) and the column reads "Multiplier (x
+base)". From levels a "DR per Brut Win" column appears and every demand is
+Brut Wins x that, with what is missing said in the cell. A demand above the
+chase (2,048) is not taken and the cell says why - never cut down to fit. A
+pasted column of demands skips the calculated ones and names them. A project
+saved before the switch keeps its typed demands, says so, and has neither
+kind picked until one is. build-event and rc-demand typed Segment 2's demand
+by hand on a new project; they now give it a multiplier of 1.6 (500 x 1.6 =
+800, the same figures). verify-demand-source 7, e2e merge-demand-source 18.
+## Wicked Trails: the first level feature
+
+26 Nov 2026: "lets start the first feature ... it is called wicked trails. for
+each feature we build, we will need to have the place where we build the
+economy and a place we can see with our eyes some kind of a mock of the
+feature", with a picture of the game's screen (two lanes of tiers, a Final
+Prize panel) and the two DR items, and an earlier summary of the economy sheet.
+The economist's words: "the feature has 2 progress bars in it. each one is
+filled using the DR u can see in the side of the progress bar. each DR as we
+said is given through a brut win ... the calculation is through (in levels
+feature) ROE, rate of economy is the allowance worth of prizes a player gets
+from a BW. it should let us pick the amount of tiers in each row, and to put
+prizes in the grand prize."
+
+Asked, in two rounds:
+- the lanes: "they are both filled together. with multiplier. when one lane is
+  finished, the economy of the first one is given to the DR of the 2nd one.
+  first each BW will split the ROE between the 2 DRs" - the split "A share I
+  type", the easy lane's length against the hard one "A share I type", and
+  silver and gold DR per Brut Win "Two per segment";
+- the tiers: "Shares of the lane" (adding up to 100%);
+- the ROE: "each feature gets a ROE";
+- the Final Prize: "Sheet's rule: 20% / 40% take" (the Final Prize counted at
+  50% of its worth against the pool).
+
+Built as a model of its own (the home page's Wicked Trails, now available):
+Segments (a segment set taken, named Wicked_Trails_..., effort, silver and
+gold per Brut Win, the base), Prizes (the rules, both lanes' tiers with their
+DR, Brut Wins, what they earn and their target, each prize's worth by the
+economy and how far it is; the Final Prize's pool and target), Mock (a
+sketch of the event, a slider of Brut Wins played and "Win a level"). The
+five shares start at the old sheet's values, said so on the page. Not built:
+the export, Fu split, Sell DR; dr-wicked-trails-dr-silver is not on the
+game's currency list. The tier-worth reading and a prize scaled for another
+segment were moved from Merge's prizeLadder.js to lib/economy/prizeWorth.js,
+unchanged (verify-prize-ladder 24 still passes). verify-wicked-trails 20 (a
+worked example by hand), e2e wicked-trails 16.

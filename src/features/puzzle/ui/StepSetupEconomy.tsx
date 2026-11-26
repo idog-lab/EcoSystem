@@ -309,7 +309,7 @@ function RcEconomy() {
           </Table>
           {Math.abs(ev.rc.tiers.reduce((a, t) => a + t.share, 0) - 1) > 1e-6 && <Note tone="red">The shares have to add up to 100%.</Note>}
           <label className="mt-3 block">
-            <Label hint="The workbook valued RC pieces with the piece worth of the segment selected on its Puzzle sheet (9 in the copy it came from). Open question: which segment is meant.">Piece worth taken from regular segment</Label>
+            <Label hint="As the RC Simulator: the last day's piece worth of regular segment 9 (economist, 26 Nov 2026: the amounts should match the simulator). Change it only on purpose.">Piece worth taken from regular segment</Label>
             <Num value={ev.rc.pieceValueSegment} min={1} max={9} digits={0} onChange={(v) => edit((e) => void (e.rc.pieceValueSegment = Math.round(v!)))} />
           </label>
         </Panel>

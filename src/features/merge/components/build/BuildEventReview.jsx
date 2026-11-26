@@ -365,7 +365,7 @@ function SegmentReview({ seg, appliedBoards }) {
                 {seg.demandFit.calibration >= 0
                   ? `The build took ${dr1(seg.demandFit.calibration)} more off the later boards`
                   : `The build put ${dr1(Math.abs(seg.demandFit.calibration))} back on the later boards`}{' '}
-                (besides the merge-energy 80%) until the average of {seg.demandFit.players} simulated players paid the demand. Those players all have average luck; step 5 shows the spread with real luck.
+                (besides the merge-energy 80%) until the average of {seg.demandFit.players} simulated players paid the demand. Those players all have average luck; step 6 shows the spread with real luck.
                 {seg.demandFit.constraint === 'no-subsidy-left' && ' A proven limit: the later boards have no more subsidy to give within their rank limits, so the player cannot be made to pay more.'}
                 {seg.demandFit.constraint === 'boards-full' && ' A proven limit: the later boards hold all the subsidy their tiles can, so the player cannot be made to pay less.'}
                 {seg.demandFit.constraint === 'not-settled' && !seg.demandFit.jump && ' Not a limit: the search did not settle closer than this in its passes; building again usually does.'}
@@ -868,7 +868,7 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
             <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500" data-testid="build-status">
               <StatusChip kind={!draftCurrent ? 'stale' : draft.status === 'infeasible' ? 'infeasible' : applied ? 'applied' : 'draft'} />
               {draftCurrent ? `${draft.builtCount} segment${draft.builtCount === 1 ? '' : 's'} built${skippedInSight(draft) ? `, ${skippedInSight(draft)} without a DR demand` : ''}.` : null}
-              {draftCurrent && !applied && draft.status !== 'infeasible' && ' This build is not in use - step 5 can put it in use.'}
+              {draftCurrent && !applied && draft.status !== 'infeasible' && ' This build is not in use - step 6 can put it in use.'}
               {draftCurrent && draft.status === 'infeasible' && ' It is not in use.'}
             </span>
           )}
@@ -900,7 +900,7 @@ export function BuildStep({ segments, listOf, activeSegmentIndex, onSelectSegmen
         )}
         {phase === 'rc' && rcOnMainDraft && !running && (
           <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="rc-on-main-draft">
-            This Recompletion build was made on top of a Normal build that is not in use yet. Put the whole event in use in step 5 to use them together.
+            This Recompletion build was made on top of a Normal build that is not in use yet. Put the whole event in use in step 6 to use them together.
           </div>
         )}
 

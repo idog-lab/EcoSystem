@@ -32,6 +32,7 @@ export const DATA_PARTS = [
   { id: 'chef', label: 'Chef (its events and the last simulation runs)', keys: ['merge-mania-chef', 'merge-mania-chef-runs'] },
   { id: 'economy', label: 'Economy page (worth, currencies, keys, and the Balance tab)', keys: ['superplay-economy', 'economy-balance-draft'] },
   { id: 'diamond-mine', label: 'Diamond Mine', keys: ['merge-mania-diamond-mine'] },
+  { id: 'wicked-trails', label: 'Wicked Trails', keys: ['superplay-wicked-trails', 'superplay-wicked-trails-view'] },
 ]
 const isEventKey = (key) => key === EVENTS_INDEX || key.startsWith(EVENT_PREFIX)
 const partOf = (key) => DATA_PARTS.find((p) => p.keys.includes(key))?.id ?? 'other'

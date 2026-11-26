@@ -41,17 +41,18 @@ describe('the model registry', () => {
     }
   }, 120_000)
 
-  it('the built tools are available (Puzzle since 26 Nov 2026); every other one says it is not migrated', () => {
+  it('the existing tools stay available, Wicked Trails and Puzzle are built; every other new one says it is not migrated', () => {
     const status = Object.fromEntries(MODEL_CATALOG.map((m) => [m.id, m.status]))
     expect(status).toEqual({
       'merge-mania': 'available',
       'diamond-mine': 'available',
       chef: 'available',
       economy: 'available',
+      ...Object.fromEntries(ADDED_IDS.map((id) => [id, 'not-migrated'])),
+      'wicked-trails': 'available',
       momentum: 'not-migrated',
       challenge: 'not-migrated',
       puzzle: 'available',
-      ...Object.fromEntries(ADDED_IDS.map((id) => [id, 'not-migrated'])),
     })
     for (const m of MODEL_CATALOG) expect(m.moduleKey === 'not-migrated').toBe(m.status === 'not-migrated')
   })

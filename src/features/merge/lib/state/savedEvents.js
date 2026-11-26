@@ -9,6 +9,7 @@
 // saving one event never rewrites the others. The browser gives a site a few
 // MB in all: when it is full, saving says so and nothing is lost.
 import { gzipSync, gunzipSync, strToU8, strFromU8 } from 'fflate'
+import { teamData } from '../../../../lib/teamData'
 
 const INDEX_KEY = 'merge-mania-saved-events'
 const DATA_PREFIX = 'merge-mania-saved-event:'
@@ -95,6 +96,8 @@ export function saveEvent({ id = null, name, startDate = null, days = null, payl
       ? { ok: false, reason: 'full', message: 'This browser has no room left for another saved event. Download an older one as a file and delete it from the list, then save again.' }
       : { ok: false, reason: 'error', message: `The event could not be saved (${error?.message ?? 'unknown error'}).` }
   }
+  // Shared with the team when connected (lib/teamData.js): one file an event.
+  teamData.eventChanged(eventId)
   return { ok: true, event }
 }
 
@@ -113,6 +116,7 @@ export function renameEvent(id, name) {
   const clean = String(name ?? '').trim()
   if (!clean) return false
   localStorage.setItem(INDEX_KEY, JSON.stringify(index.map((e) => (e.id === id ? { ...e, name: clean } : e))))
+  teamData.eventChanged(id)
   return true
 }
 
@@ -120,6 +124,7 @@ export function deleteEvent(id) {
   localStorage.removeItem(DATA_PREFIX + id)
   localStorage.setItem(INDEX_KEY, JSON.stringify(readIndex().filter((e) => e.id !== id)))
   if (openEventId() === id) setOpenEventId(null)
+  teamData.eventDeleted(id)
 }
 
 // Which saved event is open now (the one "Update" writes to).

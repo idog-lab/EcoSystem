@@ -78,8 +78,10 @@ by git, like the workbook). The parity suites skip themselves without it.
   its Puzzle sheet. The platform computes every segment with its own prices -
   what the workbook gives when that segment is selected (so the "scaled by wins"
   shortcut of the Maleficent summary is reproduced in the parity test only).
-- RC pieces are valued with the piece worth of one regular segment, an input
-  (default 9, the segment selected in the copy) - **open question** which one.
+- RC pieces are valued with the last day's piece worth of regular segment 9,
+  as the RC Simulator does (economist, 26 Nov 2026: "RC piece value is in the
+  RC simulator - the amounts should match whats there"); the parity test holds
+  every RC segment's coins to the simulator's. It stays a visible setting.
 - The daily progression, effort shares and every former mode toggle are
   explicit inputs; changing the length puts in the workbook's values for it.
 

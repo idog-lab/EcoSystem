@@ -43,7 +43,7 @@ const { browser, page, errors } = await launch({
 await openMerge(page)
 
 // ---- The editor, as steps of the flow ----
-ok('the flow has five steps; the generator and the effort shape are sections of step 1 and step 4', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,rewards,build,finalize')
+ok('the flow has six steps; the generator and the effort shape are sections of step 1 and step 4', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.dataset.step).join(','))) === 'setup,layouts,rewards,build,prizes,finalize')
 
 // Step 1, its last section: generator multipliers, lucky drops, dates and CC
 await step(page, 'setup').click()

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import Card from '../../components/ui/Card'
-import { chefBasketKeys, currencyValue, findCurrency } from '../../lib/economy/economyModel'
+import { PRESET_GROUPS, chefBasketKeys, currencyValue, findCurrency, presetGroup } from '../../lib/economy/economyModel'
 import { checkReward, rewardWorth } from '../../lib/economy/parse'
 import { tierSyntax } from '../../lib/economy/syntax'
 import { worthText } from '../../lib/economy/examples'
@@ -99,7 +99,7 @@ export default function BuildTab({ economy }) {
         <Card title="Triggers, presets, a pack, a chest">
           <div className="flex flex-col gap-3">
             <PickMany label="Triggers" items={economy.keys.triggers.map((k) => k.key)} picked={triggers} onPicked={setTriggers} testid="economy-build-triggers" />
-            <PickMany label="Presets" items={economy.keys.presets.map((k) => k.key)} picked={presets} onPicked={setPresets} testid="economy-build-presets" />
+            <PickMany label="Presets" items={economy.keys.presets.map((k) => k.key)} picked={presets} onPicked={setPresets} groups={PRESET_GROUPS} groupOf={presetGroup} testid="economy-build-presets" />
             <div className="flex flex-wrap items-end gap-3">
               <Field label="Chef basket">
                 <select value={basket} onChange={(e) => setBasket(e.target.value)} className={`${INPUT} max-w-[22rem]`} aria-label="Chef basket" data-testid="economy-build-basket">
@@ -230,8 +230,13 @@ export default function BuildTab({ economy }) {
         <div className="flex flex-col gap-3" data-testid="economy-build-output">
           {text ? <p className={`${MONO} rounded-xl bg-slate-50 p-3 text-slate-800`} data-testid="economy-build-text">{text}</p> : <p className="text-sm text-slate-500">Nothing yet: add coins, a resource, a preset, a pack or a currency.</p>}
           {text && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <CopyButton text={text} />
+              {check.node && (
+                <span className="text-sm text-slate-600" data-testid="economy-build-prizes" title="Counted as the economist's validator counts: triggers and hidden counters are not prizes.">
+                  {check.prizes} {check.prizes === 1 ? 'prize' : 'prizes'}
+                </span>
+              )}
             </div>
           )}
           {text && <Findings issues={check.issues} />}
@@ -264,8 +269,14 @@ function CurrencySelect({ economy, value, onChange, label, empty = 'pick one' })
   )
 }
 
-function PickMany({ label, items, picked, onPicked, testid }) {
+// (groups: [{ id, label }] and groupOf(key) - the presets' groups, as on the Keys tab.)
+function PickMany({ label, items, picked, onPicked, testid, groups = null, groupOf = null }) {
   const left = items.filter((k) => !picked.includes(k))
+  const option = (k) => (
+    <option key={k} value={k}>
+      {k}
+    </option>
+  )
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid={testid}>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
@@ -280,11 +291,16 @@ function PickMany({ label, items, picked, onPicked, testid }) {
       {left.length > 0 ? (
         <select value="" onChange={(e) => e.target.value && onPicked([...picked, e.target.value])} className={`${INPUT} max-w-[20rem]`} aria-label={`Add to ${label}`}>
           <option value="">add...</option>
-          {left.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
+          {groups && groupOf
+            ? groups.map((g) => {
+                const inGroup = left.filter((k) => groupOf(k) === g.id)
+                return inGroup.length ? (
+                  <optgroup key={g.id} label={`${g.label} (${inGroup.length})`}>
+                    {inGroup.map(option)}
+                  </optgroup>
+                ) : null
+              })
+            : left.map(option)}
         </select>
       ) : (
         !items.length && <span className="text-xs text-slate-400">none on the Keys tab</span>

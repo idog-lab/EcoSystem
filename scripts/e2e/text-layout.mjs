@@ -72,7 +72,8 @@ function inspect() {
       continue
     }
     const ownText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 1)
-    if (ownText && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 2) say('text-cut', el, `${el.scrollWidth}px of text in ${el.clientWidth}px`)
+    // (A text cut on purpose, its full text in the hover, is marked data-cut-ok: a segment's condition on one line.)
+    if (ownText && !el.closest('[data-cut-ok]') && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 2) say('text-cut', el, `${el.scrollWidth}px of text in ${el.clientWidth}px`)
     // 2. Sticking out of the window (and not inside something that scrolls sideways).
     if (ownText && r.right > vw + 2 && !inScroller(el)) say('sticks-out-of-window', el, `ends at ${Math.round(r.right)}px in a ${vw}px window`)
     // 3. A table cell squeezed into a tall narrow column.
@@ -138,11 +139,13 @@ for (const width of WIDTHS) {
   await page.getByTestId('build-summary').waitFor({ state: 'visible', timeout: 540000 })
   await page.waitForTimeout(1500)
   await look('step 4 built')
+  await step('prizes').click()
+  await look('step 5 prizes')
   await step('finalize').click()
   await page.waitForTimeout(300)
   await page.getByTestId('finalize-validate').click()
   await page.getByTestId('validation-table').waitFor({ state: 'visible', timeout: 300000 })
-  await look('step 5')
+  await look('step 6')
   for (const name of ['Play tester', 'Syntax', 'Editor', 'Rewards (V2)', 'Twister', 'CC management']) {
     await tab(page, name).click()
     await page.waitForTimeout(700)
@@ -151,7 +154,7 @@ for (const width of WIDTHS) {
   await browser.close()
 }
 // ---- the verdicts ----
-const MAIN = ['step 1', 'More menu', 'step 2', 'step 3', 'step 4 before a build', 'step 4 building', 'step 4 built', 'step 5', 'Play tester', 'Syntax']
+const MAIN = ['step 1', 'More menu', 'step 2', 'step 3', 'step 4 before a build', 'step 4 building', 'step 4 built', 'step 5 prizes', 'step 6', 'Play tester', 'Syntax']
 const of = (width, kinds, screens = null) =>
   Object.entries(report)
     .filter(([screen]) => screen.startsWith(`${width} `) && (!screens || screens.includes(screen.slice(String(width).length + 1))))

@@ -127,7 +127,7 @@ export type PuzzleEvent = {
     tiers: RcTier[]
     cap: number
     coinValue: number
-    /** Whose piece worth values the RC boards: the workbook used the segment selected on its Puzzle sheet. */
+    /** Whose last-day piece worth values the RC boards: 9, as the RC Simulator (economist, 26 Nov 2026). */
     pieceValueSegment: number
   }
   maleficent: {

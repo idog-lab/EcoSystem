@@ -52,7 +52,7 @@ export function balanceTiers(rows, { economy, date = null, flagPct = 10, currenc
     if (cv && cv.value > 0 && target != null && worth != null) {
       const without = worth - currencyPartWorth(node, currency, cv.value)
       const amount = roundTo((target - without) / cv.value, 0)
-      suggest = { amount: Math.max(0, amount), value: cv.value, without: clean(without), text: amount >= 1 ? `dynamic(${currency}:${amount})` : null }
+      suggest = { amount: Math.max(0, amount), value: cv.value, without: clean(without), text: amount >= 1 ? `[dynamic(${currency}:${amount})]` : null }
     }
     return {
       tier: row.tier || `Tier ${i + 1}`,

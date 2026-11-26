@@ -35,6 +35,9 @@ import { MIN_DROP_RANK, multiDropRankOf, tripleDropRankOf, soloDropRankOf, tileR
 import { firstBoardCapFor, RC_MIN_RANK_UNDER_TILES, invalidateLayout, tutorialCells, tutorialCellsAreOpen } from '../../lib/core/board'
 import { paintTile, fillAllTiles, resizeBoard, setRankWindow, applyLayout, openTutorialCells, hasTutorialCells } from '../../lib/core/layoutEdits'
 import BoardBank from './BoardBank'
+import SegmentsBuilder from './SegmentsBuilder'
+import PrizesStep from './PrizesStep'
+import { DEMAND_SOURCES, demandSourceOf, demandsBySource } from '../../lib/build/demandSource'
 import { bankLayoutOf } from '../../lib/core/boardBank'
 import { parseRewardDefinitionRows } from '../../lib/rewards/rewardDefinitionsPaste'
 import { buildInputsKey, buildInputParts, changedInputParts, draftSegmentIsApplied, segmentBuildInputs, rcInputsOnMainDraft, layoutCapacity, ladderAdvisories, splitTargets, twisterInputsKey, repriceTwister, withTwisterMarks, draftStatusOf, INPUT_PART_LABELS, boardsWithDraftApplied, draftIsUsable } from '../../lib/build/eventBuild'
@@ -52,10 +55,11 @@ import { chaseValue, subsidyForDemand, demandForSubsidy, fillLastBoard, spreadSu
 // effort shape in step 4 above the Build button. Old names for them still
 // lead there (`STEP_ALIAS`, `STEP_FOLD`).
 const STEPS = [
-  { id: 'setup', label: 'DR demand', purpose: 'Type what each segment\'s player should spend. The board subsidy follows from it.' },
+  { id: 'setup', label: 'Segments', purpose: 'Build the segments, then type what each one\'s player should spend and its multiplier. The board subsidy follows from it.' },
   { id: 'layouts', label: 'Board layouts', purpose: 'Pick each board\'s layout. The same boards for every segment; the build fills what goes under the tiles.' },
   { id: 'rewards', label: 'Rewards and Twister', purpose: 'Type what a player should collect, and the twists. The rules behind them have working defaults.' },
   { id: 'build', label: 'Build', purpose: 'One click builds the event from what you entered, puts it in use and shows how it turned out.' },
+  { id: 'prizes', label: 'Prizes', purpose: 'Each marked rank is worth the DR paid for it. Type its prize and see how far it is from that, for the base and every segment.' },
   { id: 'finalize', label: 'Test and export', purpose: 'Your last build is in use. Test it on players, play it, then export.' },
 ]
 const STEP_ALIAS = { generator: 'setup', effort: 'build', definitions: 'rewards', phase: 'setup' }
@@ -268,7 +272,7 @@ export default function BuildEventPage({
   const totalBudget = baseList.boards.reduce((s, b) => s + (b.blockedValue ?? 0), 0)
   const hasTiles = baseList.boards.some((b) => b.tiles.flat().some((t) => t !== 'open'))
   const hasTargets = REWARD_TYPES.some((t) => (baseTargets[t] ?? 0) > 0)
-  const done = { setup: totalBudget > 0, layouts: hasTiles, rewards: hasTargets, build: draftCurrent, finalize: applied && draftCurrent }
+  const done = { setup: totalBudget > 0, layouts: hasTiles, rewards: hasTargets, build: draftCurrent, prizes: Object.keys(segments[segments[0].prizeBase ?? 0]?.prizeLadder?.main ?? {}).length > 0, finalize: applied && draftCurrent }
 
   const goTo = (id, anchor) => {
     onStepChange(STEP_ALIAS[id] ?? id)
@@ -361,7 +365,7 @@ export default function BuildEventPage({
         )}
         {draft?.restored && !applied && draftCurrent && draftIsUsable(draft) && (
           <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="draft-restored">
-            A build kept from your last session (or from a backup file) is here, but it is not what is in use. Step 5 can put it in use.
+            A build kept from your last session (or from a backup file) is here, but it is not what is in use. Step 6 can put it in use.
           </div>
         )}
         {draft && !draftCurrent && (
@@ -403,6 +407,7 @@ export default function BuildEventPage({
           setFixed={setFixed}
         />
       )}
+      {step === 'prizes' && <PrizesStep segments={segments} shownSegments={shown} goTo={goTo} />}
       {step === 'finalize' && (
         <FinalizeStep
           {...shared}
@@ -467,8 +472,29 @@ function SetupStep(props) {
     })
   }
 
-  function setDemand(seg, demand) {
-    const list = listOf(seg)
+  // WHERE THE DEMAND COMES FROM (lib/build/demandSource.js): From events - the base's typed, the others base x
+  // multiplier; From levels - Brut Wins x DR per Brut Win. A calculated demand is the normal event's (Recompletion
+  // follows it, App.jsx); it is written whenever what it is made of changes, and never typed.
+  const source = demandSourceOf(segments[0].demandSource)
+  const mainDemandOf = (seg) => (seg.main.targetSubsidy == null ? null : demandForSubsidy(seg.main.targetSubsidy, 'main'))
+  const bySource = demandsBySource(
+    source,
+    segments.map((seg, i) => ({ demand: mainDemandOf(seg), factor: i === 0 ? 1 : (seg.segmentFactor ?? 1), effortBW: seg.effortBW, drPerBW: seg.drPerBW })),
+    chaseValue('main'),
+  )
+  const calculated = (i) => (shownSegments.includes(i) ? bySource[i] : null)
+  const wanted = shownSegments.map((i) => `${i}:${bySource[i].derived ? bySource[i].demand : 'typed'}:${mainDemandOf(segments[i])}`).join('|')
+  useEffect(() => {
+    for (const i of shownSegments) {
+      const row = bySource[i]
+      if (row.derived && row.demand !== mainDemandOf(segments[i])) setDemand(segments[i], row.demand, 'main')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted])
+
+  function setDemand(seg, demand, ph = phase) {
+    const list = ph === 'main' ? seg.main : seg.recompletion
+    const phase = ph
     if (demand == null) {
       // No amount: budgets stay as typed and every board becomes editable.
       list.updateTargetSubsidy(null)
@@ -512,6 +538,7 @@ function SetupStep(props) {
       if (!seg) return skipped.push(`"${row}" (no segment left for it)`)
       const value = Number(row.split(',').join('').split(' ').join(''))
       if (phase === 'rc' && seg.main.targetSubsidy != null) return skipped.push(`${name} (follows the normal event)`)
+      if (bySource[startIndex + k]?.derived) return skipped.push(`${name} (calculated ${source === 'levels' ? 'from its Brut Wins' : 'from the base'})`)
       if (!Number.isFinite(value) || value < 0 || value > chaseValue(phase)) return skipped.push(`${name}: "${row}" is not a demand between 0 and ${chaseValue(phase).toLocaleString()}`)
       setDemand(seg, Math.round(value))
       taken += 1
@@ -529,6 +556,8 @@ function SetupStep(props) {
   const anyGap = shownSegments.some((i) => listOf(segments[i]).targetSubsidy != null && Math.abs(gapOf(i)) > 0)
 
   return (
+    <div className="flex flex-col gap-4">
+    <SegmentsBuilder segments={segments} />
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] xl:items-start">
       <Panel title="1. DR demand" tag={<SegmentTag />}>
         {phase === 'rc' && (
@@ -544,6 +573,30 @@ function SetupStep(props) {
           </span>
           .
         </p>
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5" data-testid="demand-source">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">The demand comes</span>
+          <div className="flex gap-1.5" role="radiogroup" aria-label="Where the DR demand comes from">
+            {DEMAND_SOURCES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="radio"
+                aria-checked={source === s.id}
+                onClick={() => segments[0].setDemandSource(s.id)}
+                title={s.hint}
+                data-demand-source={s.id}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 transition-colors ${source === s.id ? 'bg-purple-600 text-white ring-purple-600' : 'bg-white text-slate-600 ring-slate-200 hover:text-purple-700'}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-600" data-testid="demand-source-hint">
+            {source === 'events' && <>Type the base segment's demand; every other segment's is the base's × its multiplier.</>}
+            {source === 'levels' && <>Each segment's demand is its effort in Brut Wins × its DR per Brut Win.</>}
+            {!source && <span className="text-amber-700">Saved before this choice: every demand is as it was typed. Pick one to work them out by its rule.</span>}
+          </span>
+        </div>
         {phase === 'rc' && (
           <p className="text-xs text-purple-800 bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 mb-3 max-w-3xl" data-testid="rc-demand-follows">
             A segment's demand in Recompletion is <span className="font-semibold">the same as its demand in the normal event</span>, so it is not typed here. Change it in the Normal phase and
@@ -554,16 +607,30 @@ function SetupStep(props) {
         <div className="overflow-x-auto">
           <table className="text-sm" data-testid="setup-segments" data-dense>
             <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
+              <tr className="text-left align-bottom whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-200">
                 <th className="py-2 pr-6">Segment</th>
+                <th className="py-2 pr-4" title={source === 'levels' ? 'This segment\'s effort in Brut Wins, from the segment set it was taken from (Economy page, Segments) or typed: times its DR per Brut Win, it is the DR demand.' : 'This segment\'s effort in Brut Wins, from the segment set it was taken from (Economy page, Segments). Used From levels only: From events, the demand comes from the base.'}>
+                  Effort <span className="block normal-case tracking-normal font-normal">(Brut Wins)</span>
+                </th>
+                {source === 'levels' && (
+                  <th className="py-2 pr-4" title="The DR a Brut Win is worth in Merge, for this segment (2.5: every Brut Win gives 2.5 DR). Merge's own; another feature has its own.">
+                    DR per <span className="block normal-case tracking-normal font-normal">Brut Win</span>
+                  </th>
+                )}
                 <th className="py-2 pr-6">
-                  DR demand <span className="normal-case tracking-normal font-normal">(player spends)</span>
+                  DR demand <span className="block normal-case tracking-normal font-normal">(player spends)</span>
                 </th>
                 <th className="py-2 pr-6">
-                  Board subsidy <span className="normal-case tracking-normal font-normal">(under tiles)</span>
+                  Board subsidy <span className="block normal-case tracking-normal font-normal">(under tiles)</span>
                 </th>
-                <th className="py-2 pr-3" title="This segment's reward amounts are the base segment's times this number (step 3)">
-                  Reward size <span className="normal-case tracking-normal font-normal">(× base)</span>
+                <th
+                  className="py-2 pr-3"
+                  title={`This segment's reward amounts (step 3) and its prizes (step 5)${source === 'events' ? ', and its DR demand,' : ''} are the base segment's times this number`}
+                >
+                  {source === 'events' ? 'Multiplier' : 'Reward size'} <span className="block normal-case tracking-normal font-normal">(× base)</span>
+                </th>
+                <th className="py-2 pr-3" title="The segment the prizes are worked out on (step 5): its build is played, each marked rank's effort taken from it; every other segment's prizes are its own times their multiplier against it">
+                  Prizes on
                 </th>
               </tr>
             </thead>
@@ -579,6 +646,9 @@ function SetupStep(props) {
                 // the subsidy in step); with no normal amount there is nothing
                 // to follow and the field stays free.
                 const follows = phase === 'rc' && seg.main.targetSubsidy != null
+                // Calculated from the base or from Brut Wins (normal event; Recompletion follows as before).
+                const calc = phase === 'main' ? calculated(i) : null
+                const derived = !!calc?.derived
                 return (
                   <tr key={i} className={`border-b border-slate-100 align-top ${i === activeSegmentIndex ? 'bg-purple-50/50' : ''}`} data-setup-segment={i}>
                     <td className="py-1.5 pr-6">
@@ -586,8 +656,38 @@ function SetupStep(props) {
                         {name}
                       </button>
                       {i === 0 && <span className="ml-1.5 text-[11px] text-purple-600 font-semibold">base</span>}
+                      {seg.condition && (
+                        <div className="max-w-[22rem] truncate font-mono text-[10.5px] text-slate-400" title={seg.condition} data-field="condition" data-cut-ok>
+                          {seg.condition}
+                        </div>
+                      )}
                     </td>
+                    <td className="py-1.5 pr-4">
+                      <CommitNumber value={seg.effortBW} allowEmpty min={0} onCommit={(v) => seg.setEffortBW(v)} className="w-24" placeholder="-" aria-label={`${name} effort in Brut Wins`} data-field="effort-bw" />
+                    </td>
+                    {source === 'levels' && (
+                      <td className="py-1.5 pr-4">
+                        <CommitNumber value={seg.drPerBW} allowEmpty min={0} step={0.1} onCommit={(v) => seg.setDrPerBW(v)} className="w-20" placeholder="-" aria-label={`${name} DR per Brut Win`} data-field="dr-per-bw" />
+                      </td>
+                    )}
                     <td className="py-1.5 pr-6">
+                      {derived ? (
+                        <div data-field="demand-calculated">
+                          <span className="font-semibold tabular-nums text-slate-800" data-field="demand-value">
+                            {calc.demand == null ? '-' : `${calc.demand.toLocaleString()} DR`}
+                          </span>
+                          <div className="text-[10px] font-semibold text-purple-600">
+                            {source === 'levels'
+                              ? `${seg.effortBW ?? '?'} BW × ${seg.drPerBW ?? '?'}`
+                              : `base × ${seg.segmentFactor ?? 1}`}
+                          </div>
+                          {calc.problem && (
+                            <div className="max-w-[14rem] text-[11px] text-amber-700" data-field="demand-problem">
+                              {calc.problem}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
                       <CommitNumber
                         value={target == null ? null : demandForSubsidy(target, phase)}
                         allowEmpty
@@ -603,6 +703,7 @@ function SetupStep(props) {
                         disabled={follows}
                         title={follows ? 'Same as this segment in the normal event - change it in the Normal phase' : undefined}
                       />
+                      )}
                       {follows && <div className="mt-0.5 text-[10px] font-semibold text-purple-600">same as Normal</div>}
                     </td>
                     <td className="py-1.5 pr-6 tabular-nums" data-field="subsidy-needed">
@@ -613,7 +714,7 @@ function SetupStep(props) {
                           {total.toLocaleString()} DR <span className="text-[11px] text-slate-400">typed by board</span>
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-xs">type a demand</span>
+                        <span className="text-slate-400 text-xs">{derived ? 'no demand yet' : 'type a demand'}</span>
                       )}
                       {target != null && Math.abs(gap) > 0 && <div className="text-[11px] text-amber-700">the boards are {gap > 0 ? `${gap} over` : `${-gap} short`} - see the boards below</div>}
                     </td>
@@ -623,6 +724,9 @@ function SetupStep(props) {
                       ) : (
                         <CommitNumber value={seg.segmentFactor ?? 1} min={0} max={100} step={0.05} onCommit={(v) => seg.setSegmentFactor(v)} className="w-20" aria-label={`Reward factor for ${name}`} data-field="factor" />
                       )}
+                    </td>
+                    <td className="py-1.5 pr-3 text-center">
+                      <input type="radio" name="prize-base" checked={(segments[0].prizeBase ?? 0) === i} onChange={() => segments[0].setPrizeBase(i)} aria-label={`Work the prizes out on ${name}`} data-field="prize-base" />
                     </td>
                   </tr>
                 )
@@ -739,6 +843,7 @@ function SetupStep(props) {
         <GeneratorStep {...props} />
       </Collapsible>
       </div>
+    </div>
     </div>
   )
 }
@@ -1271,7 +1376,10 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             ))}
           </div>
         )}
-        <p className="mt-2 text-[11px] text-slate-400">These do not change the build - they are part of what is exported. The same set applies to every segment.</p>
+        <p className="mt-2 text-[11px] text-slate-400">
+          These do not change the build - they are part of what is exported. The ranks marked here are the same for every segment; what each one is worth, and each
+          segment&apos;s prize, is in step 5. <LinkButton onClick={() => goTo('prizes')}>Go to step 5: Prizes</LinkButton>
+        </p>
       </Collapsible>
         </div>
 
@@ -1572,7 +1680,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
                 Nothing about which reward a merge drops is left to chance, so every player ends close to the amounts you ask for - not only the average player. Measured on a
                 test event (one build, 200 players): with it, 100 of 100 players land within 15% of every amount at once; with containers picked at random, 28 of 100 did. The
                 item counts stay your rules (one item at rank {minDropRank}, two items, three items). Switch it off for the more varied containers of before. It needs the build to
-                give the rank values (below); this tool&apos;s own design. Step 5 shows the number for your own event.
+                give the rank values (below); this tool&apos;s own design. Step 6 shows the number for your own event.
               </span>
             </span>
           </label>
