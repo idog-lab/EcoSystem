@@ -262,15 +262,16 @@ async function build(page) {
   ok('step 1 is "Segments" (with the DR demand) and it is where the workflow starts', (await step(page, 'setup').innerText()).includes('Segments') && (await step(page, 'setup').getAttribute('aria-current')) === 'step' && (await page.getByText('1. DR demand', { exact: true }).isVisible()))
   ok('the step order is segments, layouts, rewards, build, prizes, then test and export', (await page.locator('[data-step]').evaluateAll((els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').trim()).join(' | '))).replace(/\d /g, '') === 'Segments | Board layouts | Rewards and Twister | Build | Prizes | Test and export')
   // A new project shows the one segment it has; the others are brought in as they are needed.
-  ok('a new project shows one segment, in step 1 and in the bar at the top', (await page.locator('[data-field="demand"]').count()) === 1 && (await page.locator('[data-segment-tab]').count()) === 1 && (await page.getByTestId('add-segment').isVisible()))
+  ok('a new project shows one segment, in step 1 and in the bar at the top', (await page.locator('[data-testid="setup-segments"] [data-setup-segment]').count()) === 1 && (await page.locator('[data-segment-tab]').count()) === 1 && (await page.getByTestId('add-segment').isVisible()))
   await page.getByTestId('setup-add-segment').click()
   await page.waitForTimeout(200)
-  ok('"+ Add a segment" brings in the next one as a row and a tab, and leaves Segment 1 the one selected', (await page.locator('[data-field="demand"]').count()) === 2 && (await page.locator('[data-segment-tab]').count()) === 2 && /Segment 1/.test(await page.getByTestId('build-scope-segment').innerText()))
+  ok('"+ Add a segment" brings in the next one as a row and a tab, and leaves Segment 1 the one selected', (await page.locator('[data-testid="setup-segments"] [data-setup-segment]').count()) === 2 && (await page.locator('[data-segment-tab]').count()) === 2 && /Segment 1/.test(await page.getByTestId('build-scope-segment').innerText()))
   await showSegments(page, 8)
-  ok('...up to eight, after which there is nothing more to add', (await page.locator('[data-field="demand"]').count()) === 8 && (await page.getByTestId('setup-add-segment').count()) === 0 && (await page.getByTestId('add-segment').count()) === 0)
+  ok('...up to eight, after which there is nothing more to add', (await page.locator('[data-testid="setup-segments"] [data-setup-segment]').count()) === 8 && (await page.getByTestId('setup-add-segment').count()) === 0 && (await page.getByTestId('add-segment').count()) === 0)
   const seg = (i) => page.locator(`[data-setup-segment="${i}"]`)
   const budgets = async (i) => seg(i).locator('[data-field="budget"]').evaluateAll((els) => els.map((e) => Number(e.value)))
-  ok('every segment has a Total demand field, empty until an amount is entered', (await page.locator('[data-field="demand"]').count()) === 8 && (await seg(0).locator('[data-field="demand"]').inputValue()) === '' && (await seg(0).locator('[data-field="subsidy-needed"]').innerText()).includes('type a demand'))
+  // A new project's demand comes From events: the base's is typed, the others are the base's x their multiplier.
+  ok('a new project types the base segment\'s demand; the others are worked out from it, empty until it is typed', (await page.locator('[data-field="demand"]').count()) === 1 && (await page.locator('[data-field="demand-calculated"]').count()) === 7 && (await page.locator('[data-demand-source="events"]').getAttribute('aria-checked')) === 'true' && (await seg(0).locator('[data-field="demand"]').inputValue()) === '' && (await seg(0).locator('[data-field="subsidy-needed"]').innerText()).includes('type a demand'))
 
   await page.locator('[data-field="setup-board-count"]').fill('3')
   await page.locator('[data-field="setup-board-count"]').blur()
@@ -292,10 +293,10 @@ async function build(page) {
   await page.waitForTimeout(200)
   ok('Board 1 still cannot go above its 150 DR cap', (await budgets(0))[0] === 150)
 
-  await seg(1).locator('[data-field="demand"]').fill('800')
-  await seg(1).locator('[data-field="demand"]').blur()
-  await page.waitForTimeout(300)
-  ok('each segment has its own amount (demand 800 -> 1,248 DR)', num(await seg(1).locator('[data-field="subsidy-needed"]').innerText()) === 1248 && JSON.stringify(await budgets(1)) === JSON.stringify([150, 549, 549]) && JSON.stringify(await budgets(0)) === JSON.stringify([150, 500, 898]))
+  await seg(1).locator('[data-field="factor"]').fill('1.6')
+  await seg(1).locator('[data-field="factor"]').blur()
+  await page.waitForTimeout(400)
+  ok('each segment has its own amount: the base\'s x its multiplier (500 x 1.6 = 800 -> 1,248 DR)', num(await seg(1).locator('[data-field="subsidy-needed"]').innerText()) === 1248 && JSON.stringify(await budgets(1)) === JSON.stringify([150, 699, 399]) && JSON.stringify(await budgets(0)) === JSON.stringify([150, 500, 898]))
 
   await seg(0).locator('[data-field="demand"]').fill('600')
   await seg(0).locator('[data-field="demand"]').blur()
@@ -320,11 +321,12 @@ async function build(page) {
   await tab(page, 'Build event').click()
   await page.waitForTimeout(200)
 
-  // Clearing the amount hands the boards back to manual entry.
-  await seg(1).locator('[data-field="demand"]').fill('')
-  await seg(1).locator('[data-field="demand"]').blur()
-  await page.waitForTimeout(250)
-  ok('clearing a demand leaves the budgets as they were and makes every board editable', (await seg(1).locator('[data-field="budget"]').nth(3).isEnabled()) && (await budgets(1)).reduce((s, v) => s + v, 0) === 1248)
+  // Clearing the amount hands the boards back to manual entry (the base's: the others go with it).
+  const before = (await budgets(1)).reduce((s, v) => s + v, 0)
+  await seg(0).locator('[data-field="demand"]').fill('')
+  await seg(0).locator('[data-field="demand"]').blur()
+  await page.waitForTimeout(400)
+  ok(`clearing the base's demand clears the others', leaves the budgets as they were and makes every board editable (${before} DR)`, (await seg(1).locator('[data-field="budget"]').nth(3).isEnabled()) && (await budgets(1)).reduce((s, v) => s + v, 0) === before && before === 2048 - 960 && (await seg(1).locator('[data-field="demand-value"]').innerText()).trim() === '-')
 
   // Other settings are out of the way, not in the way.
   ok('step 1 holds the amounts; the generator, lucky drops and dates are a section of their own under them', (await page.locator('details[data-collapsible="setup-generator"] [data-field="target-ev"]').count()) === 1 && (await page.locator('[data-testid="setup-segments"] [data-field="target-ev"]').count()) === 0)

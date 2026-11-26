@@ -728,6 +728,22 @@ and then the item ladder is created from the base on the others").
   Segment 1 (`segmentPlan`, `drWorth`, `prizeBase`); `condition`,
   `segmentKey` and `prizeLadder` are each segment's. All saved, backed up,
   restored and cleared with the project.
+- **Where the DR demand comes from** (economist, 26 Nov 2026: "each feature
+  will need to be toggled between levels or events"; `lib/build/demandSource.js`,
+  `demandSource` on Segment 1, `drPerBW` per segment). **From levels**: "the
+  effort is driven from the BW, each segment get a BW dr multiplier ... the EV
+  of a BW will give 2.5 DRs. so the total effort will be BW*multiplier" -
+  demand = effort in Brut Wins x DR per Brut Win, the multiplier typed in the
+  feature per segment ("In each feature"), calculated and never typed.
+  **From events**: "do not get their effort from the BW, they get it from the
+  economist for the base segment" - the base's (Segment 1's) demand typed,
+  every other segment's the base's x its multiplier between segments, the
+  same one that sizes its rewards and prizes (the column reads "Multiplier"
+  then). Merge Mania is From events by default. A demand above the chase is
+  not taken and says why; Recompletion follows the normal demand as before.
+  A project saved before the switch has none: its demands stay as typed until
+  a kind is picked. Held by `verify-demand-source.mjs` and
+  `scripts/e2e/merge-demand-source.mjs`.
 - **Step 5, Prizes** (`PrizesStep.jsx`, `lib/build/prizeLadder.js`): the
   ranks marked in step 3's milestone rewards ("The ones I mark"; 13-14 from
   Recompletion's). One playthrough of the base segment's boards in use, as
@@ -759,8 +775,8 @@ and then the item ladder is created from the base on the others").
   and **copies** it ("Copied when picked"): names, conditions, the flow and
   each segment's effort (`effortBW`, a column in the demand table; Segment 1
   keeps `segmentSet`: id, name, time); when the set changes later, step 1
-  says so and offers "Take its new numbers". The effort is not turned into a
-  DR demand - not taught yet. **The feature typed in the flow when a set is
+  says so and offers "Take its new numbers". The effort becomes the DR demand
+  only From levels (above), times the feature's own DR per Brut Win. **The feature typed in the flow when a set is
   saved is its name placeholder** (economist: "if we make generic 2d_levels
   segments, we will hold the 2D_LEVELS as a name placeholder that changes
   between features"): the set shows `2D_Levels_BW_0_9` with `2D_Levels_`

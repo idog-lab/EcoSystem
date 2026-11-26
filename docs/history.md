@@ -8499,3 +8499,28 @@ letters, digits and "_"), and it is saved as the set's placeholder, so any
 feature that takes the set puts its own name there. Merge's own flow still
 has its feature. verify-segment-sets 20, e2e segment-sets 21 (Merge takes
 the generic set as Merge_BW_...), economy-page 111.
+## Merge: the demand From levels or From events
+
+26 Nov 2026, answering what was open about effort: "the effort is driven
+from the BW, each segment get a BW dr multiplier. its a multiplier that we
+give on each brut win for the player, that means that the EV of a BW will
+give 2.5 DRs. so the total effort will be BW*multiplier", and then: "each
+feature will need to be toggled between levels or events. from events do not
+get their effort from the BW, they get it from the economist for the base
+segment". Asked: the multiplier is kept "In each feature" (not in the set);
+From events, the other segments are "Base x segment multiplier" - the
+multiplier between segments that already sized the rewards and prizes;
+From levels the demand is "Calculated, read-only"; Merge Mania is "From
+events" by default.
+
+Step 1 has the switch ("The demand comes From events / From levels").
+From events only the base's demand is a field; every other segment shows
+its demand worked out (base x 1.6) and the column reads "Multiplier (x
+base)". From levels a "DR per Brut Win" column appears and every demand is
+Brut Wins x that, with what is missing said in the cell. A demand above the
+chase (2,048) is not taken and the cell says why - never cut down to fit. A
+pasted column of demands skips the calculated ones and names them. A project
+saved before the switch keeps its typed demands, says so, and has neither
+kind picked until one is. build-event and rc-demand typed Segment 2's demand
+by hand on a new project; they now give it a multiplier of 1.6 (500 x 1.6 =
+800, the same figures). verify-demand-source 7, e2e merge-demand-source 18.
