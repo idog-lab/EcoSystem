@@ -5,6 +5,7 @@ import { COMPARISONS, CONDITION_PARTS, MODE_MULTIPLIERS, SEGMENT_FUNCTIONS, cond
 import { BASE_RULES, baseRule, baseSegments, buildPlan, createPlan, createSplit, createSpecific, planTable, withBaseRule } from '../../lib/economy/segmentFlow'
 import { BUTTON, CopyButton, INPUT, MONO, Num, TD, TH, TaughtMark } from './economyUi'
 import { teamData } from '../../lib/teamData'
+import SegmentSetsCard from './SegmentSetsCard'
 
 const LABEL = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500'
 const REMOVE = 'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30'
@@ -36,6 +37,7 @@ export default function SegmentsTab() {
   return (
     <div className="flex flex-col gap-4">
       <SegmentPlanEditor plan={plan} setPlan={setPlan} aside={<ReadCard />} />
+      <SegmentSetsCard plan={plan} setPlan={setPlan} />
       <FunctionsCard />
     </div>
   )

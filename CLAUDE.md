@@ -744,6 +744,25 @@ and then the item ladder is created from the base on the others").
   Syntax tab's Item Ladder takes each segment's prizes (`laddersOfEvent` in
   App.jsx); an event with nothing typed in step 5 exports exactly as before.
   Held by `verify-prize-ladder.mjs` and `scripts/e2e/merge-prizes.mjs`.
+- **Segment sets** (economist, 26 Nov 2026: features "live for 2 days and
+  ... from levels ... hold the same segments with the same effort (each
+  segment gets a base of Brut Wins as the effort of the segment)"; "a memory
+  of segment chunks with their demand if given"; "pick the segments from a
+  drop list and ill get the effort also"; "edit those for all in one time").
+  `lib/economy/segmentSets.js`, `SegmentSetsCard.jsx` on the Economy page's
+  Segments tab: the flow is saved as a named set ("Save from the segment
+  flow"; the same name updates it, efforts kept by segment); every set is
+  edited on one card - name, delete, "Open in the flow", each segment's
+  effort **in Brut Wins** ("Brut Wins per segment"; optional). A set keeps
+  its segments without the feature in their names (`BW_0_1000`), so any
+  feature takes it under its own name. Merge's step 1 picks a set from a list
+  and **copies** it ("Copied when picked"): names, conditions, the flow and
+  each segment's effort (`effortBW`, a column in the demand table; Segment 1
+  keeps `segmentSet`: id, name, time); when the set changes later, step 1
+  says so and offers "Take its new numbers". The effort is not turned into a
+  DR demand - not taught yet. Shared with the team
+  (`economy/segment-sets.json`). Held by `verify-segment-sets.mjs` and
+  `scripts/e2e/segment-sets.mjs`.
 
 **The header** (economist: "the app is very heavy in text and buttons"; of the
 advanced tools: "i use only the builder as for the last runs"): the three
@@ -1217,7 +1236,9 @@ simulator's rewards and 0.94 of its DR, against 1.00 alone), and
 verify-twister-cadence's "the build moves the subsidy until the average player
 pays the demand" (Segment 1's search did not settle, 268 of 298 DR, -10.1% -
 the build said "not settled"; alone it was 288, -3.4%). Neither code had
-changed. Because \`npm run verify\` stops at the first failing suite, a
+changed. economy-page's "the chests are the four" read an empty list once in a run of
+several suites (26 Nov 2026) and passed alone - a timing note, the Keys tab
+had not changed. Because \`npm run verify\` stops at the first failing suite, a
 draw-dependent failure hides the suites after it: run those alone. (verify-event-build once
 stopped a full run with a crash, not a failure: a check read the mark of a
 re-valued rank on a segment the build had given exactly the typed values,
