@@ -1,4 +1,4 @@
-import { Candy, Castle, ChefHat, Coins, Disc3, FerrisWheel, Flag, Footprints, Gauge, Gem, Layers, Map as MapIcon, MoonStar, Package, PawPrint, Puzzle, ShoppingBasket, Tornado, TrainTrack, Trophy, WandSparkles, Zap, type LucideIcon } from 'lucide-react'
+import { Candy, Castle, ChefHat, Coins, Disc3, FerrisWheel, Flag, Footprints, Gauge, Gem, Image, Layers, Map as MapIcon, MoonStar, Package, PawPrint, Puzzle, ShoppingBasket, Tornado, TrainTrack, Trophy, WandSparkles, Zap, type LucideIcon } from 'lucide-react'
 import type { IconKey } from '../registry/types'
 
 const ICONS: Record<IconKey, LucideIcon> = {
@@ -24,6 +24,7 @@ const ICONS: Record<IconKey, LucideIcon> = {
   map: MapIcon,
   castle: Castle,
   candy: Candy,
+  image: Image,
 }
 
 export default function ModelIcon({ iconKey, size = 22 }: { iconKey: IconKey; size?: number }) {

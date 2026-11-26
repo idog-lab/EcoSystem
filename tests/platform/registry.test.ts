@@ -10,9 +10,9 @@ const ADDED = [
 const ADDED_IDS = MODEL_CATALOG.filter((m) => (ADDED as string[]).includes(m.displayName)).map((m) => m.id)
 
 describe('the model registry', () => {
-  it('lists exactly the seven first models and the fifteen added ones, in that order', () => {
+  it('lists exactly the seven first models, Scene upload and the fifteen added ones, in that order', () => {
     expect(MODEL_CATALOG.map((m) => m.displayName)).toEqual([
-      'Merge Mania', 'Diamond Mine', 'Chef', 'Economy', 'Momentum', 'Challenge', 'Puzzle',
+      'Merge Mania', 'Diamond Mine', 'Chef', 'Economy', 'Scene upload', 'Momentum', 'Challenge', 'Puzzle',
       ...ADDED,
     ])
   })
@@ -48,6 +48,7 @@ describe('the model registry', () => {
       'diamond-mine': 'available',
       chef: 'available',
       economy: 'available',
+      'scene-upload': 'available',
       momentum: 'not-migrated',
       challenge: 'not-migrated',
       puzzle: 'not-migrated',
@@ -66,6 +67,7 @@ describe('the model registry', () => {
       'diamond-mine': ['Diamond Mine:name-unverified'],
       chef: [],
       economy: [],
+      'scene-upload': [],
       ...Object.fromEntries(ADDED_IDS.map((id) => [id, []])),
     })
     expect(modelById('chef')?.sourceNote).toMatch(/No verified/)

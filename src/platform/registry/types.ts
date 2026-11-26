@@ -25,6 +25,7 @@ export const ICON_KEYS = [
   'map',
   'castle',
   'candy',
+  'image',
 ] as const
 export type IconKey = (typeof ICON_KEYS)[number]
 

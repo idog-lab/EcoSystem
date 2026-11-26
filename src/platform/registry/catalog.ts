@@ -46,6 +46,18 @@ export const MODEL_CATALOG = [
     sourceNote: 'No verified one-to-one workbook sheet family.',
   },
   {
+    // The economist's weekly scene upload (26 Nov 2026): the DCX text for a
+    // new scene, worked out with the model's own formulas.
+    id: 'scene-upload',
+    slug: 'scene-upload',
+    displayName: 'Scene upload',
+    iconKey: 'image',
+    moduleKey: 'scene-upload',
+    status: 'available',
+    sources: [],
+    sourceNote: 'Disney Economy model: Area Rewards - Test, Areas - Test, Missions, Level Difficulties & Layout, Config - Levels, Config - Allowance (stated by the economist).',
+  },
+  {
     id: 'momentum',
     slug: 'momentum',
     displayName: 'Momentum',
