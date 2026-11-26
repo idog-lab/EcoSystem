@@ -50,6 +50,7 @@ export function createState() {
     segments: [],
     baseIndex: 0,
     segmentSet: null,
+    startDate: '',
   }
 }
 function normalizeLane(raw) {
@@ -61,7 +62,7 @@ function normalizeLane(raw) {
 export function normalizeState(raw) {
   const fresh = createState()
   if (!raw || typeof raw !== 'object') return fresh
-  return {
+  return resolveEfforts({
     rules: { ...fresh.rules, ...Object.fromEntries(Object.entries(raw.rules ?? {}).map(([k, v]) => [k, num(v)])) },
     lanes: { easy: normalizeLane(raw.lanes?.easy), hard: normalizeLane(raw.lanes?.hard) },
     finalPrize: String(raw.finalPrize ?? ''),
@@ -69,6 +70,11 @@ export function normalizeState(raw) {
       name: String(s.name ?? ''),
       key: String(s.key ?? ''),
       condition: String(s.condition ?? ''),
+      // The effort typed (or copied from the set) - or, when `effortOf` names another segment, that segment's x
+      // `effortFactor`. `effortBW` is the effort in force, worked out by resolveEfforts.
+      effortTyped: num(s.effortTyped ?? s.effortBW),
+      effortOf: typeof s.effortOf === 'string' && s.effortOf ? s.effortOf : null,
+      effortFactor: num(s.effortFactor),
       effortBW: num(s.effortBW),
       silverPerBW: num(s.silverPerBW),
       goldPerBW: num(s.goldPerBW),
@@ -76,6 +82,35 @@ export function normalizeState(raw) {
     })),
     baseIndex: Number.isInteger(raw.baseIndex) ? raw.baseIndex : 0,
     segmentSet: raw.segmentSet && typeof raw.segmentSet === 'object' ? raw.segmentSet : null,
+    startDate: typeof raw.startDate === 'string' ? raw.startDate : '',
+  })
+}
+
+// A SEGMENT'S EFFORT (economist, 26 Nov 2026: "we should let a segment have an effort that is a factor of another
+// segment if we want, and an option to hard code the effort"): typed, or another segment's (by key) x a factor -
+// that one may itself follow a third. A chain that comes back to itself, or names a segment not there, has no effort.
+// Returns the state with every segment's `effortBW` the effort in force, and `effortProblem` where it has none.
+export function resolveEfforts(state) {
+  const byKey = new Map(state.segments.map((s) => [s.key, s]))
+  const memo = new Map()
+  const effortOf = (seg, seen) => {
+    if (memo.has(seg.key)) return memo.get(seg.key)
+    if (!seg.effortOf) return { value: num(seg.effortTyped), problem: null }
+    if (seen.has(seg.key)) return { value: null, problem: 'Its effort follows a segment that follows it back.' }
+    const from = byKey.get(seg.effortOf)
+    if (!from) return { value: null, problem: 'It follows a segment that is not here any more.' }
+    if (num(seg.effortFactor) == null || num(seg.effortFactor) < 0) return { value: null, problem: `Type its factor of ${from.name}.` }
+    const r = effortOf(from, new Set([...seen, seg.key]))
+    const out = r.value == null ? { value: null, problem: r.problem ?? `${from.name} has no effort yet.` } : { value: round2(r.value * num(seg.effortFactor)), problem: null }
+    memo.set(seg.key, out)
+    return out
+  }
+  return {
+    ...state,
+    segments: state.segments.map((s) => {
+      const r = effortOf(s, new Set())
+      return { ...s, effortBW: r.value, effortProblem: r.problem }
+    }),
   }
 }
 
@@ -112,7 +147,7 @@ export function ruleProblems(state) {
 export function workOut(state, seg) {
   const problems = ruleProblems(state)
   const E = num(seg?.effortBW)
-  if (!(E > 0)) problems.push('Needs its effort in Brut Wins.')
+  if (!(E > 0)) problems.push(seg?.effortProblem ?? 'Needs its effort in Brut Wins.')
   for (const lane of LANES) if (!(num(seg?.[lane.perBW]) > 0)) problems.push(`Needs its ${lane.dr} per Brut Win.`)
   if (problems.length) return { problems, E, lanes: null, pool: null, finalTarget: null, total: null }
   const r = state.rules
@@ -167,6 +202,37 @@ export function prizeOf(state, index, place) {
   const base = state.segments[state.baseIndex]
   const factor = num(seg?.effortBW) > 0 && num(base?.effortBW) > 0 ? num(seg.effortBW) / num(base.effortBW) : null
   return { text: factor ? scaleReward(text, factor) : text, own: false, factor }
+}
+
+// THE BUILD, STEP BY STEP (economist: "the flow of the wicked trails is not good. it should be intuitive how i go on
+// with the event build"): what each step still needs, in words. `readable(text)` says whether a prize can be read
+// (the economy's checker, passed in). { segments, rules, tiers, prizes } -> { done, missing: [text] }.
+export function stepStatus(state, readable = () => true) {
+  const segs = state.segments
+  const segMissing = []
+  if (!segs.length) segMissing.push('Take the segments from a segment set.')
+  for (const s of segs) {
+    if (!(num(s.effortBW) > 0)) segMissing.push(`${s.name}: ${s.effortProblem ?? 'its effort in Brut Wins.'}`)
+    if (!(num(s.silverPerBW) > 0) || !(num(s.goldPerBW) > 0)) segMissing.push(`${s.name}: its silver and gold DR per Brut Win.`)
+  }
+  const problems = ruleProblems(state)
+  const laneProblem = (p) => LANES.some((l) => p.startsWith(`${l.label}:`))
+  const rulesMissing = problems.filter((p) => !laneProblem(p))
+  const tiersMissing = problems.filter(laneProblem)
+  const prizesMissing = []
+  const places = [...LANES.flatMap((l) => state.lanes[l.id].shares.map((_, i) => placeKey(l.id, i))), 'final']
+  const label = (place) => (place === 'final' ? 'the Final Prize' : `${LANES.find((l) => place.startsWith(l.id)).label}, tier ${Number(place.split('-')[1]) + 1}`)
+  for (const place of places) {
+    const text = String(baseText(state, place) ?? '').trim()
+    if (!text) prizesMissing.push(`${label(place)}: no prize yet.`)
+    else if (!readable(text)) prizesMissing.push(`${label(place)}: the prize cannot be read.`)
+  }
+  return {
+    segments: { done: segMissing.length === 0, missing: segMissing },
+    rules: { done: rulesMissing.length === 0, missing: rulesMissing },
+    tiers: { done: tiersMissing.length === 0, missing: tiersMissing },
+    prizes: { done: prizesMissing.length === 0, missing: prizesMissing },
+  }
 }
 
 // WHERE A PLAYER IS after `bw` Brut Wins (the mock): per lane the DR collected, the tiers done, the tier being filled

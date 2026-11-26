@@ -8561,3 +8561,31 @@ game's currency list. The tier-worth reading and a prize scaled for another
 segment were moved from Merge's prizeLadder.js to lib/economy/prizeWorth.js,
 unchanged (verify-prize-ladder 24 still passes). verify-wicked-trails 20 (a
 worked example by hand), e2e wicked-trails 16.
+## Wicked Trails: a guided build, efforts that follow, the export
+
+26 Nov 2026: "yes add the silver currency to the economy" -
+dr-wicked-trails-dr-silver is on the game's currency list. "the export rows
+will be added into the folder of the project and ull be able to see an
+example of it. t_Promo|st_WickedTrail|n_WickedTrail|d_20261116 is the name of
+the file" - the file in the folder is
+t_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx (a Windows file name
+holds no "|"): sheets "segments", "Congif OPS", "Config RC OPS", 30 segments
+named 8BOX_... (8BOX the placeholder), conditions on fn_BrutWinPrediciton(12)
+- not a function the app knows yet. Asked about what the example could not
+say: RC - "the RC is another output the model should give. in a from level
+event, the effort of all tiers are 50% more and the coins in the GP are 40%
+more" (the example's own RC numbers are 1.33-1.44x; the rule is built);
+triggers - "each tier should have a specific trigger in its prize. u can
+create any one that is good for u with good naming for the feature and the
+tier"; chests - "Always, last tier"; the Final Prize filter - "Always
+chest|coins".
+
+"the flow of the wicked trails is not good. it should be intuitive how i go
+on with the event build": three tabs became six steps - Segments, Rules,
+Tiers, Prizes, Mock, Export - with a tick on a step that needs nothing more,
+what each step is for and what it still needs, Back / Next. While building:
+"in the segments brut wins. we should let a segment have an effort that is a
+factor of another segment if we want, and an option to hard code the effort"
+- each segment's effort is Typed or "x <segment>" with a factor, followed
+through chains, a loop named. verify-wicked-trails 37, e2e wicked-trails 24
+(the downloaded workbook read back).

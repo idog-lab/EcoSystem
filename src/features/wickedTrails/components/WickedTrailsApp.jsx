@@ -1,25 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, Map as MapIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Download, Map as MapIcon } from 'lucide-react'
 import Card from '../../../components/ui/Card'
 import { useEconomy } from '../../../lib/economy/economyStore'
-import { parseReward } from '../../../lib/economy/parse'
+import { checkReward, parseReward } from '../../../lib/economy/parse'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
 import { setForFeature, useSegmentSets } from '../../../lib/economy/segmentSets'
 import { teamData } from '../../../lib/teamData'
-import { FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, baseText, normalizeState, placeKey, prizeOf, progressAt, ruleProblems, withTierCount, workOut } from '../lib/wickedTrails'
+import { FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, baseText, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
+import { END_TRIGGER, FINAL_FILTER, FINAL_TRIGGER, OPS_HEADERS, RC_FINAL_COINS, RC_TIER_EFFORT, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWorkbook, triggerOf } from '../lib/wickedTrailsExport'
 
-// WICKED TRAILS (lib/wickedTrails.js): the segments with their effort in Brut Wins and DR per Brut Win, the prizes of
-// both lanes' tiers and of the Final Prize beside what each should be worth, and a mock of the event to look at.
-const VIEW_KEY = 'superplay-wicked-trails-view'
-const VIEWS = [
-  { id: 'segments', label: '1. Segments' },
-  { id: 'prizes', label: '2. Prizes' },
-  { id: 'mock', label: '3. Mock' },
+// WICKED TRAILS (lib/wickedTrails.js): the event built step by step (economist: "the flow of the wicked trails is not
+// good. it should be intuitive how i go on with the event build") - the segments, the rules, the tiers, the prizes
+// against what each should be worth, a mock to look at, and the export for Ops. Each step says what it is for and
+// what it still needs; Next leads on.
+const STEP_KEY = 'superplay-wicked-trails-view'
+const STEPS = [
+  { id: 'segments', label: 'Segments', purpose: 'Take the segments from a segment set. Give each its effort in Brut Wins - typed, or a factor of another segment - and how much silver and gold DR one Brut Win gives it. Pick the base: its prizes are the ones you type.' },
+  { id: 'rules', label: 'Rules', purpose: 'Type the feature\'s ROE - the allowance worth of prizes a player gets from one Brut Win - and check how it is shared between the lanes and the Final Prize.' },
+  { id: 'tiers', label: 'Tiers', purpose: 'Choose how many tiers each lane has and where they sit, as shares of the lane. Every tier shows the DR it asks for and the worth it should give.' },
+  { id: 'prizes', label: 'Prizes', purpose: 'Type the base segment\'s prize for every tier and for the Final Prize; each shows its worth and how far it is from its target. Then look at the other segments.' },
+  { id: 'mock', label: 'Mock', purpose: 'Play the event for a segment, a Brut Win at a time, and see the lanes fill.' },
+  { id: 'export', label: 'Export', purpose: 'Pick the event\'s first day and download the workbook for Ops: the segments, Config OPS and Config RC OPS.' },
 ]
 const INPUT = 'rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200'
 const BUTTON = 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-purple-300 hover:text-purple-700'
+const PRIMARY = 'inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:opacity-40'
 const TH = 'px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap align-bottom'
 const TD = 'px-2 py-1.5 align-top'
+const SUB = 'block font-normal normal-case tracking-normal'
 const fmt = (v, d = 2) => (v == null ? '-' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d }))
 
 function load(key, fallback) {
@@ -53,7 +61,7 @@ function Text({ value, onCommit, className = '', ...props }) {
 
 export default function WickedTrailsApp({ onHome }) {
   const [state, setState] = useState(() => normalizeState(load(STORAGE_KEY, null)))
-  const [view, setViewState] = useState(() => (VIEWS.some((v) => v.id === load(VIEW_KEY, null)) ? load(VIEW_KEY, null) : 'segments'))
+  const [step, setStepState] = useState(() => (STEPS.some((s) => s.id === load(STEP_KEY, null)) ? load(STEP_KEY, null) : 'segments'))
   const [shown, setShown] = useState(null)
   const economy = useEconomy()
   useEffect(() => {
@@ -64,55 +72,132 @@ export default function WickedTrailsApp({ onHome }) {
       // Not kept between visits; the page works without it.
     }
   }, [state])
-  const setView = (v) => {
-    setViewState(v)
+  const goTo = (id) => {
+    setStepState(id)
+    window.scrollTo({ top: 0 })
     try {
-      window.localStorage.setItem(VIEW_KEY, JSON.stringify(v))
+      window.localStorage.setItem(STEP_KEY, JSON.stringify(id))
     } catch {
       // Not remembered; nothing else depends on it.
     }
   }
-  const change = (fn) => setState((s) => fn(s))
+  // Every change works the efforts out again (a segment may follow another's).
+  const change = (fn) => setState((s) => resolveEfforts(fn(s)))
   const index = shown != null && shown < state.segments.length ? shown : Math.min(state.baseIndex, Math.max(0, state.segments.length - 1))
+  const status = stepStatus(state, (text) => checkReward(text, { economy }).ok)
+  const at = STEPS.findIndex((s) => s.id === step)
+  const current = STEPS[at]
+  const missing = status[step]?.missing ?? []
+  const needsSegments = ['tiers', 'prizes', 'mock', 'export'].includes(step) && !state.segments.length
 
   return (
     <div className="min-h-screen">
       <div className="app-backdrop" aria-hidden="true" />
-      <header className="mx-auto flex max-w-[1760px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 pb-2 pt-4" data-testid="wt-header">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <button type="button" onClick={onHome} aria-label="Back to the features" title="Back to the features" className="grid h-9 w-9 place-items-center rounded-xl border border-white bg-white/80 text-slate-500 ring-1 ring-slate-200/70 transition-colors hover:text-purple-600">
-            <ArrowLeft size={16} />
-          </button>
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30">
-            <MapIcon size={18} strokeWidth={2.25} />
-          </span>
-          <h1 className="font-display text-xl font-bold tracking-tight text-slate-900">Wicked Trails</h1>
-          <span className="text-sm text-slate-500">A level feature: two lanes filled by Brut Wins, and a Final Prize for finishing both.</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Wicked Trails" data-testid="wt-views">
-          {VIEWS.map((v) => (
-            <button key={v.id} type="button" role="tab" aria-selected={view === v.id} onClick={() => setView(v.id)} data-wt-view={v.id} className={`rounded-lg px-3 py-1 text-sm font-semibold ring-1 transition-colors ${view === v.id ? 'bg-slate-800 text-white ring-slate-800' : 'bg-white/80 text-slate-600 ring-slate-200 hover:text-purple-700'}`}>
-              {v.label}
-            </button>
-          ))}
-        </div>
+      <header className="mx-auto flex max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-2 pt-4" data-testid="wt-header">
+        <button type="button" onClick={onHome} aria-label="Back to the features" title="Back to the features" className="grid h-9 w-9 place-items-center rounded-xl border border-white bg-white/80 text-slate-500 ring-1 ring-slate-200/70 transition-colors hover:text-purple-600">
+          <ArrowLeft size={16} />
+        </button>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/30">
+          <MapIcon size={18} strokeWidth={2.25} />
+        </span>
+        <h1 className="font-display text-xl font-bold tracking-tight text-slate-900">Wicked Trails</h1>
+        <span className="text-sm text-slate-500">A level feature: two lanes filled by Brut Wins, and a Final Prize for finishing both.</span>
       </header>
       <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-6 pb-10">
-        {view === 'segments' && <SegmentsView state={state} change={change} />}
-        {view !== 'segments' && !state.segments.length && (
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-6 text-center text-sm text-slate-500" data-testid="wt-no-segments">
-            No segments yet: take them from a segment set in 1. Segments.
+        <nav className="flex flex-wrap items-center gap-1" aria-label="The steps of the build" data-testid="wt-steps">
+          {STEPS.map((s, i) => {
+            const done = status[s.id]?.done
+            return (
+              <div key={s.id} className="flex items-center gap-1">
+                {i > 0 && <ArrowRight size={14} className="text-slate-300" />}
+                <button
+                  type="button"
+                  onClick={() => goTo(s.id)}
+                  aria-current={step === s.id ? 'step' : undefined}
+                  data-step={s.id}
+                  data-done={done ? 'true' : undefined}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold ring-1 transition-colors ${step === s.id ? 'bg-slate-800 text-white ring-slate-800' : 'bg-white/80 text-slate-600 ring-slate-200 hover:text-purple-700'}`}
+                >
+                  <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] ${done ? 'bg-emerald-500 text-white' : step === s.id ? 'bg-white text-slate-800' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                  {s.label}
+                  {done && <Check size={14} strokeWidth={3} className={step === s.id ? 'text-emerald-300' : 'text-emerald-600'} aria-label="done" />}
+                </button>
+              </div>
+            )
+          })}
+        </nav>
+        <div className="rounded-2xl border border-purple-100 bg-white/85 px-4 py-3 shadow-sm" data-testid="wt-step-head">
+          <div className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+            Step {at + 1} of {STEPS.length} · {current.label}
+          </div>
+          <p className="mt-0.5 text-sm text-slate-700" data-testid="wt-step-purpose">
+            {current.purpose}
           </p>
+          {missing.length > 0 && (
+            <div className="mt-2 flex flex-col gap-0.5" data-testid="wt-step-missing">
+              <span className="text-xs font-semibold text-amber-700">Still needed:</span>
+              <ul className="ml-4 list-disc text-xs text-amber-800">
+                {missing.slice(0, 8).map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+                {missing.length > 8 && <li>and {missing.length - 8} more</li>}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {needsSegments ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-6 text-center text-sm text-slate-500" data-testid="wt-no-segments">
+            No segments yet: take them from a segment set in step 1.
+          </p>
+        ) : (
+          <>
+            {step === 'segments' && <SegmentsStep state={state} change={change} />}
+            {step === 'rules' && <RulesStep state={state} change={change} />}
+            {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} />}
+            {step === 'prizes' && <PrizesStep state={state} change={change} index={index} setShown={setShown} economy={economy} />}
+            {step === 'mock' && <MockStep state={state} index={index} setShown={setShown} />}
+            {step === 'export' && <ExportStep state={state} change={change} index={index} setShown={setShown} />}
+          </>
         )}
-        {view === 'prizes' && state.segments.length > 0 && <PrizesView state={state} change={change} index={index} setShown={setShown} economy={economy} />}
-        {view === 'mock' && state.segments.length > 0 && <MockView state={state} index={index} setShown={setShown} />}
+
+        <div className="flex items-center justify-between border-t border-slate-200/70 pt-3" data-testid="wt-step-nav">
+          {at > 0 ? (
+            <button type="button" className={BUTTON} onClick={() => goTo(STEPS[at - 1].id)} data-testid="wt-back">
+              Back: {STEPS[at - 1].label}
+            </button>
+          ) : (
+            <span />
+          )}
+          {at < STEPS.length - 1 && (
+            <button type="button" className={PRIMARY} onClick={() => goTo(STEPS[at + 1].id)} data-testid="wt-next">
+              Next: {STEPS[at + 1].label} <ArrowRight size={15} />
+            </button>
+          )}
+        </div>
       </main>
     </div>
   )
 }
 
+function SegmentChips({ state, index, setShown, note = null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap gap-1.5" data-testid="wt-segment-chips">
+        {state.segments.map((seg, i) => (
+          <button key={seg.key || i} type="button" onClick={() => setShown(i)} aria-pressed={index === i} data-wt-chip={i} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ${index === i ? 'bg-purple-600 text-white ring-purple-600' : 'bg-white text-slate-600 ring-slate-200 hover:text-purple-700'}`}>
+            {seg.name}
+            {state.baseIndex === i ? ' (base)' : ''}
+          </button>
+        ))}
+      </div>
+      {note && <span className="text-xs text-slate-500">{note}</span>}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- 1. Segments
-function SegmentsView({ state, change }) {
+function SegmentsStep({ state, change }) {
   const sets = useSegmentSets()
   const [message, setMessage] = useState(null)
   const picked = state.segmentSet ? sets.find((s) => s.id === state.segmentSet.id) : null
@@ -124,11 +209,16 @@ function SegmentsView({ state, change }) {
     const r = setForFeature(set, FEATURE_NAME)
     if (r.errors.length) return setMessage(`"${set.name}" has something to fix first: ${r.errors[0]}`)
     change((s) => {
-      // The multipliers typed for a segment are kept by its key when the set is taken again.
+      // What was typed for a segment is kept by its key when the set is taken again (its effort comes from the set).
       const kept = new Map(s.segments.map((x) => [x.key, x]))
+      const keys = new Set(r.segments.map((x) => x.key))
       return {
         ...s,
-        segments: r.segments.map((x) => ({ name: x.name, key: x.key, condition: x.condition, effortBW: x.effort, silverPerBW: kept.get(x.key)?.silverPerBW ?? null, goldPerBW: kept.get(x.key)?.goldPerBW ?? null, own: kept.get(x.key)?.own ?? {} })),
+        segments: r.segments.map((x) => {
+          const k = kept.get(x.key)
+          const follows = k?.effortOf && keys.has(k.effortOf)
+          return { name: x.name, key: x.key, condition: x.condition, effortTyped: x.effort, effortOf: follows ? k.effortOf : null, effortFactor: follows ? k.effortFactor : null, silverPerBW: k?.silverPerBW ?? null, goldPerBW: k?.goldPerBW ?? null, own: k?.own ?? {} }
+        }),
         baseIndex: Math.min(s.baseIndex, r.segments.length - 1),
         segmentSet: { id: set.id, name: set.name, updatedAt: set.updatedAt },
       }
@@ -136,9 +226,10 @@ function SegmentsView({ state, change }) {
     setMessage(`${r.segments.length} segments taken from "${set.name}", named ${FEATURE_NAME}_, ${r.segments.filter((x) => x.effort != null).length} with an effort in Brut Wins.`)
   }
   const setSeg = (i, patch) => change((s) => ({ ...s, segments: s.segments.map((x, j) => (j === i ? { ...x, ...patch } : x)) }))
+  const setAll = (field, v) => change((s) => ({ ...s, segments: s.segments.map((x) => ({ ...x, [field]: v })) }))
 
   return (
-    <Card title="The segments" subtitle="Taken from a segment set (Economy page, Segments), each with its effort in Brut Wins for the feature. Type how much silver and gold DR one Brut Win gives each segment, and pick the base: its prizes are the ones typed.">
+    <Card title="The segments" subtitle="Effort: typed (from the set, or your own number), or another segment's times a factor - it then follows that segment.">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <select value="" onChange={(e) => e.target.value && take(e.target.value)} className={`${INPUT} min-w-64`} data-testid="wt-segment-set" aria-label="Take the segments from a set">
@@ -169,31 +260,33 @@ function SegmentsView({ state, change }) {
             <table className="w-full border-collapse text-sm" data-testid="wt-segments" data-dense>
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className={TH}>Base</th>
+                  <th className={TH} title="The base segment: the prizes typed in step 4 are its own; the others' follow from it">
+                    Base
+                  </th>
                   <th className={TH}>Segment</th>
-                  <th className={TH} title="What this segment's player does in the feature, in Brut Wins (from the set, or typed)">
+                  <th className={TH} title="Typed: a number of Brut Wins. Or another segment's effort times a factor - it follows that segment when it changes.">
                     Effort
-                    <span className="block font-normal normal-case tracking-normal">(Brut Wins)</span>
+                    <span className={SUB}>(Brut Wins)</span>
                   </th>
                   <th className={TH}>
                     Silver DR
-                    <span className="block font-normal normal-case tracking-normal">per Brut Win</span>
+                    <span className={SUB}>per Brut Win</span>
                   </th>
                   <th className={TH}>
                     Gold DR
-                    <span className="block font-normal normal-case tracking-normal">per Brut Win</span>
+                    <span className={SUB}>per Brut Win</span>
                   </th>
-                  <th className={TH} title="The easy lane's length in silver DR: its Brut Wins (the easy lane's share of the effort) x silver per Brut Win">
+                  <th className={TH} title="The easy lane's length in silver DR">
                     Easy lane
-                    <span className="block font-normal normal-case tracking-normal">(silver DR)</span>
+                    <span className={SUB}>(silver DR)</span>
                   </th>
-                  <th className={TH} title="The hard lane's length in gold DR: the whole effort x gold per Brut Win">
+                  <th className={TH} title="The hard lane's length in gold DR">
                     Hard lane
-                    <span className="block font-normal normal-case tracking-normal">(gold DR)</span>
+                    <span className={SUB}>(gold DR)</span>
                   </th>
                   <th className={TH} title="Effort x ROE: the allowance worth of everything the segment's player gets in the feature">
                     Worth
-                    <span className="block font-normal normal-case tracking-normal">(allowance)</span>
+                    <span className={SUB}>(allowance)</span>
                   </th>
                 </tr>
               </thead>
@@ -205,14 +298,47 @@ function SegmentsView({ state, change }) {
                       <td className={`${TD} text-center`}>
                         <input type="radio" name="wt-base" checked={state.baseIndex === i} onChange={() => change((s) => ({ ...s, baseIndex: i }))} aria-label={`${seg.name} is the base`} data-field="base" />
                       </td>
-                      <td className={`${TD} max-w-[24rem]`}>
+                      <td className={`${TD} max-w-[22rem]`}>
                         <div className="whitespace-nowrap font-semibold text-slate-800">{seg.name}</div>
                         <div className="truncate font-mono text-[10.5px] text-slate-400" title={seg.condition} data-cut-ok>
                           {seg.condition}
                         </div>
                       </td>
                       <td className={TD}>
-                        <Num value={seg.effortBW} onCommit={(v) => setSeg(i, { effortBW: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} effort in Brut Wins`} data-field="effort-bw" />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <select
+                            value={seg.effortOf ?? ''}
+                            onChange={(e) => setSeg(i, e.target.value ? { effortOf: e.target.value, effortFactor: seg.effortFactor ?? 1 } : { effortOf: null, effortTyped: seg.effortBW ?? seg.effortTyped })}
+                            className={`${INPUT} max-w-[13rem]`}
+                            aria-label={`${seg.name}: how its effort is set`}
+                            data-field="effort-mode"
+                          >
+                            <option value="">Typed</option>
+                            {state.segments
+                              .filter((o) => o.key !== seg.key)
+                              .map((o) => (
+                                <option key={o.key} value={o.key}>
+                                  x {o.name}
+                                </option>
+                              ))}
+                          </select>
+                          {seg.effortOf ? (
+                            <>
+                              <span className="text-xs text-slate-500">x</span>
+                              <Num value={seg.effortFactor} onCommit={(v) => setSeg(i, { effortFactor: v != null && v >= 0 ? v : null })} className="w-16" placeholder="1.5" aria-label={`${seg.name}: factor`} data-field="effort-factor" />
+                              <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-purple-700" data-field="effort-value">
+                                = {fmt(seg.effortBW)}
+                              </span>
+                            </>
+                          ) : (
+                            <Num value={seg.effortTyped} onCommit={(v) => setSeg(i, { effortTyped: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} effort in Brut Wins`} data-field="effort-bw" />
+                          )}
+                        </div>
+                        {seg.effortProblem && (
+                          <div className="mt-0.5 text-[11px] text-amber-700" data-field="effort-problem">
+                            {seg.effortProblem}
+                          </div>
+                        )}
                       </td>
                       <td className={TD}>
                         <Num value={seg.silverPerBW} onCommit={(v) => setSeg(i, { silverPerBW: v != null && v >= 0 ? v : null })} placeholder="-" aria-label={`${seg.name} silver DR per Brut Win`} data-field="silver-per-bw" />
@@ -227,7 +353,7 @@ function SegmentsView({ state, change }) {
                         {w.lanes ? fmt(w.lanes.hard.totalDR, 0) : '-'}
                       </td>
                       <td className={`${TD} tabular-nums`} data-field="worth">
-                        {w.lanes ? fmt(w.total) : <span className="text-[11px] text-amber-700">{w.problems.find((p) => /Needs/.test(p)) ?? 'See 2. Prizes'}</span>}
+                        {w.lanes ? fmt(w.total) : '-'}
                       </td>
                     </tr>
                   )
@@ -236,25 +362,145 @@ function SegmentsView({ state, change }) {
             </table>
           </div>
         )}
+        {state.segments.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="wt-fill-all">
+            Same for every segment:
+            <Num value={null} onCommit={(v) => v != null && v >= 0 && setAll('silverPerBW', v)} className="w-16" placeholder="silver" aria-label="Silver DR per Brut Win for every segment" data-field="all-silver" />
+            <Num value={null} onCommit={(v) => v != null && v >= 0 && setAll('goldPerBW', v)} className="w-16" placeholder="gold" aria-label="Gold DR per Brut Win for every segment" data-field="all-gold" />
+            <span className="text-slate-400">DR per Brut Win</span>
+          </div>
+        )}
       </div>
     </Card>
   )
 }
 
-// ---------------------------------------------------------------- 2. Prizes
-function SegmentChips({ state, index, setShown }) {
+// ---------------------------------------------------------------- 2. Rules
+function RulesStep({ state, change }) {
+  const r = state.rules
+  const set = (k) => (v) => change((s) => ({ ...s, rules: { ...s.rules, [k]: v } }))
+  const field = (k, label, title, suffix = '%') => (
+    <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500" title={title}>
+      {label}
+      <span className="flex items-center gap-1 normal-case tracking-normal">
+        <Num value={r[k]} onCommit={set(k)} className="w-20" data-rule={k} />
+        <span className="text-xs font-normal text-slate-500">{suffix}</span>
+      </span>
+    </label>
+  )
   return (
-    <div className="flex flex-wrap gap-1.5" data-testid="wt-segment-chips">
-      {state.segments.map((seg, i) => (
-        <button key={seg.key || i} type="button" onClick={() => setShown(i)} aria-pressed={index === i} data-wt-chip={i} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ${index === i ? 'bg-purple-600 text-white ring-purple-600' : 'bg-white text-slate-600 ring-slate-200 hover:text-purple-700'}`}>
-          {seg.name}
-          {state.baseIndex === i ? ' (base)' : ''}
-        </button>
-      ))}
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card title="The ROE" subtitle="This feature's own rate of economy.">
+        <div data-testid="wt-rules-roe">{field('roe', 'ROE', 'Rate of economy: the allowance worth of prizes a player gets from one Brut Win', 'allowance a Brut Win')}</div>
+      </Card>
+      <Card title="How it is shared" subtitle="These five start at the old sheet's values - type yours over them.">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3" data-testid="wt-rules">
+          {field('easyShare', 'Easy lane\'s share', 'While both lanes fill, this share of each Brut Win\'s ROE goes to the easy lane, the rest to the hard lane. Once the easy lane is done, all of it goes to the hard lane.', '% of a BW')}
+          {field('easySize', 'Easy lane\'s length', 'The easy lane is done after this share of the effort; the hard lane lasts the whole effort', '% of the hard')}
+          {field('takeEasy', 'Easy to the Final Prize', 'The share of what the easy lane earns that goes to the Final Prize; its tiers get the rest')}
+          {field('takeHard', 'Hard to the Final Prize', 'The share of what the hard lane earns that goes to the Final Prize; its tiers get the rest')}
+          {field('finalCounted', 'Final Prize counted at', 'The Final Prize is counted at this share of its worth against the pool: its worth should be the pool divided by it')}
+        </div>
+      </Card>
     </div>
   )
 }
 
+// ---------------------------------------------------------------- 3. Tiers
+function TiersStep({ state, change, index, setShown }) {
+  const seg = state.segments[index]
+  const w = workOut(state, seg)
+  const setLane = (laneId, lane) => change((s) => ({ ...s, lanes: { ...s.lanes, [laneId]: lane } }))
+  return (
+    <>
+      <SegmentChips state={state} index={index} setShown={setShown} note="The shares are the same for every segment; the DR and worth shown are the segment picked." />
+      {w.lanes && (
+        <p className="text-sm text-slate-700" data-testid="wt-totals">
+          <span className="font-semibold">{seg.name}</span>: {fmt(w.E)} Brut Wins x ROE {fmt(state.rules.roe, 4)} = <span className="font-semibold">{fmt(w.total)}</span> allowance - the Final Prize&apos;s pool {fmt(w.pool)}, the tiers the rest.
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+        {LANES.map((lane) => {
+          const l = state.lanes[lane.id]
+          const lw = w.lanes?.[lane.id]
+          return (
+            <Card
+              key={lane.id}
+              title={`${lane.label} (${lane.dr})`}
+              subtitle={lw ? `${fmt(lw.totalDR, 0)} ${lane.dr} over ${fmt(lw.doneAtBW)} Brut Wins; earns ${fmt(lw.earned)} allowance.` : 'Tiers as shares of the lane, adding up to 100%.'}
+              action={
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  Tiers
+                  <Num value={l.shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(l, v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
+                  <span className="font-normal text-slate-400">1 to {MAX_TIERS}</span>
+                </label>
+              }
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm" data-testid={`wt-lane-${lane.id}`} data-dense>
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className={TH}>Tier</th>
+                      <th className={TH} title="The tier's share of the lane; the shares add up to 100%">
+                        Share
+                        <span className={SUB}>(of the lane)</span>
+                      </th>
+                      <th className={TH} title={`The ${lane.dr} this tier asks for, on its own`}>
+                        DR
+                        <span className={SUB}>(this tier)</span>
+                      </th>
+                      <th className={TH} title={`The ${lane.dr} in all, to the end of this tier - the requirement Ops gets`}>
+                        DR
+                        <span className={SUB}>(in all)</span>
+                      </th>
+                      <th className={TH} title="The Brut Wins between the tier before and this one">
+                        Brut Wins
+                        <span className={SUB}>(from - to)</span>
+                      </th>
+                      <th className={TH} title="What the lane earns between the tier before and this one, in allowance">
+                        Earned
+                      </th>
+                      <th className={TH} title="Its target worth: what it earned less the lane's share to the Final Prize">
+                        Target
+                        <span className={SUB}>(allowance)</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {l.shares.map((share, i) => {
+                      const t = lw?.tiers[i]
+                      return (
+                        <tr key={i} className="border-b border-slate-100" data-tier={placeKey(lane.id, i)}>
+                          <td className={`${TD} font-semibold text-slate-700`}>{i + 1}</td>
+                          <td className={TD}>
+                            <Num value={share} onCommit={(v) => v != null && setLane(lane.id, { ...l, shares: l.shares.map((x, j) => (j === i ? v : x)) })} className="w-16" aria-label={`${lane.label} tier ${i + 1} share`} data-field="share" />
+                          </td>
+                          <td className={`${TD} tabular-nums`} data-field="dr">
+                            {t ? fmt(t.dr, 0) : '-'}
+                          </td>
+                          <td className={`${TD} tabular-nums text-slate-600`} data-field="dr-total">
+                            {t ? fmt(t.drTotal, 0) : '-'}
+                          </td>
+                          <td className={`${TD} whitespace-nowrap tabular-nums text-slate-600`}>{t ? `${fmt(t.bwFrom, 1)} - ${fmt(t.bwTo, 1)}` : '-'}</td>
+                          <td className={`${TD} tabular-nums text-slate-600`}>{t ? fmt(t.earned) : '-'}</td>
+                          <td className={`${TD} font-semibold tabular-nums text-purple-700`} data-field="target">
+                            {t ? fmt(t.target) : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------- 4. Prizes
 function Gap({ check, target }) {
   if (!check) return <span className="text-slate-300">-</span>
   if (!check.ok) return <span className="text-rose-700">{check.issues.find((x) => x.level === 'error')?.message ?? 'Cannot be read'}</span>
@@ -306,135 +552,59 @@ function PrizeField({ state, change, index, place, economy, target, limit, class
   )
 }
 
-function Rules({ state, change }) {
-  const r = state.rules
-  const set = (k) => (v) => change((s) => ({ ...s, rules: { ...s.rules, [k]: v } }))
-  const field = (k, label, title, suffix = '%') => (
-    <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500" title={title}>
-      {label}
-      <span className="flex items-center gap-1 normal-case tracking-normal">
-        <Num value={r[k]} onCommit={set(k)} className="w-20" data-rule={k} />
-        <span className="text-xs font-normal text-slate-500">{suffix}</span>
-      </span>
-    </label>
-  )
-  return (
-    <Card title="The rules of the feature" subtitle="The ROE is this feature's own. The other five start at the old sheet's values - type yours over them.">
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-3" data-testid="wt-rules">
-        {field('roe', 'ROE', 'Rate of economy: the allowance worth of prizes a player gets from one Brut Win', 'allowance a Brut Win')}
-        {field('easyShare', 'Easy lane\'s share', 'While both lanes fill, this share of each Brut Win\'s ROE goes to the easy lane, the rest to the hard lane. Once the easy lane is done, all of it goes to the hard lane.', '% of a BW')}
-        {field('easySize', 'Easy lane\'s length', 'The easy lane is done after this share of the effort; the hard lane lasts the whole effort', '% of the hard')}
-        {field('takeEasy', 'Easy to the Final Prize', 'The share of what the easy lane earns that goes to the Final Prize; its tiers get the rest')}
-        {field('takeHard', 'Hard to the Final Prize', 'The share of what the hard lane earns that goes to the Final Prize; its tiers get the rest')}
-        {field('finalCounted', 'Final Prize counted at', 'The Final Prize is counted at this share of its worth against the pool: its worth should be the pool divided by it')}
-      </div>
-    </Card>
-  )
-}
-
-function PrizesView({ state, change, index, setShown, economy }) {
+function PrizesStep({ state, change, index, setShown, economy }) {
   const seg = state.segments[index]
   const w = workOut(state, seg)
-  const problems = [...new Set([...ruleProblems(state), ...w.problems])]
-  const setLane = (laneId, lane) => change((s) => ({ ...s, lanes: { ...s.lanes, [laneId]: lane } }))
-  const tierSum = () => (w.lanes ? w.lanes.easy.tiers.concat(w.lanes.hard.tiers).reduce((a, x) => a + x.target, 0) : 0)
   return (
     <>
-      <Rules state={state} change={change} />
-      <div className="flex flex-wrap items-center gap-3">
-        <SegmentChips state={state} index={index} setShown={setShown} />
-        <span className="text-xs text-slate-500" data-testid="wt-prizes-who">
-          {index === state.baseIndex ? 'The base: the prizes typed here are every segment\'s, times its effort against the base\'s.' : 'A segment\'s prize is the base\'s times its effort against the base\'s - type one to give it its own.'}
-        </span>
-      </div>
-      {problems.length > 0 && (
-        <div className="flex flex-col gap-1" data-testid="wt-problems">
-          {problems.map((p) => (
-            <p key={p} className="rounded-lg bg-amber-50 px-2.5 py-1 text-sm text-amber-800">
-              {p}
-            </p>
-          ))}
-        </div>
-      )}
-      {w.lanes && (
-        <p className="text-sm text-slate-700" data-testid="wt-totals">
-          <span className="font-semibold">{seg.name}</span>: {fmt(w.E)} Brut Wins x ROE {fmt(state.rules.roe, 4)} = <span className="font-semibold">{fmt(w.total)}</span> allowance - the tiers {fmt(tierSum())} and the Final Prize&apos;s pool {fmt(w.pool)}.
+      <SegmentChips state={state} index={index} setShown={setShown} note={index === state.baseIndex ? 'The base: the prizes typed here are every segment\'s, times its effort against the base\'s.' : 'This segment\'s prize is the base\'s times its effort against the base\'s - type one to give it its own.'} />
+      {w.problems.length > 0 && (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-1 text-sm text-amber-800" data-testid="wt-prizes-blocked">
+          {seg.name} cannot be worked out yet: {w.problems.join(' ')}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {LANES.map((lane) => {
-          const l = state.lanes[lane.id]
           const lw = w.lanes?.[lane.id]
           const take = lane.id === 'easy' ? state.rules.takeEasy : state.rules.takeHard
           return (
-            <Card
-              key={lane.id}
-              title={`${lane.label} (${lane.dr})`}
-              subtitle={lw ? `${fmt(lw.totalDR, 0)} ${lane.dr} over ${fmt(lw.doneAtBW)} Brut Wins; earns ${fmt(lw.earned)} allowance, ${fmt(take)}% of it to the Final Prize.` : `Tiers as shares of the lane, adding up to 100%.`}
-              action={
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  Tiers
-                  <Num value={l.shares.length} onCommit={(v) => v != null && setLane(lane.id, withTierCount(l, v))} className="w-14" aria-label={`${lane.label}: how many tiers`} data-tier-count={lane.id} />
-                  <span className="font-normal text-slate-400">1 to {MAX_TIERS}</span>
-                </label>
-              }
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm" data-testid={`wt-lane-${lane.id}`} data-dense>
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className={TH}>Tier</th>
-                      <th className={TH} title="The tier's share of the lane; the shares add up to 100%">
-                        Share
-                        <span className="block font-normal normal-case tracking-normal">(of the lane)</span>
-                      </th>
-                      <th className={TH} title={`The ${lane.dr} this tier asks for, on its own (and in all, to the end of it)`}>
-                        DR
-                        <span className="block font-normal normal-case tracking-normal">(this tier)</span>
-                      </th>
-                      <th className={TH} title="The Brut Wins between the tier before and this one">
-                        Brut Wins
-                        <span className="block font-normal normal-case tracking-normal">(from - to)</span>
-                      </th>
-                      <th className={TH} title="What the lane earns between the tier before and this one, in allowance (its share of those Brut Wins' ROE)">
-                        Earned
-                      </th>
-                      <th className={TH} title="Its target worth: what it earned less the lane's share to the Final Prize">
-                        Target
-                        <span className="block font-normal normal-case tracking-normal">(allowance)</span>
-                      </th>
-                      <th className={TH}>
-                        Prize
-                        <span className="block font-normal normal-case tracking-normal">its worth and how far from the target</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {l.shares.map((share, i) => {
-                      const t = lw?.tiers[i]
-                      return (
-                        <tr key={i} className="border-b border-slate-100" data-tier={placeKey(lane.id, i)}>
-                          <td className={`${TD} font-semibold text-slate-700`}>{i + 1}</td>
-                          <td className={TD}>
-                            <Num value={share} onCommit={(v) => v != null && setLane(lane.id, { ...l, shares: l.shares.map((x, j) => (j === i ? v : x)) })} className="w-16" aria-label={`${lane.label} tier ${i + 1} share`} data-field="share" />
-                          </td>
-                          <td className={`${TD} tabular-nums`} data-field="dr" title={t ? `${fmt(t.drTotal, 0)} in all by the end of it` : undefined}>
-                            {t ? fmt(t.dr, 0) : '-'}
-                          </td>
-                          <td className={`${TD} whitespace-nowrap tabular-nums text-slate-600`}>{t ? `${fmt(t.bwFrom, 1)} - ${fmt(t.bwTo, 1)}` : '-'}</td>
-                          <td className={`${TD} tabular-nums text-slate-600`}>{t ? fmt(t.earned) : '-'}</td>
-                          <td className={`${TD} font-semibold tabular-nums text-purple-700`} data-field="target">
-                            {t ? fmt(t.target) : '-'}
-                          </td>
-                          <td className={TD}>
-                            <PrizeField state={state} change={change} index={index} place={placeKey(lane.id, i)} economy={economy} target={t?.target ?? null} limit={PRIZE_LIMIT.tier} />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <Card key={lane.id} title={`${lane.label} (${lane.dr})`} subtitle={`Each tier's target is what it earns less ${fmt(take)}% to the Final Prize. The last tier goes in a ${lane.id === 'easy' ? 'silver' : 'golden'} chest in the export.`}>
+              <table className="w-full border-collapse text-sm" data-testid={`wt-prizes-${lane.id}`} data-dense>
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className={TH}>Tier</th>
+                    <th className={TH} title={`The ${lane.dr} in all, to the end of the tier`}>
+                      DR
+                      <span className={SUB}>(in all)</span>
+                    </th>
+                    <th className={TH}>
+                      Target
+                      <span className={SUB}>(allowance)</span>
+                    </th>
+                    <th className={TH}>
+                      Prize
+                      <span className={SUB}>its worth and how far from the target</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.lanes[lane.id].shares.map((_, i) => {
+                    const t = lw?.tiers[i]
+                    return (
+                      <tr key={i} className="border-b border-slate-100" data-tier={placeKey(lane.id, i)}>
+                        <td className={`${TD} font-semibold text-slate-700`}>{i + 1}</td>
+                        <td className={`${TD} tabular-nums text-slate-600`}>{t ? fmt(t.drTotal, 0) : '-'}</td>
+                        <td className={`${TD} font-semibold tabular-nums text-purple-700`} data-field="target">
+                          {t ? fmt(t.target) : '-'}
+                        </td>
+                        <td className={`${TD} w-full`}>
+                          <PrizeField state={state} change={change} index={index} place={placeKey(lane.id, i)} economy={economy} target={t?.target ?? null} limit={PRIZE_LIMIT.tier} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </Card>
           )
         })}
@@ -454,13 +624,14 @@ function PrizesView({ state, change, index, setShown, economy }) {
       </Card>
       <p className="text-xs text-slate-500" data-note>
         Worth is read by the Economy page, in allowance; a currency with no worth there makes a prize&apos;s worth unknown. Green within 5% of the target, amber within 15%
-        - this app&apos;s own reading, not a pass mark. The sheet&apos;s check: at most {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize.
+        - this app&apos;s own reading, not a pass mark. The sheet&apos;s check: at most {PRIZE_LIMIT.tier} prizes in a tier, {PRIZE_LIMIT.final} in the Final Prize. The trigger and
+        the chest are added in the export.
       </p>
     </>
   )
 }
 
-// ---------------------------------------------------------------- 3. Mock
+// ---------------------------------------------------------------- 5. Mock
 const RESOURCE_LABEL = { free_wild: 'Wild', free_stock: 'Extra stock', free_undo: 'Undo', free_entry: 'Free round' }
 const short = (n) => (n >= 1000 ? `${fmt(n / 1000, 1)}K` : fmt(n))
 // The parts of a prize, as the mock shows them: [{ label, amount }].
@@ -490,7 +661,7 @@ function PrizeBox({ text, done, wide = false }) {
       {parts.length ? (
         parts.map((p, i) => (
           <div key={i} className="leading-tight">
-            <div className="text-[11px] font-bold text-amber-200">{p.label}</div>
+            <div className="break-all text-[11px] font-bold text-amber-200">{p.label}</div>
             {p.amount && <div className="text-xs font-extrabold text-white">{p.amount}</div>}
           </div>
         ))
@@ -510,7 +681,7 @@ const LANE_LOOK = {
   hard: { ring: 'ring-amber-400', gem: 'bg-teal-400', bar: 'bg-gradient-to-r from-teal-500 to-emerald-300' },
 }
 
-function MockView({ state, index, setShown }) {
+function MockStep({ state, index, setShown }) {
   const seg = state.segments[index]
   const w = useMemo(() => workOut(state, seg), [state, seg])
   const end = w.E ?? 0
@@ -519,9 +690,7 @@ function MockView({ state, index, setShown }) {
   const p = progressAt(w, seg, played)
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
-        <SegmentChips state={state} index={index} setShown={setShown} />
-      </div>
+      <SegmentChips state={state} index={index} setShown={setShown} />
       {!w.lanes ? (
         <p className="rounded-lg bg-amber-50 px-2.5 py-1 text-sm text-amber-800" data-testid="wt-mock-missing">
           The mock needs this segment worked out first: {w.problems.join(' ')}
@@ -593,9 +762,129 @@ function MockView({ state, index, setShown }) {
             </div>
           </div>
           <p className="text-xs text-slate-500" data-note>
-            A sketch of the event for {seg.name}, played by the rules of 2. Prizes - not the game&apos;s artwork. The easy lane is done after {fmt(w.lanes.easy.doneAtBW, 1)} Brut Wins, the hard lane after {fmt(w.lanes.hard.doneAtBW, 1)}.
+            A sketch of the event for {seg.name}, played by the rules of the steps before - not the game&apos;s artwork. The easy lane is done after {fmt(w.lanes.easy.doneAtBW, 1)} Brut Wins, the hard lane after{' '}
+            {fmt(w.lanes.hard.doneAtBW, 1)}.
           </p>
         </>
+      )}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------- 6. Export
+function ExportStep({ state, change, index, setShown }) {
+  const data = useMemo(() => buildExport(state), [state])
+  const [message, setMessage] = useState(null)
+  const seg = state.segments[index]
+  const rowIndex = data.ops.findIndex((r) => r[0] === (seg?.key || `def_${seg?.name}`))
+  const fileName = exportFileName(state.startDate)
+  // The columns that say something for this segment: the event's, and each lane's tiers in use.
+  const shownColumns = OPS_HEADERS.map((h, c) => ({ h, c })).filter(({ h, c }) => {
+    if (rowIndex < 0) return false
+    const v = data.ops[rowIndex][c]
+    return !(String(h).includes('Milestone_') && (v === UNUSED.req || v === UNUSED.res))
+  })
+
+  async function download() {
+    try {
+      const { workbook } = await exportWorkbook(state)
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(url)
+      setMessage({ tone: 'ok', text: `Downloaded ${fileName}: ${data.ops.length} segments on each config sheet.` })
+    } catch (e) {
+      setMessage({ tone: 'error', text: `Not downloaded: ${e?.message ?? e}` })
+    }
+  }
+
+  return (
+    <>
+      <Card title="The workbook" subtitle={`Three sheets, as the example: "${SHEET_NAMES.segments}", "${SHEET_NAMES.ops}" and "${SHEET_NAMES.rc}" - one row per segment.`}>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              The event&apos;s first day
+              <input type="date" value={state.startDate ?? ''} onChange={(e) => change((s) => ({ ...s, startDate: e.target.value }))} className={INPUT} data-testid="wt-start-date" />
+            </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">File</span>
+              <span className="font-mono text-sm text-slate-700" data-testid="wt-file-name">
+                {fileName}
+              </span>
+            </div>
+            <button type="button" className={PRIMARY} onClick={download} disabled={!data.ops.length} data-testid="wt-download">
+              <Download size={15} /> Download the workbook
+            </button>
+          </div>
+          {message && (
+            <p className={`text-xs ${message.tone === 'error' ? 'text-rose-700' : 'text-emerald-700'}`} data-testid="wt-export-message">
+              {message.text}
+            </p>
+          )}
+          {data.problems.length > 0 && (
+            <div className="flex flex-col gap-0.5" data-testid="wt-export-problems">
+              <span className="text-xs font-semibold text-amber-700">Worth a look before sending:</span>
+              <ul className="ml-4 list-disc text-xs text-amber-800">
+                {data.problems.slice(0, 10).map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+                {data.problems.length > 10 && <li>and {data.problems.length - 10} more</li>}
+              </ul>
+            </div>
+          )}
+          <ul className="ml-4 list-disc text-xs text-slate-600" data-testid="wt-export-rules">
+            <li>
+              Right is the silver lane, Left the gold lane; a tier asks for the DR in all to its end. A milestone with no tier is {UNUSED.req} and {UNUSED.res}.
+            </li>
+            <li>
+              Each tier&apos;s prize starts with its own trigger - {triggerOf('easy', 0)}, {triggerOf('hard', 0)}, ..., {FINAL_TRIGGER} for the Final Prize (this app&apos;s names, as you asked). The last
+              tier of each lane is in its chest: silver, golden. The end trigger is {END_TRIGGER}; the Final Prize&apos;s filter {FINAL_FILTER}.
+            </li>
+            <li>
+              Config RC OPS: every tier asks for {Math.round((RC_TIER_EFFORT - 1) * 100)}% more, and the Final Prize&apos;s coins are {Math.round((RC_FINAL_COINS - 1) * 100)}% more (your rule for a from-level event).
+            </li>
+          </ul>
+        </div>
+      </Card>
+      {state.segments.length > 0 && (
+        <Card title="What a row holds" subtitle="The segment picked, as Ops gets it. The tiers not in use are left out here; the file has all of them.">
+          <div className="flex flex-col gap-3">
+            <SegmentChips state={state} index={index} setShown={setShown} />
+            {rowIndex < 0 ? (
+              <p className="text-sm text-amber-700">This segment is left out of the export until it can be worked out.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm" data-testid="wt-export-preview" data-dense>
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className={TH}>Column</th>
+                      <th className={TH}>{SHEET_NAMES.ops}</th>
+                      <th className={TH}>{SHEET_NAMES.rc}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shownColumns.map(({ h, c }) => (
+                      <tr key={h} className="border-b border-slate-100" data-export-column={h}>
+                        <td className={`${TD} whitespace-nowrap font-mono text-[11.5px] text-slate-500`}>{h}</td>
+                        <td className={`${TD} break-all font-mono text-[12px] text-slate-800`} data-export-ops>
+                          {String(data.ops[rowIndex][c])}
+                        </td>
+                        <td className={`${TD} break-all font-mono text-[12px] text-slate-800`} data-export-rc>
+                          {String(data.rc[rowIndex][c])}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
       )}
     </>
   )

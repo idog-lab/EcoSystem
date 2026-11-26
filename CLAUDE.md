@@ -181,10 +181,30 @@ that file.
 `src/features/wickedTrails/` (`lib/wickedTrails.js`, `WickedTrailsApp.jsx`), at `/models/wicked-trails`; economist,
 26 Nov 2026: "for each feature we build, we will need to have the place where we build the economy and a place we can
 see with our eyes some kind of a mock of the feature". Two lanes - Easy (silver DR) and Hard (gold DR) - and a Final
-Prize for finishing both. Three views: **Segments** (taken from a segment set, named `Wicked_Trails_...`, each with its
-effort in Brut Wins, its silver and gold DR per Brut Win - "Two per segment" - and the base), **Prizes** (the rules,
-both lanes' tiers and the Final Prize, each prize's worth by the economy beside its target), **Mock** (a sketch of the
-event for a segment, played Brut Win by Brut Win - not the game's artwork). The rules, all asked:
+Prize for finishing both. **A guided build of six steps** (economist: "the flow of the wicked trails is not good. it
+should be intuitive how i go on with the event build"): Segments, Rules, Tiers, Prizes, Mock, Export - a numbered bar
+with a tick on a step that needs nothing more (`stepStatus`), each step saying what it is for and what is still
+needed, Back / Next under it. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
+and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
+Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of
+another segment if we want, and an option to hard code the effort"; `resolveEfforts`: by key, chains followed, a loop
+or a missing segment says so). **Rules**: the ROE and the five shares. **Tiers**: tier counts and shares, each tier's
+DR (alone and in all), Brut Wins, what it earns and its target. **Prizes**: each prize's worth by the economy beside
+its target, per segment. **Mock**: a sketch of the event, played Brut Win by Brut Win - not the game's artwork.
+**Export** (`lib/wickedTrailsExport.js`) in the layout of the economist's example
+`t_Promo_st_WickedTrail_n_WickedTrail_d_20261116.xlsx` (in the project folder, ignored by git): sheets "segments" (Key,
+Definition), "Congif OPS" and "Config RC OPS" - names and the 42 headers literal - a row a segment, the file named
+`t_Promo_st_WickedTrail_n_WickedTrail_d_<first day>.xlsx`. Right = silver, Left = gold; a Req is the DR in all to the
+tier's end; no tier = 100 / `[dynamic(dr-hidden:1)]`; end trigger `trigger:wicked_trail_end` and filter `chest|coins`
+(economist: "Always chest|coins"); **each tier's own trigger**, this app's names on the economist's word ("u can create
+any one that is good for u with good naming for the feature and the tier"): `wicked_trails_silver_tier<n>`,
+`wicked_trails_gold_tier<n>`, `wicked_trails_grand_prize`; **the last tier of each lane in its chest** ("Always, last
+tier": silver / golden, the trigger inside; a prize typed as a chest keeps its own); **Config RC OPS** ("in a from level
+event, the effort of all tiers are 50% more and the coins in the GP are 40% more"): every Req x 1.5, the Final Prize's
+coins x 1.4, the rest the same. The example's own RC numbers are 1.33-1.44x - the economist's rule is what is built.
+`dr-wicked-trails-dr-silver` is on the game's currency list since 26 Nov 2026 ("yes add the silver currency to the
+economy"). The example's segment conditions use `fn_BrutWinPrediciton(12)`, a function not taught yet. The rules,
+all asked:
 - both lanes fill together; "first each BW will split the ROE between the 2 DRs" by a share typed, and "when one lane is
   finished, the economy of the first one is given to the DR of the 2nd one"; the easy lane's length is a share of the
   hard one's, typed; the hard lane lasts the segment's whole effort;
@@ -196,8 +216,8 @@ event for a segment, played Brut Win by Brut Win - not the game's artwork). The 
 The five shares start at the old sheet's values (33.33, 50, 20, 40, 50) and are typed over; tier DR is rounded to a
 whole DR (the sheet's "8Box rounding steps" are not taught); 1 to 8 tiers a lane (this app's own, the export's
 milestones 0-7); the sheet's prize count (4 a tier, 5 the Final Prize) is a warning. Kept in this browser under
-`superplay-wicked-trails` and shared with the team (`wicked-trails/state.json`). **Not built yet**: the export (OPS
-rows, syntax), Fu split, Sell DR. `dr-wicked-trails-dr-silver` is not on the game's currency list (gold is). Held by
+`superplay-wicked-trails` and shared with the team (`wicked-trails/state.json`). **Not built yet**: Fu split, Sell DR,
+the old sheet's Allocation. Held by
 `verify-wicked-trails.mjs` and `scripts/e2e/wicked-trails.mjs`. A rule of the economy said while teaching a feature
 is asked about and then put in the Economy (economist: "if i do, u can ask and then insert it into the economy").
 
