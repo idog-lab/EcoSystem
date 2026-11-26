@@ -34,12 +34,22 @@ check('the same name (any case) updates the set, it does not add one', !again.cr
 check('its efforts are kept by segment, the new band has none', again.set.segments.length === 4 && again.set.segments[0].effort === 40 && again.set.segments[1].effort === 90 && again.set.segments.find((s) => s.id === 'BW_2500_5000')?.effort === null)
 const two = saveFlowAsSet(again.sets, plan, 'Weekend features')
 check('another name is another set', two.created && two.sets.length === 2)
-check('a flow with something to fix is not saved', !!saveFlowAsSet([], { ...plan, feature: '' }, 'X').error)
+check('a flow with something to fix is not saved', !!saveFlowAsSet([], { ...plan, cuts: '1000, abc' }, 'X').error)
 check('rename through editSet', editSet(two.sets, first.set.id, () => ({ name: 'Renamed' }))[0].name === 'Renamed')
 
 const generic = saveFlowAsSet([], { ...plan, feature: '2D_Levels' }, '')
 check(`no name typed: the set is named after its placeholder, the feature typed (${generic.set?.name})`, generic.set?.name === '2D_Levels' && setPlaceholder(generic.set) === '2D_Levels' && generic.set.segments[0].id === 'BW_0_1000')
 check('the placeholder changes with the feature that takes the set', setForFeature(generic.set, 'Disco').segments[0].name === 'Disco_BW_0_1000' && setForFeature(generic.set, 'Merge').segments[0].name === 'Merge_BW_0_1000')
+// Generic segments: no feature typed, the set's name stands in for it.
+const noFeature = { ...plan, feature: '' }
+const gen = saveFlowAsSet([], noFeature, '2D_Levels')
+check(`no feature typed: generic segments, the set's name the placeholder (${gen.set?.segments.map((s) => s.id).slice(0, 2).join(', ')})`, gen.created && setPlaceholder(gen.set) === '2D_Levels' && gen.set.segments[0].id === 'BW_0_1000' && gen.set.segments.length === 3)
+check('a generic set is taken by any feature with its own name', setForFeature(gen.set, 'Disco').segments[0].name === 'Disco_BW_0_1000' && setForFeature(gen.set, 'Merge').segments[2].name === 'Merge_BW_2500_Plus')
+check('a set name with spaces and signs makes a clean placeholder', setPlaceholder(saveFlowAsSet([], noFeature, 'Level features, 2 days').set) === 'Level_features_2_days')
+check('a generic set needs a name, one with letters or digits', !!saveFlowAsSet([], noFeature, '').error && !!saveFlowAsSet([], noFeature, ' ,, ').error)
+const genAgain = saveFlowAsSet(setEffort(gen.sets, gen.set.id, 'BW_0_1000', 12), noFeature, '2D_Levels')
+check('saved again under its name: the same set, its efforts kept', !genAgain.created && genAgain.sets.length === 1 && genAgain.set.segments[0].effort === 12)
+
 const read = normalizeSets(JSON.parse(JSON.stringify({ sets: two.sets })))
 check('a stored list reads back the same', JSON.stringify(read) === JSON.stringify(two.sets))
 check('nothing stored, or something else, reads as no set', normalizeSets(null).length === 0 && normalizeSets({ sets: [{ name: 'no plan' }] }).length === 0)

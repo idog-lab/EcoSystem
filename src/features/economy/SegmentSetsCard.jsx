@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { BUTTON, INPUT, Num, PRIMARY, TD, TH, Text } from './economyUi'
-import { SEGMENT_SETS_KEY, editSet, featureOf, saveFlowAsSet, saveSets, setEffort, setPlaceholder, setSegmentsOf, useSegmentSets } from '../../lib/economy/segmentSets'
+import { SEGMENT_SETS_KEY, editSet, featureOf, namedPlan, saveFlowAsSet, saveSets, setEffort, setPlaceholder, setSegmentsOf, useSegmentSets } from '../../lib/economy/segmentSets'
 import { teamData } from '../../lib/teamData'
 
 const REMOVE = 'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600'
@@ -12,14 +12,17 @@ const store = (sets) => {
 
 // SAVE THE FLOW AS A SET (lib/economy/segmentSets.js), on the segments the flow makes: a name, and the set is saved -
 // or, under the name of a set already kept, brought up to the flow with its efforts kept by segment.
-export function SaveSetForm({ plan, onSaved = null }) {
+// `name` / `setName`: the name typed, when the page shows it elsewhere too (a generic flow is named after it).
+export function SaveSetForm({ plan, onSaved = null, name: shownName, setName: setShownName }) {
   const sets = useSegmentSets()
-  const [name, setName] = useState('')
+  const [ownName, setOwnName] = useState('')
+  const name = shownName ?? ownName
+  const setName = setShownName ?? setOwnName
   const [message, setMessage] = useState(null)
   const feature = String(plan?.feature ?? '').trim()
   const wanted = name.trim() || feature
   const existing = sets.find((s) => s.name.toLowerCase() === wanted.toLowerCase())
-  const preview = setSegmentsOf(plan, existing?.segments ?? [])
+  const preview = setSegmentsOf(namedPlan(plan, wanted), existing?.segments ?? [])
 
   function save() {
     const out = saveFlowAsSet(sets, plan, name)
@@ -35,11 +38,11 @@ export function SaveSetForm({ plan, onSaved = null }) {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={feature ? `Set name (or ${feature})` : 'Name a set: Level features, 2 days'}
+          placeholder={feature ? `Set name (or ${feature})` : 'Set name: 2D_Levels'}
           className={`${INPUT} w-64`}
           list="economy-set-names"
           aria-label="The set's name"
-          title={preview.errors.length ? 'The flow has something to fix first.' : `${existing ? `"${existing.name}" is updated; its efforts are kept by segment.` : 'Saved under Segment sets, with an effort for each segment.'} The feature typed in the flow (${featureOf(plan)}) is the set's name placeholder: a feature that takes the set puts its own name there.`}
+          title={preview.errors.length ? 'The flow has something to fix first.' : `${existing ? `"${existing.name}" is updated; its efforts are kept by segment.` : 'Saved under Segment sets, with an effort for each segment.'} ${feature ? `The feature typed in the flow (${featureOf(plan)})` : 'With no feature typed, the set\'s name'} is the set's name placeholder: a feature that takes the set puts its own name there.`}
           data-testid="economy-set-name"
         />
         <datalist id="economy-set-names">
@@ -61,7 +64,7 @@ export function SaveSetForm({ plan, onSaved = null }) {
 }
 
 // The name placeholder in a segment's name (2D_Levels_), marked as the part a feature replaces.
-function Placeholder({ text }) {
+export function Placeholder({ text }) {
   return (
     <span className="rounded border border-dashed border-purple-300 bg-purple-50 px-0.5 font-mono text-[11.5px] text-purple-700" title="The name placeholder: a feature that takes this set puts its own name here">
       {text}_

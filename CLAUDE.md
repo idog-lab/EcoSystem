@@ -765,7 +765,13 @@ and then the item ladder is created from the base on the others").
   segments, we will hold the 2D_LEVELS as a name placeholder that changes
   between features"): the set shows `2D_Levels_BW_0_9` with `2D_Levels_`
   marked, a set saved with no name is named after it (`setPlaceholder`), and
-  a feature that takes the set puts its own name there. **The Segments tab
+  a feature that takes the set puts its own name there. **The feature may be
+  left empty on the Economy page: generic segments** (economist: "create a
+  generic segment that will be overriden with the features name. so i dont
+  have a feature name to put in"): the set's name typed beside "Save as a
+  set" stands in for it as it is typed (`namedPlan`, `namePlaceholder`:
+  letters, digits and "_"; `Feature_` until a name is typed) and is saved as
+  the set's placeholder. Merge's own flow always has its feature. **The Segments tab
   shows one view at a time** (economist: "too scrollable. and u need to
   search for things"): Build segments (steps 1-3 on the left, the segments
   on the right in sight, with "Save as a set" on them; a condition on one
