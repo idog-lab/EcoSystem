@@ -5,7 +5,7 @@
 // text and writing it back never loses a piece.
 import { formatReward, parseReward } from './parse'
 import { RESOURCE_BY_TOKEN } from './economyModel'
-import { coinsSyntax, counterSyntax, joinPlus, packSyntax, presetSyntax, resourceSyntax, syntaxNumber } from './syntax'
+import { coinsSyntax, counterSyntax, joinPlus, packSyntax, presetSyntax, resourceSyntax, syntaxNumber, triggerSyntax } from './syntax'
 
 export const PRIZE_RESOURCES = [
   { id: 'wild', label: 'Wild' },
@@ -13,7 +13,7 @@ export const PRIZE_RESOURCES = [
   { id: 'undo', label: 'Undo' },
   { id: 'entry', label: 'Free round' },
 ]
-export const emptyParts = () => ({ coins: null, bucket: '', wild: null, stock: null, undo: null, entry: null, presets: [], pack: '', packCoins: null, packCounter: true, currencies: [], chest: '', extra: [] })
+export const emptyParts = () => ({ triggers: [], coins: null, bucket: '', wild: null, stock: null, undo: null, entry: null, presets: [], pack: '', packCoins: null, packCounter: true, currencies: [], chest: '', extra: [] })
 
 const isCounter = (n) => n?.type === 'dynamic' && n.name === 'dr-pack-counter'
 const isHidden = (n) => n?.type === 'dynamic' && n.name === 'dr-hidden'
@@ -34,7 +34,9 @@ export function readPrize(text) {
   }
   const list = inner.type === 'all' ? inner.parts : [inner]
   for (const n of list) {
-    if (n.type === 'allowance' && parts.coins == null) {
+    if (n.type === 'trigger') {
+      parts.triggers.push(n.name)
+    } else if (n.type === 'allowance' && parts.coins == null) {
       parts.coins = Number(n.coins)
       parts.bucket = n.bucket ?? ''
     } else if (n.type === 'resource' && RESOURCE_BY_TOKEN[n.token] && parts[RESOURCE_BY_TOKEN[n.token].id] == null) {
@@ -62,12 +64,13 @@ export function readPrize(text) {
   return { parts, readable: true }
 }
 
-// The parts -> the text, in the order of 2.3: coins, wild, extra stock, undo, free round, presets, [pack], [pack
+// The parts -> the text, in the order of 2.3: triggers, coins, wild, extra stock, undo, free round, presets, [pack], [pack
 // counter], [currencies], what was kept as it was; in a chest when one is named.
 export function writePrize(parts) {
   const p = { ...emptyParts(), ...parts }
   const pack = p.pack ? packSyntax({ packKey: p.pack, allowance: p.packCoins != null && p.packCoins > 0 ? p.packCoins : null }) : ''
   const text = joinPlus(
+    p.triggers.map(triggerSyntax),
     coinsSyntax(p.coins, { bucket: p.bucket || '' }),
     resourceSyntax('wild', p.wild),
     resourceSyntax('stock', p.stock),
@@ -81,3 +84,25 @@ export function writePrize(parts) {
   )
   return text && p.chest ? `chest:${p.chest}(${text})` : text
 }
+
+// THE PRESETS OF A PRIZE BY KIND, for a table with a column each (economist: "in the table the core resources, with
+// presets and stickers options, puzzle and mini games"): the puzzle preset (puzzle_gameplay_<n>), the mini game preset
+// (mini_game_<n>_gameplay_<kind>), and the others. The first of each kind is its column's; a second one of a kind stays
+// with the others.
+const PUZZLE = /^puzzle_gameplay_(\d+)$/
+const MINI = /^mini_game_(\d+)_gameplay_([a-z]+)$/
+export function presetsByKind(presets = []) {
+  let puzzle = null
+  let mini = null
+  const others = []
+  for (const key of presets) {
+    const p = key.match(PUZZLE)
+    const m = key.match(MINI)
+    if (p && !puzzle) puzzle = { key, amount: Number(p[1]) }
+    else if (m && !mini) mini = { key, amount: Number(m[1]), kind: m[2] }
+    else others.push(key)
+  }
+  return { puzzle, mini, others }
+}
+// The presets again from their kinds (puzzle first, then the mini game, then the others).
+export const presetsFromKinds = ({ puzzle = null, mini = null, others = [] }) => [puzzle?.key, mini?.key, ...others].filter(Boolean)

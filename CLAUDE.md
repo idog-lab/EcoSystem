@@ -191,8 +191,10 @@ sticker pack searched on the Economy page's lists (a key not on them is not
 taken), its pack counter and coin alternative, currencies, a chest; the text
 is written by the syntax builders and shown, "Write the text myself" stays.
 A text is read back into parts (what has no field, a trigger say, is kept as
-written), so the economist's real prizes come back whole. Wicked Trails'
-Prizes step and Merge's Prizes step ("Build" beside the field) use it.
+written), so the economist's real prizes come back whole. Merge's Prizes
+step uses it ("Build" beside the field); Wicked Trails types its prizes in
+its sheet instead, a part a column ("in the table ... not in the prize
+builder").
 Diamond Mine is not connected. Open questions are listed in
 that file.
 
@@ -211,8 +213,16 @@ wicked trails, we will make sure its built perfectly and then later when buildin
 there"): arrows, Tab, Enter, typing over a cell, F2, Shift+arrows or a drag to select, Ctrl+C / Ctrl+V blocks with
 Excel (one value fills a selection), Delete, Ctrl+Z / Ctrl+Y, dropdown and tick cells, worked-out cells grey and never
 typed over; a key typed before the edit box shows is never lost. Tiers and prizes are one sheet (both lanes' tiers, then
-the Final Prize); Ctrl+B on a row opens the prize builder for it; on another segment a prize typed is its own and Delete
-brings the base's back. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
+the Final Prize) and **the prize is typed in the sheet, a part a column** (economist: "we need to be able in the table
+to insert the prizes, not in the prize builder ... the core resources, with presets and stickers options, puzzle and
+mini games, and to have an option to add DRs and triggers if needed, and then wrap it with chests if needed also. we
+are supposed to also see ... the calculation of the tier vs the amount that should actually be there"): The tier
+(lane, tier, share, DR in all; the lane's numbers on a tick), Against the target (target, worth, off by - beside the
+tier, always in sight), The prize (coins, Wild, Extra stock, Undo, Free round, Puzzle and Mini game as amounts taken as
+the nearest preset on the Economy page, what a mini game gives, other presets and a sticker pack typed with suggestions
+and refused when not listed, a chest), More on a tick (DRs, triggers, the pack's coin alternative, the whole text -
+pasteable). The text is written from the parts (`prizeParts.js`: triggers first now). On another segment a part typed
+makes the prize its own; put back to the base's scaled prize, it follows the base again. **Segments**: taken from a segment set, named `Wicked_Trails_...`, each with its silver
 and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
 Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of
 another segment if we want, and an option to hard code the effort"; `resolveEfforts`: by key, chains followed, a loop
