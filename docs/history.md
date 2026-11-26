@@ -8400,3 +8400,36 @@ Chef field as a word tag at first - a dot in the margin now, words only when
 something needs the person). verify-team-data 24 (two browsers, a stand-in
 GitHub), e2e team-data 16; saved-events 20, browser-data 10 + 11, Chef 188,
 economy-page 110 unchanged.
+
+## Merge: segments and prizes
+
+26 Nov 2026: "with the logic we learned on segmnets building and on prize
+generation, i want u to add segmentation into the merge and also the prizes.
+u need to oipen 2 tabs for those in the flow. in the merge, we will have the
+first tab as the segments, there we can also have the DR demand and the
+multipliers between segments. we should also give the value of a merge DR.
+then, the simulator should calculate the allowance worth of each rank in the
+prizes ladder. we should pick the base segments that opon it we calculate all
+of those. and then the item ladder is created from the base on the others."
+Asked four things: a rank's worth - "DR paid since the rank before"; which
+ranks - "The ones I mark"; the prize - "the app should show the allowance
+worth of the rank, then i put prizes inside and the app calculates live how
+far i am from the prize that is suppos to be"; the DR worth - "Per Merge
+event".
+
+Built: step 1 became "Segments" (the Economy page's segment flow, now a
+component both pages use; "Use these segments" names Merge's segments with
+their conditions; the worth of one merge DR; a "Prizes on" choice of base in
+the demand table), and a new step 5, "Prizes", between Build and Test and
+export (which is step 6 now; every on-screen "step 5" that meant it says 6).
+One playthrough of the base segment's boards in use (step 4's effort chart's,
+normal then Recompletion), each marked rank's DR since the marked rank before
+times the DR worth; the typed prize read by the economy, its worth and the
+difference live. Other segments: the base's worth and prize times their
+multiplier against the base, their own prize where typed. The Item Ladder of
+each segment takes them; with nothing typed the export is what it was. This
+app's own: the colours of the difference (5% / 15%), how a scaled amount is
+rounded (coins to hundredths, others whole, at least 1), Segment 1 keeping
+the event-level fields. Opening a saved event or a backup, and Clear data,
+did not know the new fields at first (found while testing; fixed).
+verify-prize-ladder 24, e2e merge-prizes 17.

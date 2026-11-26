@@ -21,8 +21,7 @@ function loadPlan() {
   }
 }
 
-// THE FLOW (lib/economy/segmentFlow.js; economist, 25 Nov 2026): the feature, the base (Brut Wins bands),
-// specifics added to the segments picked, mode splits that duplicate the segments picked - and the segments.
+// THE ECONOMY PAGE'S SEGMENTS TAB: the flow, a condition read in words, the functions known.
 export default function SegmentsTab() {
   const [plan, setPlan] = useState(loadPlan)
   useEffect(() => {
@@ -34,6 +33,19 @@ export default function SegmentsTab() {
       // Not kept between visits; the page works without it.
     }
   }, [plan])
+  return (
+    <div className="flex flex-col gap-4">
+      <SegmentPlanEditor plan={plan} setPlan={setPlan} aside={<ReadCard />} />
+      <FunctionsCard />
+    </div>
+  )
+}
+
+// THE FLOW (lib/economy/segmentFlow.js; economist, 25 Nov 2026): the feature, the base (one rule's bands),
+// specifics added to the segments picked, mode splits that duplicate the segments picked - and the segments.
+// Shared by the Economy page and Merge Mania's Segments step (`setPlan` takes a function, as React's does).
+// `aside`: a card beside the mode splits; `action`: a button beside "Copy as a table" (Merge's "Use these segments").
+export function SegmentPlanEditor({ plan, setPlan, aside = null, action = null }) {
   const patch = (p) => setPlan((x) => ({ ...x, ...p }))
   const result = buildPlan(plan)
   const base = baseSegments(plan)
@@ -137,13 +149,18 @@ export default function SegmentsTab() {
           </div>
         </Card>
 
-        <ReadCard />
+        {aside}
       </div>
 
       <Card
         title={<StepTitle n={4} text={`${result.segments.length} segments`} />}
         subtitle="Names put a specific's tag before the mode: Disco_BW_0_9_OOC_Mode_0_3 (this app's order)."
-        action={<CopyButton text={result.errors.length || !result.segments.length ? '' : planTable(result.segments)} label="Copy as a table" data-testid="economy-seg-copy" />}
+        action={
+          <span className="flex flex-wrap items-center gap-2">
+            {action}
+            <CopyButton text={result.errors.length || !result.segments.length ? '' : planTable(result.segments)} label="Copy as a table" data-testid="economy-seg-copy" />
+          </span>
+        }
       >
         <div className="flex flex-col gap-2">
           {result.errors.map((e) => (
@@ -178,7 +195,6 @@ export default function SegmentsTab() {
           </div>
         </div>
       </Card>
-      <FunctionsCard />
     </div>
   )
 }

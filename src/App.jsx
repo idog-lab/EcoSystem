@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { setEffortTargetForBuild } from './features/merge/lib/build/eventBuild'
+import { laddersOfEvent } from './features/merge/lib/build/prizeLadder'
 import { Save, Puzzle, LayoutGrid, RotateCcw, Gamepad2, Boxes, FileCode2, Share2, Eye, Check, TriangleAlert, ArrowLeft, Download, Upload, Trash2, Gift, Tornado, Hammer, Menu, Info, Plus, CalendarDays } from 'lucide-react'
 import BoardList from './features/merge/components/editor/BoardList'
 import BoardEditor from './features/merge/components/editor/BoardEditor'
@@ -409,6 +410,17 @@ function freshSegment(name) {
     // config. One shared plan: only the base segment's copy is read, the
     // same way only its rewardTargets are absolute.
     twisterPlan: { main: createTwisterPlan(), rc: createTwisterPlan() },
+    // SEGMENTS AND PRIZES (economist, 26 Nov 2026: "add segmentation into the merge and also the prizes"):
+    // the segment's condition and key from the segment plan (lib/economy/segmentFlow.js), and its own prize
+    // ladder - { main: { [rank]: text }, rc } - written from the base segment's times its multiplier, then its own.
+    condition: '',
+    segmentKey: '',
+    prizeLadder: { main: {}, rc: {} },
+    // Event-level, read on Segment 1 only (like the dates): the segment plan the segments were made from, the
+    // allowance worth of one merge DR ("Per Merge event"), and which segment the prizes are worked out on.
+    segmentPlan: null,
+    drWorth: null,
+    prizeBase: 0,
   }
 }
 
@@ -498,6 +510,13 @@ function normalizeSegment(raw, defaultName) {
     twisterPlan: { main: normalizeTwisterPlan(raw.twisterPlan?.main), rc: normalizeTwisterPlan(raw.twisterPlan?.rc) },
     // See preserveDivergentRewardConfig.
     legacyRewardConfig: raw.legacyRewardConfig ?? null,
+    // Segments and prizes (see freshSegment); a save from before has none.
+    condition: typeof raw.condition === 'string' ? raw.condition : '',
+    segmentKey: typeof raw.segmentKey === 'string' ? raw.segmentKey : '',
+    prizeLadder: { main: { ...(raw.prizeLadder?.main ?? {}) }, rc: { ...(raw.prizeLadder?.rc ?? {}) } },
+    segmentPlan: raw.segmentPlan && typeof raw.segmentPlan === 'object' ? raw.segmentPlan : null,
+    drWorth: Number.isFinite(Number(raw.drWorth)) && raw.drWorth !== null && raw.drWorth !== '' ? Number(raw.drWorth) : null,
+    prizeBase: Number.isInteger(raw.prizeBase) ? raw.prizeBase : 0,
   }
 }
 
@@ -641,6 +660,12 @@ function buildSaveShape(segments) {
       sourceAllocation: seg.sourceAllocation,
       twisterPlan: seg.twisterPlan,
       ...(seg.legacyRewardConfig ? { legacyRewardConfig: seg.legacyRewardConfig } : {}),
+      condition: seg.condition,
+      segmentKey: seg.segmentKey,
+      prizeLadder: seg.prizeLadder,
+      segmentPlan: seg.segmentPlan,
+      drWorth: seg.drWorth,
+      prizeBase: seg.prizeBase,
     })),
   }
 }
@@ -676,7 +701,26 @@ function useSegment(initial) {
   const [sourceAllocation, setSourceAllocation] = useState(initial.sourceAllocation)
   const [twisterPlan, setTwisterPlan] = useState(initial.twisterPlan)
   const [legacyRewardConfig, setLegacyRewardConfig] = useState(initial.legacyRewardConfig ?? null)
+  // Segments and prizes (see freshSegment).
+  const [condition, setCondition] = useState(initial.condition ?? '')
+  const [segmentKey, setSegmentKey] = useState(initial.segmentKey ?? '')
+  const [prizeLadder, setPrizeLadder] = useState(initial.prizeLadder ?? { main: {}, rc: {} })
+  const [segmentPlan, setSegmentPlan] = useState(initial.segmentPlan ?? null)
+  const [drWorth, setDrWorth] = useState(initial.drWorth ?? null)
+  const [prizeBase, setPrizeBase] = useState(initial.prizeBase ?? 0)
   return {
+    condition,
+    setCondition,
+    segmentKey,
+    setSegmentKey,
+    prizeLadder,
+    setPrizeLadder,
+    segmentPlan,
+    setSegmentPlan,
+    drWorth,
+    setDrWorth,
+    prizeBase,
+    setPrizeBase,
     main,
     recompletion,
     legacyRecompletionB,
@@ -1373,6 +1417,9 @@ export function EditorApp({ onHome }) {
   const [openSavedId, setOpenSavedId] = useState(() => openEventId())
   const [savedEventsMessage, setSavedEventsMessage] = useState(null)
   const eventDates = { startDate: segments[0].eventStartDate ?? null, days: segments[0].eventDurationDays ?? null }
+  // Each segment's prizes (step 5, Prizes) on its first boards' milestone texts, for the Item Ladder sheet: its own
+  // where typed, else the base segment's times its multiplier. Nothing typed there leaves the boards as they are.
+  const withPrizes = laddersOfEvent(segments, segments[0].prizeBase, (s) => s.main.boards, (s) => s.recompletion.boards)
   function storeEvent({ id = null, name }) {
     const result = saveEvent({ id, name, ...eventDates, payload: backupPayload() })
     if (!result.ok) {
@@ -1646,6 +1693,13 @@ export function EditorApp({ onHome }) {
       seg.setSourceAllocation(data.sourceAllocation)
       seg.setTwisterPlan(data.twisterPlan)
       seg.setLegacyRewardConfig(data.legacyRewardConfig ?? null)
+      // The segment plan, conditions and prizes (step 1 and step 5).
+      seg.setCondition(data.condition)
+      seg.setSegmentKey(data.segmentKey)
+      seg.setPrizeLadder(data.prizeLadder)
+      seg.setSegmentPlan(data.segmentPlan)
+      seg.setDrWorth(data.drWorth)
+      seg.setPrizeBase(data.prizeBase)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
@@ -1714,6 +1768,12 @@ export function EditorApp({ onHome }) {
       seg.setSourceAllocation({ main: createSourceAllocation(), rc: createSourceAllocation() })
       seg.setTwisterPlan({ main: createTwisterPlan(), rc: createTwisterPlan() })
       seg.setLegacyRewardConfig(null)
+      seg.setCondition('')
+      seg.setSegmentKey('')
+      seg.setPrizeLadder({ main: {}, rc: {} })
+      seg.setSegmentPlan(null)
+      seg.setDrWorth(null)
+      seg.setPrizeBase(0)
     })
     setActiveSegmentIndex(0)
     setDataEpoch((n) => n + 1)
@@ -2143,7 +2203,7 @@ export function EditorApp({ onHome }) {
                     {playOverride ? (
                       <>
                         Playing <span className="font-semibold">{playOverride.label}</span>
-                        {playOverride.builtAt ? `, built at ${new Date(playOverride.builtAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. The exports hold what is in use, not this - step 5 can
+                        {playOverride.builtAt ? `, built at ${new Date(playOverride.builtAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. The exports hold what is in use, not this - step 6 can
                         put it in use.
                       </>
                     ) : (
@@ -2162,7 +2222,7 @@ export function EditorApp({ onHome }) {
                                     ? ': nothing is built on these boards yet. Build the event first (Build event, step 4).'
                                     : ': the boards in use. They were made by hand, not by a build.'}
                             </span>
-                            {pendingBuilds.includes('Normal') && <span className="font-semibold text-amber-700"> Another build is kept that is not in use (step 5) - this is not it.</span>}
+                            {pendingBuilds.includes('Normal') && <span className="font-semibold text-amber-700"> Another build is kept that is not in use (step 6) - this is not it.</span>}
                           </>
                         )
                       })()
@@ -2182,7 +2242,7 @@ export function EditorApp({ onHome }) {
                     }}
                     data-testid="play-back-to-build"
                   >
-                    {playOverride || pendingBuilds.length > 0 ? 'Back to test and export (step 5)' : 'Back to the build results (step 4)'}
+                    {playOverride || pendingBuilds.length > 0 ? 'Back to test and export (step 6)' : 'Back to the build results (step 4)'}
                   </Button>
                 </div>
                 {playOverride ? (
@@ -2295,8 +2355,8 @@ export function EditorApp({ onHome }) {
             )}
             {mode === 'syntax' && (
               <SyntaxPage
-                boards={main.boards}
-                recompletionBoards={recompletion.boards}
+                boards={withPrizes[activeSegmentIndex].main}
+                recompletionBoards={withPrizes[activeSegmentIndex].rc}
                 eventStartDate={eventStartDate}
                 eventDurationDays={eventDurationDays}
                 twisterPlan={segments[0].twisterPlan}
@@ -2307,10 +2367,10 @@ export function EditorApp({ onHome }) {
                 onRebuild={() => goRebuild(designIssues[0]?.phase)}
                 pendingBuilds={pendingBuilds}
                 onOpenBuild={() => setMode('build')}
-                allSegments={segments.map((seg) => ({
+                allSegments={segments.map((seg, i) => ({
                   name: seg.name,
-                  boards: seg.main.boards,
-                  recompletionBoards: seg.recompletion.boards,
+                  boards: withPrizes[i].main,
+                  recompletionBoards: withPrizes[i].rc,
                 }))}
               />
             )}

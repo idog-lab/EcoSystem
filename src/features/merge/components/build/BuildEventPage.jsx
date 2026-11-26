@@ -35,6 +35,8 @@ import { MIN_DROP_RANK, multiDropRankOf, tripleDropRankOf, soloDropRankOf, tileR
 import { firstBoardCapFor, RC_MIN_RANK_UNDER_TILES, invalidateLayout, tutorialCells, tutorialCellsAreOpen } from '../../lib/core/board'
 import { paintTile, fillAllTiles, resizeBoard, setRankWindow, applyLayout, openTutorialCells, hasTutorialCells } from '../../lib/core/layoutEdits'
 import BoardBank from './BoardBank'
+import SegmentsBuilder from './SegmentsBuilder'
+import PrizesStep from './PrizesStep'
 import { bankLayoutOf } from '../../lib/core/boardBank'
 import { parseRewardDefinitionRows } from '../../lib/rewards/rewardDefinitionsPaste'
 import { buildInputsKey, buildInputParts, changedInputParts, draftSegmentIsApplied, segmentBuildInputs, rcInputsOnMainDraft, layoutCapacity, ladderAdvisories, splitTargets, twisterInputsKey, repriceTwister, withTwisterMarks, draftStatusOf, INPUT_PART_LABELS, boardsWithDraftApplied, draftIsUsable } from '../../lib/build/eventBuild'
@@ -52,10 +54,11 @@ import { chaseValue, subsidyForDemand, demandForSubsidy, fillLastBoard, spreadSu
 // effort shape in step 4 above the Build button. Old names for them still
 // lead there (`STEP_ALIAS`, `STEP_FOLD`).
 const STEPS = [
-  { id: 'setup', label: 'DR demand', purpose: 'Type what each segment\'s player should spend. The board subsidy follows from it.' },
+  { id: 'setup', label: 'Segments', purpose: 'Build the segments, then type what each one\'s player should spend and its multiplier. The board subsidy follows from it.' },
   { id: 'layouts', label: 'Board layouts', purpose: 'Pick each board\'s layout. The same boards for every segment; the build fills what goes under the tiles.' },
   { id: 'rewards', label: 'Rewards and Twister', purpose: 'Type what a player should collect, and the twists. The rules behind them have working defaults.' },
   { id: 'build', label: 'Build', purpose: 'One click builds the event from what you entered, puts it in use and shows how it turned out.' },
+  { id: 'prizes', label: 'Prizes', purpose: 'Each marked rank is worth the DR paid for it. Type its prize and see how far it is from that, for the base and every segment.' },
   { id: 'finalize', label: 'Test and export', purpose: 'Your last build is in use. Test it on players, play it, then export.' },
 ]
 const STEP_ALIAS = { generator: 'setup', effort: 'build', definitions: 'rewards', phase: 'setup' }
@@ -268,7 +271,7 @@ export default function BuildEventPage({
   const totalBudget = baseList.boards.reduce((s, b) => s + (b.blockedValue ?? 0), 0)
   const hasTiles = baseList.boards.some((b) => b.tiles.flat().some((t) => t !== 'open'))
   const hasTargets = REWARD_TYPES.some((t) => (baseTargets[t] ?? 0) > 0)
-  const done = { setup: totalBudget > 0, layouts: hasTiles, rewards: hasTargets, build: draftCurrent, finalize: applied && draftCurrent }
+  const done = { setup: totalBudget > 0, layouts: hasTiles, rewards: hasTargets, build: draftCurrent, prizes: Object.keys(segments[segments[0].prizeBase ?? 0]?.prizeLadder?.main ?? {}).length > 0, finalize: applied && draftCurrent }
 
   const goTo = (id, anchor) => {
     onStepChange(STEP_ALIAS[id] ?? id)
@@ -361,7 +364,7 @@ export default function BuildEventPage({
         )}
         {draft?.restored && !applied && draftCurrent && draftIsUsable(draft) && (
           <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800" data-testid="draft-restored">
-            A build kept from your last session (or from a backup file) is here, but it is not what is in use. Step 5 can put it in use.
+            A build kept from your last session (or from a backup file) is here, but it is not what is in use. Step 6 can put it in use.
           </div>
         )}
         {draft && !draftCurrent && (
@@ -403,6 +406,7 @@ export default function BuildEventPage({
           setFixed={setFixed}
         />
       )}
+      {step === 'prizes' && <PrizesStep segments={segments} shownSegments={shown} goTo={goTo} />}
       {step === 'finalize' && (
         <FinalizeStep
           {...shared}
@@ -529,6 +533,8 @@ function SetupStep(props) {
   const anyGap = shownSegments.some((i) => listOf(segments[i]).targetSubsidy != null && Math.abs(gapOf(i)) > 0)
 
   return (
+    <div className="flex flex-col gap-4">
+    <SegmentsBuilder segments={segments} />
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] xl:items-start">
       <Panel title="1. DR demand" tag={<SegmentTag />}>
         {phase === 'rc' && (
@@ -562,8 +568,11 @@ function SetupStep(props) {
                 <th className="py-2 pr-6">
                   Board subsidy <span className="normal-case tracking-normal font-normal">(under tiles)</span>
                 </th>
-                <th className="py-2 pr-3" title="This segment's reward amounts are the base segment's times this number (step 3)">
+                <th className="py-2 pr-3" title="This segment's reward amounts (step 3) and its prizes (step 5) are the base segment's times this number">
                   Reward size <span className="normal-case tracking-normal font-normal">(× base)</span>
+                </th>
+                <th className="py-2 pr-3" title="The segment the prizes are worked out on (step 5): its build is played, each marked rank's effort taken from it; every other segment's prizes are its own times their multiplier against it">
+                  Prizes on
                 </th>
               </tr>
             </thead>
@@ -586,6 +595,11 @@ function SetupStep(props) {
                         {name}
                       </button>
                       {i === 0 && <span className="ml-1.5 text-[11px] text-purple-600 font-semibold">base</span>}
+                      {seg.condition && (
+                        <div className="max-w-[22rem] truncate font-mono text-[10.5px] text-slate-400" title={seg.condition} data-field="condition">
+                          {seg.condition}
+                        </div>
+                      )}
                     </td>
                     <td className="py-1.5 pr-6">
                       <CommitNumber
@@ -623,6 +637,9 @@ function SetupStep(props) {
                       ) : (
                         <CommitNumber value={seg.segmentFactor ?? 1} min={0} max={100} step={0.05} onCommit={(v) => seg.setSegmentFactor(v)} className="w-20" aria-label={`Reward factor for ${name}`} data-field="factor" />
                       )}
+                    </td>
+                    <td className="py-1.5 pr-3 text-center">
+                      <input type="radio" name="prize-base" checked={(segments[0].prizeBase ?? 0) === i} onChange={() => segments[0].setPrizeBase(i)} aria-label={`Work the prizes out on ${name}`} data-field="prize-base" />
                     </td>
                   </tr>
                 )
@@ -739,6 +756,7 @@ function SetupStep(props) {
         <GeneratorStep {...props} />
       </Collapsible>
       </div>
+    </div>
     </div>
   )
 }
@@ -1271,7 +1289,10 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
             ))}
           </div>
         )}
-        <p className="mt-2 text-[11px] text-slate-400">These do not change the build - they are part of what is exported. The same set applies to every segment.</p>
+        <p className="mt-2 text-[11px] text-slate-400">
+          These do not change the build - they are part of what is exported. The ranks marked here are the same for every segment; what each one is worth, and each
+          segment&apos;s prize, is in step 5. <LinkButton onClick={() => goTo('prizes')}>Go to step 5: Prizes</LinkButton>
+        </p>
       </Collapsible>
         </div>
 
@@ -1572,7 +1593,7 @@ function RewardsStep({ segments, base, baseList, activeSegmentIndex, onSelectSeg
                 Nothing about which reward a merge drops is left to chance, so every player ends close to the amounts you ask for - not only the average player. Measured on a
                 test event (one build, 200 players): with it, 100 of 100 players land within 15% of every amount at once; with containers picked at random, 28 of 100 did. The
                 item counts stay your rules (one item at rank {minDropRank}, two items, three items). Switch it off for the more varied containers of before. It needs the build to
-                give the rank values (below); this tool&apos;s own design. Step 5 shows the number for your own event.
+                give the rank values (below); this tool&apos;s own design. Step 6 shows the number for your own event.
               </span>
             </span>
           </label>
