@@ -89,8 +89,8 @@ Google Sheets: a copy of the template of the mode, into a Drive folder, mapped
 ranges filled (`exportPlan.ts` names every range). Price Cut: Segments, RC
 Segments, Seg 1-9 (A2:Z7 and A12:Z17), RC Eco (11 blocks), Puzzle DR Name.
 Maleficent: Segments, RC Segments, Seg 1-9 (A3:AH8), RC Seg 1-11 (A3:AH5),
-Wheel Wedges and Wheel Buckets (Layouts and Multiplier are kept from the
-template). Event Data is written only where an override is typed, per
+Wheel Wedges, Wheel Buckets, Wheel Layouts and Wheel Multiplier (edited in
+Event mechanics, started from the template's own tabs). Event Data is written only where an override is typed, per
 template keys. Every export is recorded (revision, engine, fingerprint, the
 cells sent); a later change marks it "Out of date".
 
@@ -121,4 +121,3 @@ example. No recommendation is shown until it can be supported.
 - Returning-segment rows are written in the templates' spacing; first-puzzle
   time rules must be typed for each event (the Maleficent template has an
   inverted window - shown as a problem, never copied).
-- Wheel layouts and multipliers are not edited in the platform yet.

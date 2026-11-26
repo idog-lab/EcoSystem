@@ -116,9 +116,11 @@ searches display names only and filters by shared folders, both kept in the
 URL; folders, placements, model documents and shared assumptions live in
 PostgreSQL behind the toolkit server (`server/`, TypeScript, Hono, Prisma,
 better-auth), checked per workspace membership on the server, with
-optimistic concurrency (`expectedRevision`, 409 on a stale write). No model
-has a server-side document schema yet - the existing tools still keep their
-work in the browser - and none may be invented. Merge Mania's `?s=`, `?play`
+optimistic concurrency (`expectedRevision`, 409 on a stale write). Puzzle is
+the only model with a server-side document schema (`src/features/puzzle/
+engine/schema.ts`), plus append-only exports, live runs and observed results
+(`server/modules/records`); the other tools still keep their work in the
+browser, and no schema may be invented for them. Merge Mania's `?s=`, `?play`
 and `?plan` links open as before. The GitHub Pages deploy serves the site
 only: there, the home page works without folders.
 

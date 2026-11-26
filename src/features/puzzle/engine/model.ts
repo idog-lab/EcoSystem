@@ -165,6 +165,18 @@ export type CcSettings = {
   presets: string[]
 }
 
+// The Maleficent template's "Wheel Layouts" and "Wheel Multiplier" tabs (read 26 Nov 2026).
+const TEMPLATE_LAYOUT = ['S_J', 'S_S', 'S_B', 'F_2', 'S_S', 'S_M', 'S_S', 'S_B', 'S_M', 'F_2', 'S_S', 'S_M']
+const TEMPLATE_LAYOUTS: WheelLayout[] = ['1', '2', '3', '4', '5'].map((id) => ({ id, wedges: [...TEMPLATE_LAYOUT] }))
+const TEMPLATE_MULTIPLIERS: WheelMultiplier[] = [
+  { multiplier: 1, light: '#f4fbff', mid: '#aed0e8', dark: '#1b3c62', text: '#527ea3', locked: '#527ea3', defaultLadder: true },
+  { multiplier: 2, light: '#d1eeff', mid: '#29adff', dark: '#00328a', text: '#215eb1', locked: '#527ea3', defaultLadder: true },
+  { multiplier: 5, light: '#fffdb7', mid: '#ffab14', dark: '#6f3000', text: '#974100', locked: '#527ea3', defaultLadder: true },
+  { multiplier: 10, light: '#ffcafc', mid: '#e83dff', dark: '#6f08b4', text: '#780eba', locked: '#527ea3', defaultLadder: true },
+  { multiplier: 30, light: '#ffcafc', mid: '#e83dff', dark: '#6f08b4', text: '#780eba', locked: '#527ea3', defaultLadder: false },
+  { multiplier: 50, light: '#ffcafc', mid: '#e83dff', dark: '#6f08b4', text: '#780eba', locked: '#527ea3', defaultLadder: false },
+]
+
 const TEMPLATE_WEDGES: Wedge[] = [
   { id: 'S_S', name: 'sword_small', value: 5, visualVariant: '', stingerId: '' },
   { id: 'S_M', name: 'sword_medium', value: 10, visualVariant: '', stingerId: '' },
@@ -285,8 +297,8 @@ export function createDefaultEvent({ name = 'New Puzzle event', start = '2026-12
       buckets: W.maleficent.buckets.map((b) => ({ ...b })),
       // The Maleficent template's "Wheel Wedges" tab (read 26 Nov 2026) - the workbook's own list has scratch rows (a second S_S, F_1).
       wedges: TEMPLATE_WEDGES.map((w) => ({ ...w })),
-      layouts: [],
-      multipliers: [],
+      layouts: TEMPLATE_LAYOUTS.map((l) => ({ id: l.id, wedges: [...l.wedges] })),
+      multipliers: TEMPLATE_MULTIPLIERS.map((m) => ({ ...m })),
       regularWheel: W.maleficent.regularWheel.map((t, i) => wheelTier(t, spinsOf(String(i + 1)))),
       rcWheel: W.maleficent.rcWheel.map((t, i) => wheelTier(t, spinsOf(`RC${i + 1}`))),
     },

@@ -100,6 +100,15 @@ describe('export plan', () => {
     }))
   })
 
+  it('Maleficent: the wheel tabs are written as the template holds them, and every reference is found', () => {
+    const ev = event('maleficent')
+    const p = plan(ev)
+    expect(write(p, "'Wheel Layouts'!A2:M6")![0]).toEqual([1, 'S_J', 'S_S', 'S_B', 'F_2', 'S_S', 'S_M', 'S_S', 'S_B', 'S_M', 'F_2', 'S_S', 'S_M'])
+    expect(write(p, "'Wheel Multiplier'!A2:G7")![4]).toEqual([30, '#ffcafc', '#e83dff', '#6f08b4', '#780eba', '#527ea3', false])
+    expect(write(p, "'Wheel Wedges'!A2:E6")!.map((r) => r[0])).toEqual(['S_S', 'S_M', 'S_B', 'S_J', 'F_2'])
+    expect(computeAll(ev).problems.filter((x) => x.text.startsWith('Maleficent'))).toEqual([])
+  })
+
   it('the same event gives the same plan (no shuffle while exporting)', () => {
     const ev = event('maleficent')
     expect(JSON.stringify(plan(ev))).toBe(JSON.stringify(plan(ev)))

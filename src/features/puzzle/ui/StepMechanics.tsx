@@ -155,7 +155,60 @@ function Maleficent() {
         <div className="mt-2">
           <Btn small onClick={() => edit((x) => void x.maleficent.buckets.push({ id: Math.max(0, ...x.maleficent.buckets.map((b) => b.id)) + 1, wedges: '' }))}>Add a bucket</Btn>
         </div>
-        {ev.maleficent.layouts.length === 0 && <Note>Wheel layouts and multipliers are not edited here yet: the template's own tabs are kept as they are.</Note>}
+      </Panel>
+      <Panel title="Wheel layouts and multipliers" subtitle="Twelve wedges a layout; the multipliers a wheel may show, with their colours. Exported to the Wheel Layouts and Wheel Multiplier tabs. Started from the Maleficent template's own tabs.">
+        <Table head={['Layout', ...Array.from({ length: 12 }, (_, i) => `W${i + 1}`), '']}>
+          {ev.maleficent.layouts.map((l, i) => (
+            <tr key={i}>
+              <td className={td}>
+                <Text width="w-12" value={l.id} onChange={(v) => edit((x) => void (x.maleficent.layouts[i]!.id = v.trim()))} />
+              </td>
+              {Array.from({ length: 12 }, (_, j) => (
+                <td key={j} className={td}>
+                  <Text width="w-14" value={l.wedges[j] ?? ''} onChange={(v) => edit((x) => void (x.maleficent.layouts[i]!.wedges[j] = v.trim()))} />
+                </td>
+              ))}
+              <td className={td}>
+                <Btn small variant="ghost" onClick={() => edit((x) => void x.maleficent.layouts.splice(i, 1))}>
+                  Remove
+                </Btn>
+              </td>
+            </tr>
+          ))}
+        </Table>
+        <div className="mt-2">
+          <Btn small onClick={() => edit((x) => void x.maleficent.layouts.push({ id: String(x.maleficent.layouts.length + 1), wedges: [...(x.maleficent.layouts[x.maleficent.layouts.length - 1]?.wedges ?? Array(12).fill(''))] }))}>Add a layout</Btn>
+        </div>
+        <div className="mt-4">
+          <Table head={['Multiplier', 'Light', 'Mid', 'Dark', 'Text', 'Locked', 'Default ladder', '']}>
+            {ev.maleficent.multipliers.map((m, i) => (
+              <tr key={i}>
+                <td className={td}>
+                  <Num width="w-14" min={0} value={m.multiplier} onChange={(v) => edit((x) => void (x.maleficent.multipliers[i]!.multiplier = v!))} />
+                </td>
+                {(['light', 'mid', 'dark', 'text', 'locked'] as const).map((k) => (
+                  <td key={k} className={td}>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="inline-block h-3 w-3 rounded border border-slate-200" style={{ background: m[k] }} />
+                      <Text width="w-20" value={m[k]} onChange={(v) => edit((x) => void (x.maleficent.multipliers[i]![k] = v.trim()))} />
+                    </span>
+                  </td>
+                ))}
+                <td className={td}>
+                  <input type="checkbox" checked={m.defaultLadder} onChange={(e) => edit((x) => void (x.maleficent.multipliers[i]!.defaultLadder = e.target.checked))} />
+                </td>
+                <td className={td}>
+                  <Btn small variant="ghost" onClick={() => edit((x) => void x.maleficent.multipliers.splice(i, 1))}>
+                    Remove
+                  </Btn>
+                </td>
+              </tr>
+            ))}
+          </Table>
+          <div className="mt-2">
+            <Btn small onClick={() => edit((x) => void x.maleficent.multipliers.push({ multiplier: 0, light: '', mid: '', dark: '', text: '', locked: '', defaultLadder: false }))}>Add a multiplier</Btn>
+          </div>
+        </div>
       </Panel>
     </>
   )
