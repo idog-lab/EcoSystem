@@ -1,0 +1,1 @@
+import{c as e}from"./index-CxMgdSow.js";import{EditorApp as t}from"./App-BOX_CDsJ.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
