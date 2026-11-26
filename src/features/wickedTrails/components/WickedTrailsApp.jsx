@@ -5,7 +5,7 @@ import SheetGrid from '../../../components/SheetGrid'
 import { withRest } from '../../../lib/sheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward } from '../../../lib/economy/parse'
-import { currencyChoices } from '../../../lib/economy/economyModel'
+import { MINI_GAMES, currencyChoices, liveMiniGame, miniGameOf } from '../../../lib/economy/economyModel'
 import { FALLBACK_KINDS, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
 import { presetFor } from '../../../lib/economy/syntax'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
@@ -147,10 +147,10 @@ export default function WickedTrailsApp({ onHome }) {
         ) : (
           <>
             {step === 'segments' && <SegmentsStep state={state} change={change} />}
-            {step === 'rules' && <RulesStep state={state} change={change} />}
+            {step === 'rules' && <RulesStep state={state} change={change} economy={economy} />}
             {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} economy={economy} />}
             {step === 'mock' && <MockStep state={state} index={index} setShown={setShown} />}
-            {step === 'export' && <ExportStep state={state} change={change} index={index} setShown={setShown} />}
+            {step === 'export' && <ExportStep state={state} index={index} setShown={setShown} />}
           </>
         )}
 
@@ -309,7 +309,12 @@ function SegmentsSheet({ state, change }) {
 }
 
 // ---------------------------------------------------------------- 2. Rules
-function RulesStep({ state, change }) {
+// The mini game the feature uses: the calendar's on its first day, else the one picked here.
+const miniGameUsed = (state, economy) => liveMiniGame(economy, state.startDate) ?? (state.miniGame || null)
+
+function RulesStep({ state, change, economy }) {
+  const fromCalendar = liveMiniGame(economy, state.startDate)
+  const used = miniGameUsed(state, economy)
   const r = state.rules
   const set = (k) => (v) => change((s) => ({ ...s, rules: { ...s.rules, [k]: v } }))
   const field = (k, label, title, suffix = '%') => (
@@ -323,6 +328,35 @@ function RulesStep({ state, change }) {
   )
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card title="When">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3" data-testid="wt-when">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500" title="The DR values (puzzle, pet, the mini game) are read from the calendar on the feature's days; a value that changes over them is averaged">
+            First day
+            <input type="date" value={state.startDate ?? ''} onChange={(e) => change((s) => ({ ...s, startDate: e.target.value }))} className={INPUT} data-testid="wt-start-date" />
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Days
+            <Num value={state.days} onCommit={(v) => v != null && v >= 1 && change((s) => ({ ...s, days: Math.round(v) }))} className="w-16" data-testid="wt-days" />
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500" title={fromCalendar ? 'Live on these days by the calendar (Economy page)' : 'The calendar (Economy page) does not say which is live on these days: pick it'}>
+            Mini game
+            {fromCalendar ? (
+              <span className="flex h-[34px] items-center gap-1.5 text-sm font-semibold normal-case tracking-normal text-slate-800" data-testid="wt-mini-game" data-mini-game={fromCalendar}>
+                {miniGameOf(fromCalendar)?.label} <span className="text-[11px] font-normal text-slate-400">calendar</span>
+              </span>
+            ) : (
+              <select value={state.miniGame} onChange={(e) => change((s) => ({ ...s, miniGame: e.target.value }))} className={INPUT} data-testid="wt-mini-game" data-mini-game={used ?? ''}>
+                <option value="">Pick one</option>
+                {MINI_GAMES.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+        </div>
+      </Card>
       <Card title="The ROE">
         <div data-testid="wt-rules-roe">{field('roe', 'ROE', 'Rate of economy: the allowance worth of prizes a player gets from one Brut Win', 'allowance a Brut Win')}</div>
       </Card>
@@ -503,7 +537,8 @@ function TiersStep({ state, change, index, setShown, economy }) {
       return { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', last: false, share: null, t: null, target: w.finalTarget, prize, parts, kinds: presetsByKind(parts.presets) }
     })(),
   ]
-  const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
+  const miniGame = miniGameUsed(state, economy)
+  const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { date: state.startDate || null, days: state.days, miniGame, prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
   // The carry along each lane: what a tier leaves (over or under its aim) moves to the next one; the Final Prize has
   // its own pool and carries nothing. A tier with no prize gives 0; a worth not known stops the carry.
   const carried = new Map()
@@ -610,8 +645,8 @@ function TiersStep({ state, change, index, setShown, economy }) {
     {
       key: 'mini',
       group: 'The prize',
-      label: 'Mini game',
-      sub: 'amount',
+      label: miniGameOf(miniGame)?.label ?? 'Mini game',
+      sub: miniGame ? 'mini game' : 'pick it in Rules',
       width: 70,
       type: 'number',
       align: 'right',
@@ -942,7 +977,7 @@ function MockStep({ state, index, setShown }) {
 }
 
 // ---------------------------------------------------------------- 6. Export
-function ExportStep({ state, change, index, setShown }) {
+function ExportStep({ state, index, setShown }) {
   const data = useMemo(() => buildExport(state), [state])
   const [message, setMessage] = useState(null)
   const seg = state.segments[index]
@@ -977,10 +1012,6 @@ function ExportStep({ state, change, index, setShown }) {
       <Card title="The workbook">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              The event&apos;s first day
-              <input type="date" value={state.startDate ?? ''} onChange={(e) => change((s) => ({ ...s, startDate: e.target.value }))} className={INPUT} data-testid="wt-start-date" />
-            </label>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">File</span>
               <span className="font-mono text-sm text-slate-700" data-testid="wt-file-name">

@@ -171,7 +171,22 @@ ChefDishes - the last this app's own), specifics (parts
 added to the segments picked, a typed tag in their names) and mode splits
 (duplication of the segments picked); it also reads any condition in words,
 naming a function it does not know. Add a function only as explained in chat.
-**These rules are for prizes on a feature's tiers only** (economist: "all the
+**The calendar** (economist, 26 Nov 2026: "we need that the system will hold some
+kind of a calendar, that he will know the prices of specific DRs with the
+calendar when we create features"; the Economy page's Calendar tab,
+`CalendarTab.jsx`): each day with dr-puzzle's value (a day) and dr-pet's (a
+week), from the Worth tab, and **which mini game is live** - Merge or Diamond
+Mine - typed as periods (`economy.calendar.miniGames`, `liveMiniGame`;
+"Which one is live, by day"; an overlap refused). **A preset's worth is its
+amount x its DR's value on the date** ("Amount x the DR's value";
+`presetValue`): puzzle_gameplay_<n>... x dr-puzzle, mf_<n>_... x dr-pet,
+mini_game_<n>_... x the live mini game's (dr-merge for Merge, dr-pickaxe for
+Diamond Mine - the calendar's, else the one the feature picks); the
+fallback ending does not change it. **A feature reads its days** - a first
+day and a number of days - and a value that changes over them is averaged
+("if there is a change in values of DRs we take the average of them";
+`prizeAgainstWorth` `days`). A day with no value is unknown, never the
+nearest. **These rules are for prizes on a feature's tiers only** (economist: "all the
 rules we got from befor for small reweards and twister are untouched"): Merge
 Mania's small rewards keep their own rounding and up to 3 coin decimals, the
 Twister's price stays any whole number. Chef's grand prize follows RoundReward;
@@ -231,7 +246,10 @@ makes the prize its own; put back to the base's scaled prize, it follows the bas
 and gold DR per Brut Win ("Two per segment"; "Same for every segment" fills them), the base, and its effort in Brut
 Wins **typed or a factor of another segment** (economist: "we should let a segment have an effort that is a factor of
 another segment if we want, and an option to hard code the effort"; `resolveEfforts`: by key, chains followed, a loop
-or a missing segment says so). **Rules**: the ROE and the five shares. **Tiers and prizes**: tier counts, and each
+or a missing segment says so). **Rules**: **When** - the first day (asked for; the export's file name and the DR
+values read on the feature's days), the days (2 to start, this app's own) and the mini game ("the mini game should
+show the specific merge or diamond mine that is live": the calendar's, else picked; the prize sheet's column is headed
+by it) - the ROE and the five shares. **Tiers and prizes**: tier counts, and each
 tier's share, DR (alone and in all), Brut Wins, what it earns, its target, its prize and the prize's worth beside it,
 per segment. **Mock**: a sketch of the event, played Brut Win by Brut Win - not the game's artwork.
 **Export** (`lib/wickedTrailsExport.js`) in the layout of the economist's example
