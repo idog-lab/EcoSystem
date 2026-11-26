@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { SegmentPlanEditor } from '../../../economy/SegmentsTab'
 import { buildPlan, createPlan } from '../../../../lib/economy/segmentFlow'
 import { Collapsible, CommitNumber } from './buildUi'
-import { setForFeature, useSegmentSets } from '../../../../lib/economy/segmentSets'
+import { setForFeature, setPlaceholder, useSegmentSets } from '../../../../lib/economy/segmentSets'
 
 // MERGE MANIA'S SEGMENTS (economist, 26 Nov 2026: "add segmentation into the merge ... the first tab as the segments,
 // there we can also have the DR demand and the multipliers between segments. we should also give the value of a
@@ -61,7 +61,7 @@ export default function SegmentsBuilder({ segments }) {
     name(r.segments, true)
     base.setSegmentSet({ id: set.id, name: set.name, updatedAt: set.updatedAt })
     const given = r.segments.filter((s) => s.effort != null).length
-    setMessage({ tone: 'ok', text: `${r.segments.length} segments taken from "${set.name}"${given ? `, ${given} with an effort` : ', none with an effort yet'}. Type each one's DR demand and multiplier below.` })
+    setMessage({ tone: 'ok', text: `${r.segments.length} segments taken from "${set.name}", named Merge_ in place of ${setPlaceholder(set)}_${given ? `, ${given} with an effort` : ', none with an effort yet'}. Type each one's DR demand and multiplier below.` })
   }
 
   return (

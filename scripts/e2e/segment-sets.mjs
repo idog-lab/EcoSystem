@@ -18,22 +18,33 @@ const openEconomySegments = async () => {
   await page.locator('[data-tab="segments"]').click()
   await page.waitForTimeout(300)
 }
+const view = async (id) => {
+  await page.locator(`[data-seg-view="${id}"]`).click()
+  await page.waitForTimeout(250)
+}
 
 // The Economy page: a set from the flow.
 await openEconomySegments()
+await view('sets')
 ok('the Segments tab has the segment sets, none yet', (await page.getByTestId('economy-segment-sets').count()) === 1 && (await page.getByTestId('economy-sets-empty').count()) === 1)
-await set(page.getByTestId('economy-seg-feature'), 'Disco')
+await view('build')
+ok('"Save as a set" sits on the segments the flow makes', (await page.getByTestId('economy-seg-table').count()) === 1 && (await page.getByTestId('economy-set-save').count()) === 1)
+await set(page.getByTestId('economy-seg-feature'), '2D_Levels')
 await set(page.getByTestId('economy-seg-cuts'), '1000, 2500')
 await page.getByTestId('economy-set-name').fill('Level features, 2 days')
 await page.getByTestId('economy-set-save').click()
 await page.waitForTimeout(300)
+const savedMessage = await page.getByTestId('economy-set-message').innerText()
+await view('sets')
 const sets = page.getByTestId('economy-segment-sets')
-ok(`the flow is saved as a set (${await page.getByTestId('economy-set-message').innerText()})`, (await sets.locator('[data-set]').count()) === 1 && (await sets.locator('[data-set-segment]').count()) === 3)
-ok('a set keeps its segments without the feature in their names', (await sets.locator('[data-set-segment="BW_0_1000"]').count()) === 1)
+ok(`the flow is saved as a set (${savedMessage})`, (await sets.locator('[data-set]').count()) === 1 && (await sets.locator('[data-set-segment]').count()) === 3)
+ok(`the feature typed is the set's name placeholder, shown in its segments' names (${(await sets.locator('[data-set-segment="BW_0_1000"] td').first().innerText()).trim()})`, (await sets.locator('[data-set-segment="BW_0_1000"]').count()) === 1 && (await sets.locator('[data-set]').first().getAttribute('data-set') ) && (await sets.locator('[data-set-placeholder="2D_Levels"]').count()) === 1 && /^2D_Levels_BW_0_1000$/.test((await sets.locator('[data-set-segment="BW_0_1000"] td').first().innerText()).trim()))
+await view('build')
 await page.getByTestId('economy-set-name').fill('Weekend features')
 await page.getByTestId('economy-set-save').click()
 await page.waitForTimeout(300)
-ok('a second set', (await sets.locator('[data-set]').count()) === 2)
+await view('sets')
+ok('a second set, side by side with the first; the Sets view counts them', (await sets.locator('[data-set]').count()) === 2 && /2/.test(await page.locator('[data-seg-view="sets"]').innerText()))
 // Every set's efforts in one place.
 const effort = (setIndex, id) => sets.locator('[data-set]').nth(setIndex).locator(`[data-set-segment="${id}"] [data-set-effort]`)
 await set(effort(0, 'BW_0_1000'), 40)
@@ -43,6 +54,7 @@ ok('efforts of both sets are typed on the same card', (await effort(0, 'BW_0_100
 await page.reload({ waitUntil: 'networkidle' })
 await page.locator('[data-tab="segments"]').click().catch(() => {})
 await page.waitForTimeout(300)
+ok('the view open is remembered (Segment sets)', (await page.locator('[data-seg-view="sets"]').getAttribute('aria-selected')) === 'true')
 ok('the sets and their efforts are kept after a reload', (await effort(0, 'BW_1000_2500').inputValue()) === '90')
 
 // Merge: the set picked.
@@ -57,7 +69,7 @@ ok(`step 1 offers the sets in a list (${options.join(' / ')})`, options.some((o)
 const levelId = await picker.locator('option', { hasText: 'Level features' }).getAttribute('value')
 await picker.selectOption(levelId)
 await page.waitForTimeout(500)
-ok(`picking it copies the segments (${await page.getByTestId('merge-segments-message').innerText()})`, /3 segments taken from "Level features, 2 days", 2 with an effort/.test(await page.getByTestId('merge-segments-message').innerText()))
+ok(`picking it copies the segments (${await page.getByTestId('merge-segments-message').innerText()})`, /3 segments taken from "Level features, 2 days", named Merge_ in place of 2D_Levels_, 2 with an effort/.test(await page.getByTestId('merge-segments-message').innerText()))
 const rows = await page.locator('[data-testid="setup-segments"] [data-setup-segment]').evaluateAll((trs) =>
   trs.map((tr) => ({ name: tr.querySelector('button')?.innerText.trim(), effort: tr.querySelector('[data-field="effort-bw"]')?.value, condition: tr.querySelector('[data-field="condition"]')?.innerText })),
 )
@@ -70,6 +82,7 @@ await page.waitForTimeout(300)
 
 // The set changed on the Economy page: the event keeps its copy until told.
 await openEconomySegments()
+await view('sets')
 await set(effort(0, 'BW_0_1000'), 55)
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByText('Merge Mania', { exact: false }).first().click()

@@ -8460,3 +8460,26 @@ the segment's name without the feature; "Use these segments" from the flow
 keeps an effort by segment key and forgets the set. Nothing turns Brut Wins
 into a DR demand yet. Shared with the team (economy/segment-sets.json).
 verify-segment-sets 13, e2e segment-sets 14.
+
+## The Segments tab, one view at a time; a set's name placeholder
+
+26 Nov 2026: "the layout of the segments page is not so good. too scrollable.
+and u need to search for things". Measured at 1500 x 800: the Segments tab
+was 2,121 px (the flow, the read card, the segments, the sets and the
+functions one under the other). Now four views, one at a time: Build
+segments (steps 1-3 left, the segments right and in sight, "Save as a set"
+on them, each condition on one line with a short "Who" column - the shared
+Brut Wins formula hid the part that differs), Segment sets (small cards side
+by side), Read a condition, Functions. Tallest view 935 px. Merge's effort
+field showed "not giver" (cut): a dash now.
+
+Same day: "when we have a default segment like the 2D_levels to somehow hold
+in the segments name the (Name)_ ... so when we do each feature, the model of
+the feature will prefix the name of the feature to the segments. if we make
+generic 2d_levels segments, we will hold the 2D_LEVELS as a name placeholder
+that changes between features that use the segments". A set already kept its
+segments without the feature; now the feature typed when the set is saved is
+shown as its placeholder (2D_Levels_BW_0_9, the placeholder marked), a set
+saved with no name takes it as its name, and Merge's message says it named
+Merge_ in place of it. verify-segment-sets 15, e2e segment-sets 16,
+economy-page 111, merge-prizes 17.
