@@ -17,5 +17,6 @@ export const MODEL_MODULES: Record<ModuleKey, () => Promise<PageModule>> = {
   'diamond-mine': () => import('../../features/diamondMine/components/DiamondMineApp.jsx'),
   chef: () => import('../../features/chef/components/ChefApp.jsx'),
   economy: () => import('../../features/economy/EconomyApp.jsx'),
+  puzzle: () => import('../../features/puzzle/ui/PuzzlePage'),
   'not-migrated': () => import('../../models/notMigrated/NotMigratedPage'),
 }

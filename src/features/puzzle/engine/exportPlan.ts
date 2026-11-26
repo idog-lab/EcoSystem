@@ -72,7 +72,8 @@ export const templateFor = (ev: PuzzleEvent): TemplateKind | null =>
 const items = (order: readonly number[], costs: readonly number[]) => boardOrder(order, costs.length).map((id) => costs[id - 1]!)
 const layoutCell = (v: string): Cell => (/^\d+$/.test(v) ? Number(v) : v)
 
-export type ExportPlan = { template: TemplateKind; title: string; writes: CellWrite[]; problems: string[] }
+/** `clears` are emptied first (rows a shorter list would otherwise leave from the template's old event). */
+export type ExportPlan = { template: TemplateKind; title: string; clears: string[]; writes: CellWrite[]; problems: string[] }
 
 export function buildExportPlan(ev: PuzzleEvent, r: PuzzleResults): ExportPlan | { template: null; problems: string[] } {
   const template = templateFor(ev)
@@ -82,6 +83,7 @@ export function buildExportPlan(ev: PuzzleEvent, r: PuzzleResults): ExportPlan |
   if (ev.segmentation.firstPuzzle.length === 0)
     problems.push('First-puzzle time rules have no dates for this event: the template still holds an old event\'s. Add them in Event mechanics.')
   const writes: CellWrite[] = []
+  const clears: string[] = [`${q('Segments')}!A${3 + REGULAR_SEGMENTS}:C60`]
   const w = (sheet: string, a1: string, values: Cell[][]) => writes.push({ range: `${q(sheet)}!${a1}`, values })
 
   // Segments: returning players, first_puzzle, the first-puzzle time rules.
@@ -143,11 +145,15 @@ export function buildExportPlan(ev: PuzzleEvent, r: PuzzleResults): ExportPlan |
     for (const s of r.rc)
       w(`RC Seg ${s.segment}`, 'A3:AH5', s.tiers.map((t) => row(t.tier, t.syntax, t.costs, ev.order.rc[s.segment - 1] ?? [], s.boss, ev.maleficent.rcWheel)))
     const m = ev.maleficent
+    if (m.wedges.length) clears.push(`${q('Wheel Wedges')}!A2:E200`)
+    if (m.buckets.length) clears.push(`${q('Wheel Buckets')}!A2:B200`)
+    if (m.layouts.length) clears.push(`${q('Wheel Layouts')}!A2:M200`)
+    if (m.multipliers.length) clears.push(`${q('Wheel Multiplier')}!A2:G200`)
     if (m.wedges.length) w('Wheel Wedges', `A2:E${1 + m.wedges.length}`, m.wedges.map((x) => [x.id, x.name, x.value, x.visualVariant, x.stingerId]))
     if (m.buckets.length) w('Wheel Buckets', `A2:B${1 + m.buckets.length}`, m.buckets.map((b) => [b.id, b.wedges]))
     if (m.layouts.length) w('Wheel Layouts', `A2:M${1 + m.layouts.length}`, m.layouts.map((l) => pad([layoutCell(l.id), ...l.wedges], 13)))
     if (m.multipliers.length)
       w('Wheel Multiplier', `A2:G${1 + m.multipliers.length}`, m.multipliers.map((x) => [x.multiplier, x.light, x.mid, x.dark, x.text, x.locked, x.defaultLadder]))
   }
-  return { template, title: exportTitle(ev), writes, problems }
+  return { template, title: exportTitle(ev), clears, writes, problems }
 }

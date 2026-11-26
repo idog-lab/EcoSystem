@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { averageDamage, bossBar, bucketsText, removalFor, selectRemoved } from '../../src/features/puzzle/engine/maleficent'
 import { computeRc } from '../../src/features/puzzle/engine/rc'
 import { computeRegularSegment } from '../../src/features/puzzle/engine/regular'
-import { FIRST_PUZZLE, rcDefinition, rcSegmentRows, rcSegmentsAt, rcWindowSerials, regularDefinition, regularKey, timeWindowProblems } from '../../src/features/puzzle/engine/segments'
+import { FIRST_PUZZLE, rcSegmentRows, rcSegmentsAt, rcWindowSerials, regularDefinition, regularKey, timeWindowProblems } from '../../src/features/puzzle/engine/segments'
 import { round, toSerial } from '../../src/features/puzzle/engine/excel'
 import { hasWorkbook, workbook, workbookEvent } from './workbook'
 

@@ -41,7 +41,7 @@ describe('the model registry', () => {
     }
   }, 120_000)
 
-  it('the existing tools stay available; every new one says it is not migrated', () => {
+  it('the built tools are available (Puzzle since 26 Nov 2026); every other one says it is not migrated', () => {
     const status = Object.fromEntries(MODEL_CATALOG.map((m) => [m.id, m.status]))
     expect(status).toEqual({
       'merge-mania': 'available',
@@ -50,7 +50,7 @@ describe('the model registry', () => {
       economy: 'available',
       momentum: 'not-migrated',
       challenge: 'not-migrated',
-      puzzle: 'not-migrated',
+      puzzle: 'available',
       ...Object.fromEntries(ADDED_IDS.map((id) => [id, 'not-migrated'])),
     })
     for (const m of MODEL_CATALOG) expect(m.moduleKey === 'not-migrated').toBe(m.status === 'not-migrated')
