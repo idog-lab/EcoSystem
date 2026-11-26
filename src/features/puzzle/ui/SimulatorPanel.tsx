@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../../../platform/api/client'
 import { REGULAR_PIECES } from '../engine/model'
 import { positionAt, readProgress, weekendDay, type ProgressProvider, type QuantileRow } from '../engine/simulator'
 import { Btn, Choice, Label, Note, Num, Pill, Text } from './kit'
@@ -17,7 +16,7 @@ type Mode = 'data' | 'manual'
  * the day or percentile, never changes prices, the piece order or the config.
  */
 export function SimulatorPanel({ onClose, wide, onWide }: { onClose: () => void; wide: boolean; onWide: () => void }) {
-  const { ev, results, base } = usePuzzle()
+  const { ev, results, base, call } = usePuzzle()
   const workspace = base?.replace(/\/documents$/, '') ?? null
   const [segment, setSegment] = useState(1)
   const [percentile, setPercentile] = useState(50)
@@ -32,12 +31,12 @@ export function SimulatorPanel({ onClose, wide, onWide }: { onClose: () => void;
 
   const load = useCallback(async () => {
     if (!workspace) return
-    const r = await api<{ assumptionSet: { payload: Omit<ProgressProvider, 'kind'>; revision: number } }>(`${workspace}/assumptions/${KEY}`)
+    const r = await call<{ assumptionSet: { payload: Omit<ProgressProvider, 'kind'>; revision: number } }>(`${workspace}/assumptions/${KEY}`)
     if (r.ok) {
       setProvider({ kind: 'historical-quantiles', ...r.data.assumptionSet.payload })
       setProvRev(r.data.assumptionSet.revision)
     }
-  }, [workspace])
+  }, [workspace, call])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading from the server
     void load()
@@ -58,7 +57,7 @@ export function SimulatorPanel({ onClose, wide, onWide }: { onClose: () => void;
         const [s, d, p, v] = l.split(/[,\t]/).map((x) => Number(x.trim().replace(/%$/, '')))
         return { segment: s!, day: d!, percentile: p!, progress: v! > 1 ? v! / 100 : v! }
       })
-    const r = await api(`${workspace}/assumptions/${KEY}`, { method: 'PUT', body: { expectedRevision: provRev, schemaVersion: 1, payload: { ...meta, rows } } })
+    const r = await call(`${workspace}/assumptions/${KEY}`, { method: 'PUT', body: { expectedRevision: provRev, schemaVersion: 1, payload: { ...meta, rows } } })
     setMsg(r.ok ? `${rows.length} rows stored.` : r.message)
     if (r.ok) {
       setImportText('')

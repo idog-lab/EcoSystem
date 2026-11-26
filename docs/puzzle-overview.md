@@ -1,8 +1,24 @@
 # Puzzle
 
-The Puzzle live-ops event, in the platform at `/models/puzzle` - the first model
-whose events are stored on the toolkit server (shared per workspace, with
-revisions). Built on 26 Nov 2026 from the approved requirements and
+The Puzzle live-ops event, in the platform at `/models/puzzle`.
+
+**Where the events are kept.** Where the toolkit server runs, on it (shared per
+workspace). Where it does not - the live site on GitHub Pages - in the browser,
+under `superplay-puzzle`, and shared with the team through Team data
+(`puzzle/events.json` in the private data repository), like Chef and the
+Economy page (`ui/localBackend.ts`: the same requests and the same rules as the
+server - revisions, a stale save refused with the edits kept, exports, live
+runs and results only ever added, results joined to the live revisions). In
+the browser an event keeps its newest 10 revisions plus every revision an
+export or a live run names, and an export record keeps its revision and engine
+version instead of a copy of its cells (they are rebuilt exactly from them), so
+the shared file stays small. Unsaved edits remember the revision they were made
+from: opened after a newer one was saved (another tab, another person), they
+come back as a choice, never over it. The whole store is one shared file, so
+two people saving different Puzzle events between syncs are asked which to keep
+(Team data's rule for every shared file). Held by `tests/puzzle/local-backend.test.ts`
+and `scripts/e2e-platform/puzzle-live.mjs` (the built site served as GitHub
+Pages serves it, no server). Built on 26 Nov 2026 from the approved requirements and
 `puzzle-migration-plan.md`; formulas ported from the economist's workbook
 "Disney Economy v1.5.75 - copy for cc BF" (never committed). Where the
 requirements and the workbook differ, the requirements win (listed below).

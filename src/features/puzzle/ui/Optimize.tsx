@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../../../platform/api/client'
 import { Btn, Label, Note, Num, Panel, Table, Text } from './kit'
 import { fmt, td } from './format'
 import { usePuzzle } from './shared'
@@ -17,7 +16,7 @@ const TARGETS = [
 const CSV_HEAD = 'eventId,segment,metric,value,sampleSize,population,windowStart,windowEnd,source,refreshedAt'
 
 export function Optimize() {
-  const { ev, edit, docId, revision, base } = usePuzzle()
+  const { ev, edit, docId, revision, base, call } = usePuzzle()
   const docBase = base && docId ? `${base}/${docId}` : null
   const [runs, setRuns] = useState<LiveRun[]>([])
   const [results, setResults] = useState<Result[]>([])
@@ -29,10 +28,10 @@ export function Optimize() {
 
   const load = useCallback(async () => {
     if (!docBase) return
-    const [a, b] = await Promise.all([api<{ liveRuns: LiveRun[] }>(`${docBase}/live-runs`), api<{ results: Result[] }>(`${docBase}/results`)])
+    const [a, b] = await Promise.all([call<{ liveRuns: LiveRun[] }>(`${docBase}/live-runs`), call<{ results: Result[] }>(`${docBase}/results`)])
     if (a.ok) setRuns(a.data.liveRuns)
     if (b.ok) setResults(b.data.results)
-  }, [docBase])
+  }, [docBase, call])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading from the server
     void load()
@@ -42,7 +41,7 @@ export function Optimize() {
     if (!docBase) return
     if (!ev.optimize.eventId) return setMsg('Type the game\'s event ID first.')
     if (!runFrom) return setMsg('When did it start running?')
-    const r = await api(`${docBase}/live-runs`, { method: 'POST', body: { eventId: ev.optimize.eventId, revision: ended ? null : runRev, effectiveFrom: `${runFrom}:00Z`, note: runNote } })
+    const r = await call(`${docBase}/live-runs`, { method: 'POST', body: { eventId: ev.optimize.eventId, revision: ended ? null : runRev, effectiveFrom: `${runFrom}:00Z`, note: runNote } })
     setMsg(r.ok ? 'Recorded.' : r.message)
     void load()
   }
@@ -57,7 +56,7 @@ export function Optimize() {
       const n = (s: string) => (s === '' ? null : Number(s))
       return { eventId: c[0]!, segment: n(c[1]!), metric: c[2]!, value: n(c[3]!), sampleSize: n(c[4]!), population: c[5]!, windowStart: c[6]!, windowEnd: c[7]!, source: c[8]!, refreshedAt: c[9]! }
     })
-    const r = await api<{ added: number; unlinked: number }>(`${docBase}/results`, { method: 'POST', body: { rows } })
+    const r = await call<{ added: number; unlinked: number }>(`${docBase}/results`, { method: 'POST', body: { rows } })
     setMsg(r.ok ? `${r.data.added} results stored; ${r.data.unlinked} had no recorded live run and are kept out of any learning.` : r.message)
     if (r.ok) setCsv('')
     void load()

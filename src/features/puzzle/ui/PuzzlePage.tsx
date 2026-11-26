@@ -1,7 +1,12 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Puzzle as PuzzleIcon } from 'lucide-react'
 import type { ModelPageProps } from '../../../platform/registry/modules'
+import { api } from '../../../platform/api/client'
 import { useSession } from '../../../platform/api/useSession'
+import { Link } from '../../../platform/routing/Link'
+import { teamData } from '../../../lib/teamData'
+import { useTeamStatus } from '../../../components/useTeamStatus'
+import { createLocalBackend, PUZZLE_STORAGE_KEY } from './localBackend'
 import { computeAll } from '../engine/compute'
 import { RC_SEGMENTS, REGULAR_SEGMENTS, type PuzzleEvent } from '../engine/model'
 import { CcPresets } from './CcPresets'
@@ -28,13 +33,29 @@ type StepId = (typeof STEPS)[number]['id']
 
 export default function PuzzlePage({ onHome }: ModelPageProps) {
   const { session, devSignIn, signInWithGoogle } = useSession()
-  const workspaceId = session.status === 'signed-in' ? (session.workspaces[0]?.id ?? null) : null
-  const store = usePuzzleEvents(workspaceId)
+  // No toolkit server here (the live site): the events are kept in this browser and shared with the team
+  // through the private data repository, like the other tools. Where a server answers, it keeps them.
+  const where: 'server' | 'browser' = session.status === 'unavailable' ? 'browser' : 'server'
+  const local = useMemo(
+    () =>
+      createLocalBackend({
+        onChange: () => teamData.changed(PUZZLE_STORAGE_KEY),
+        who: () => (teamData.user() as { login?: string } | null)?.login ?? 'this browser',
+      }),
+    [],
+  )
+  const workspaceId = where === 'browser' ? 'local' : session.status === 'signed-in' ? (session.workspaces[0]?.id ?? null) : null
+  const store = usePuzzleEvents(workspaceId, where === 'browser' ? local.call : api)
+  // The team's newest file came in ("Get the team's latest", or at opening): show it.
+  const team = useTeamStatus() as { state: string; at: string | null }
+  const { refreshList } = store
+  useEffect(() => {
+    if (where === 'browser' && team.state === 'saved') void refreshList()
+  }, [where, team.state, team.at, refreshList])
 
   let body
   if (session.status === 'loading') body = <Note>Loading…</Note>
-  else if (session.status === 'unavailable')
-    body = <Note tone="amber">Puzzle keeps its events on the toolkit server, which cannot be reached here ({session.message}). It works where the server runs (see docs/setup.md).</Note>
+  else if (where === 'browser') body = !store.doc || !store.draft ? <EventList store={store} where={where} /> : <Editor store={store} where={where} />
   else if (session.status === 'signed-out')
     body = (
       <div className="flex flex-col items-start gap-3">
@@ -44,8 +65,8 @@ export default function PuzzlePage({ onHome }: ModelPageProps) {
       </div>
     )
   else if (!workspaceId) body = <Note tone="amber">You are not a member of a workspace yet.</Note>
-  else if (!store.doc || !store.draft) body = <EventList store={store} />
-  else body = <Editor store={store} />
+  else if (!store.doc || !store.draft) body = <EventList store={store} where={where} />
+  else body = <Editor store={store} where={where} />
 
   return (
     <div className="min-h-screen" data-testid="puzzle-page">
@@ -87,13 +108,27 @@ function SaveBar({ store }: { store: Store }) {
   )
 }
 
-function EventList({ store }: { store: Store }) {
+function WhereNote({ where }: { where: 'server' | 'browser' }) {
+  if (where === 'server') return null
+  return (
+    <p className="text-xs text-slate-500" data-testid="puzzle-where" data-note>
+      Puzzle events are kept in this browser and shared with the team through{' '}
+      <Link to="/browser-data" className="text-purple-700 underline">
+        Team data
+      </Link>{' '}
+      once it is connected (the same as Chef, Diamond Mine and the Economy page).
+    </p>
+  )
+}
+
+function EventList({ store, where }: { store: Store; where: 'server' | 'browser' }) {
   return (
     <div className="flex max-w-3xl flex-col gap-3" data-testid="puzzle-events">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold text-slate-800">Puzzle events</h2>
         <Btn variant="primary" testId="event-new" onClick={() => void store.create()}>New event</Btn>
       </div>
+      <WhereNote where={where} />
       {store.status.kind === 'error' && <Note tone="red">{store.status.message}</Note>}
       {store.list.length === 0 ? (
         <Note>No Puzzle event yet. A new event starts from the workbook's values (Disney Economy v1.5.75, copy for cc BF).</Note>
@@ -113,7 +148,7 @@ function EventList({ store }: { store: Store }) {
   )
 }
 
-function Editor({ store }: { store: Store }) {
+function Editor({ store, where }: { store: Store; where: 'server' | 'browser' }) {
   const ev = store.draft!
   const [tab, setTab] = useState<Tab>('build')
   const [step, setStep] = useState<StepId>('setup')
@@ -143,6 +178,8 @@ function Editor({ store }: { store: Store }) {
     revision: store.doc!.revision,
     dirty: store.dirty,
     base: store.base,
+    call: store.call,
+    where,
   }
   const stepIndex = STEPS.findIndex((s) => s.id === step)
   const segCount = phase === 'regular' ? REGULAR_SEGMENTS : RC_SEGMENTS
@@ -151,7 +188,7 @@ function Editor({ store }: { store: Store }) {
     <Ctx.Provider value={ctx}>
       {store.conflict && (
         <Note tone="red" testId="conflict">
-          Someone saved revision {store.conflict.revision} of this event while you were editing. Your changes are still here.{' '}
+          Revision {store.conflict.revision} of this event was saved after these edits were started (by someone else, or in another tab). Your edits are still here; nothing was saved over.{' '}
           <span className="ml-2 inline-flex gap-2">
             <Btn small variant="primary" testId="conflict-keep-mine" onClick={() => void store.keepMine()}>Save mine on top</Btn>
             <Btn small testId="conflict-take-theirs" onClick={store.takeTheirs}>Take theirs (drop mine)</Btn>
