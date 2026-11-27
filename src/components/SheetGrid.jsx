@@ -334,6 +334,9 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                         box.current?.focus({ preventScroll: true })
                         if (e.shiftKey) setActive({ r, c })
                         else go({ r, c })
+                        // A dropdown cell opens at the first click (economist: "the cell of the fallback will be changeable from the
+                        // first interaction").
+                        if (!e.shiftKey && col.type === 'select' && canEdit) return startEdit(r, c, 'edit')
                         dragging.current = true
                       }}
                       onMouseEnter={() => dragging.current && setActive({ r, c })}
@@ -364,6 +367,17 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                       {isEditing && col.type === 'select' && (
                         <select
                           autoFocus
+                          // Its list opens at once (where the browser allows it), not at a second click.
+                          ref={(el) => {
+                            if (el && !el.dataset.opened) {
+                              el.dataset.opened = '1'
+                              try {
+                                el.showPicker?.()
+                              } catch {
+                                // The browser keeps the list closed; the arrows and a click still choose.
+                              }
+                            }
+                          }}
                           defaultValue={valueOf(row, col) ?? ''}
                           onChange={(e) => {
                             setEdit(null)
@@ -371,6 +385,19 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                             focusBox()
                           }}
                           onKeyDown={(e) => {
+                            // Ctrl+Down / Ctrl+Up and Delete work here as on the closed cell.
+                            const pick = (value) => {
+                              e.preventDefault()
+                              setEdit(null)
+                              write([{ r, c, value }])
+                              focusBox()
+                            }
+                            if ((e.ctrlKey || e.metaKey) && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                              const opts = optionsOf(row, col)
+                              const now = opts.findIndex((o) => o.value === (valueOf(row, col) ?? ''))
+                              return pick(opts[(now + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].value)
+                            }
+                            if (e.key === 'Delete' && col.clearTo !== undefined) return pick(col.clearTo)
                             if (e.key === 'Escape' || e.key === 'Enter' || e.key === 'Tab') {
                               e.preventDefault()
                               finishEdit('cancel', e.key === 'Escape' ? null : e.key, e.shiftKey)
