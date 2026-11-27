@@ -305,7 +305,7 @@ to these:
 - **The row we are on, live under the sheet** ("we will see under the events table a live syntax of the row we are
   on"): written by the export's own builders, with copy buttons and the checker's findings - Config OPS only (RC taken
   out of the panel, asked; it stays in the export).
-- **Dropdown cells as Excel's data validation**: Ctrl+Down / Ctrl+Up go through the choices in place, Alt+Down opens.
+- **Dropdown cells as Excel's data validation**: Ctrl+Down / Ctrl+Up go through the choices in place, Alt+Down opens; **one click opens the list** ("the cell of the fallback will be changable from the first interaction"); reached with the arrows, the list stays closed and the keys work on the cell.
 - **As little text and as few buttons as possible** ("this comments are not important, the page should be as clean
   and easy to use as possible. less buttons and text"): a step is one line - what it is for in its hover, "Still
   needed" in a few words with the list in its hover; no explanatory notes on the page; keys in the sheet's hover.

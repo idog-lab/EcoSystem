@@ -8751,3 +8751,10 @@ now" - the sheet's cell lines and its header's are a darker grey (slate-300
 for slate-100), the header has lines between its columns. Seen on the way: a
 puzzle's fallback read "Coins" on a row with no puzzle - a fallback shows only
 on a row that has the puzzle (or the pack). e2e wicked-trails 61.
+27 Nov 2026: "i want that the cell of the fallback will be changable from the
+first interaction. now u need to be on it and then pick it in some how and
+just then u can change the value in there" - a click on a dropdown cell opens
+its list at once (the sheet starts editing it and asks the browser to show
+the list); reached with the arrows, the list stays closed and Ctrl+Up/Down,
+Delete and Alt+Down work on the cell, and in the open list too. e2e
+wicked-trails 62.
