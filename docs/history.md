@@ -8781,3 +8781,10 @@ Ctrl+R fill down and right, Sum · Average · Count of a selection; a balanced
 carry reads 0, not -0. verify-allocate 11 (by hand), e2e wicked-trails-builder
 15 (Undo 40: 4 / 3 / 6 / 7 / 20 undo, coins to each target, every lane at 0),
 wicked-trails 62.
+28 Nov 2026: "in here when i try to move left it acts as if its the end of
+the road. also, i dont understand the auto column". Two causes of the first,
+both fixed: moving left, the cell picked slid under the pinned Lane and Tier
+columns (now scrolled out from under them); typing in a text cell, Left and
+Right left the cell (now they move inside the text; Up, Down, Enter and Tab
+still leave it). The Auto column is named Build ("by rules"), its hover saying
+what a tick does. e2e wicked-trails-builder 18, wicked-trails 62.

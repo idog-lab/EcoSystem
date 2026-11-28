@@ -53,7 +53,15 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
     return () => window.removeEventListener('mouseup', up)
   }, [])
   useEffect(() => {
-    box.current?.querySelector(`[data-cell="${at.r}:${at.c}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    const cell = box.current?.querySelector(`[data-cell="${at.r}:${at.c}"]`)
+    cell?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+    // The sticky columns cover the left edge: a cell that slid under them is scrolled out from under them (economist:
+    // moving left "acts as if its the end of the road").
+    if (cell && box.current && lefts[at.c] == null) {
+      const covered = columns.reduce((w, col, i) => (lefts[i] != null ? w + (col.width ?? 120) : w), 0)
+      const offset = cell.offsetLeft - box.current.scrollLeft
+      if (offset < covered) box.current.scrollLeft = Math.max(0, cell.offsetLeft - covered)
+    }
     onActive?.(rows[at.r] ?? null, columns[at.c] ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at.r, at.c, rows[at.r]?.id])
@@ -385,7 +393,10 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
                             if (e.key === 'Enter') return (e.preventDefault(), finishEdit('commit', 'Enter', e.shiftKey))
                             if (e.key === 'Tab') return (e.preventDefault(), finishEdit('commit', 'Tab', e.shiftKey))
                             if (e.key === 'Escape') return (e.preventDefault(), finishEdit('cancel'))
-                            if (editing.mode === 'enter' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return (e.preventDefault(), finishEdit('commit', e.key))
+                            // Typing over a cell, the arrows take it and move on - but in a text cell Left and Right move inside
+                            // the text (economist: moving left "acts as if its the end of the road").
+                            const inText = col.type === 'text' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+                            if (editing.mode === 'enter' && !inText && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return (e.preventDefault(), finishEdit('commit', e.key))
                           }}
                           onBlur={() => finishEdit('commit')}
                           className={`absolute inset-0 w-full border-2 border-purple-500 bg-white px-1.5 text-sm outline-none ${col.align === 'right' ? 'text-right' : ''} ${col.type === 'text' ? 'font-mono text-[12px]' : ''}`}
