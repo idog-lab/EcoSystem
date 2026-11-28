@@ -45,8 +45,12 @@ export function createRules() {
 export function createState() {
   return {
     rules: createRules(),
-    lanes: { easy: { shares: evenShares(3), prizes: ['', '', ''] }, hard: { shares: evenShares(3), prizes: ['', '', ''] } },
+    lanes: { easy: newLane(3), hard: newLane(3) },
     finalPrize: '',
+    // The economy builder (lib/economy/allocate.js): whether it builds the Final Prize, and its rules - hard totals by
+    // gameplay section, fillers in order with a max a tier, the lane close to balance every Nth built tier.
+    finalAuto: false,
+    builder: createBuilder(),
     segments: [],
     baseIndex: 0,
     segmentSet: null,
@@ -57,11 +61,29 @@ export function createState() {
     miniGame: '',
   }
 }
+// A tier's gameplay section, to start: the first half of a lane easy, the rest mid ("hard is only the GP").
+export const defaultSection = (i, n) => (i < Math.ceil(n / 2) ? 'easy' : 'mid')
+const newLane = (n) => ({ shares: evenShares(n), prizes: Array(n).fill(''), sections: Array.from({ length: n }, (_, i) => defaultSection(i, n)), auto: Array(n).fill(false) })
+export function createBuilder() {
+  return { hard: [], fillers: [{ item: 'coins', max: null }], balanceEvery: 2 }
+}
+function normalizeBuilder(raw) {
+  const b = createBuilder()
+  if (!raw || typeof raw !== 'object') return b
+  const pct = (p) => ({ easy: num(p?.easy) ?? 0, mid: num(p?.mid) ?? 0, hard: num(p?.hard) ?? 0 })
+  return {
+    hard: (Array.isArray(raw.hard) ? raw.hard : []).filter((h) => h && h.item).map((h) => ({ item: String(h.item), total: num(h.total), pct: pct(h.pct) })),
+    fillers: (Array.isArray(raw.fillers) ? raw.fillers : b.fillers).filter((x) => x && x.item).map((x) => ({ item: String(x.item), max: num(x.max) })),
+    balanceEvery: Number.isInteger(raw.balanceEvery) && raw.balanceEvery >= 1 ? raw.balanceEvery : 2,
+  }
+}
 function normalizeLane(raw) {
   const shares = (Array.isArray(raw?.shares) ? raw.shares : []).map((s) => num(s) ?? 0).slice(0, MAX_TIERS)
   const n = shares.length || 3
   const prizes = Array.from({ length: n }, (_, i) => String(raw?.prizes?.[i] ?? ''))
-  return { shares: shares.length ? shares : evenShares(3), prizes }
+  const sections = Array.from({ length: n }, (_, i) => (['easy', 'mid'].includes(raw?.sections?.[i]) ? raw.sections[i] : defaultSection(i, n)))
+  const auto = Array.from({ length: n }, (_, i) => raw?.auto?.[i] === true)
+  return { shares: shares.length ? shares : evenShares(3), prizes, sections, auto }
 }
 export function normalizeState(raw) {
   const fresh = createState()
@@ -87,6 +109,8 @@ export function normalizeState(raw) {
     baseIndex: Number.isInteger(raw.baseIndex) ? raw.baseIndex : 0,
     segmentSet: raw.segmentSet && typeof raw.segmentSet === 'object' ? raw.segmentSet : null,
     startDate: typeof raw.startDate === 'string' ? raw.startDate : '',
+    finalAuto: raw.finalAuto === true,
+    builder: normalizeBuilder(raw.builder),
     days: Number.isInteger(raw.days) && raw.days >= 1 ? raw.days : 2,
     miniGame: raw.miniGame === 'merge' || raw.miniGame === 'diamond-mine' ? raw.miniGame : '',
   })
@@ -123,7 +147,12 @@ export function resolveEfforts(state) {
 // A lane with `n` tiers: the shares split evenly again, the prizes kept by place.
 export function withTierCount(lane, n) {
   const count = Math.min(MAX_TIERS, Math.max(1, Math.round(n)))
-  return { shares: evenShares(count), prizes: Array.from({ length: count }, (_, i) => lane.prizes[i] ?? '') }
+  return {
+    shares: evenShares(count),
+    prizes: Array.from({ length: count }, (_, i) => lane.prizes[i] ?? ''),
+    sections: Array.from({ length: count }, (_, i) => lane.sections?.[i] ?? defaultSection(i, count)),
+    auto: Array.from({ length: count }, (_, i) => lane.auto?.[i] ?? false),
+  }
 }
 
 // What is wrong with the rules or a lane, in words.
@@ -229,8 +258,9 @@ export function carryThrough(items) {
     }
     const aim = round2(target + carry)
     const off = worth == null ? null : round2(worth - aim)
-    const out = { carry: round2(carry), aim, off }
-    carry = off == null ? null : round2(-off)
+    // (+ 0: nothing carried reads 0, never -0.)
+    const out = { carry: round2(carry) + 0, aim, off: off == null ? null : off + 0 }
+    carry = off == null ? null : round2(-off) + 0
     return out
   })
 }

@@ -4,7 +4,8 @@ import Card from '../../../components/ui/Card'
 import SheetGrid from '../../../components/SheetGrid'
 import { withRest } from '../../../lib/sheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
-import { checkReward, parseReward } from '../../../lib/economy/parse'
+import { checkReward, parseReward, prizeCount } from '../../../lib/economy/parse'
+import { ALLOC_ITEMS, FILLER_ITEMS, SECTIONS, allocate } from '../../../lib/economy/allocate'
 import { MINI_GAMES, currencyChoices, liveMiniGame, miniGameOf } from '../../../lib/economy/economyModel'
 import { FALLBACK_KINDS, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
 import { presetFor } from '../../../lib/economy/syntax'
@@ -401,6 +402,144 @@ function prizeChange(s, index, place, text) {
   return { ...s, segments: s.segments.map((x, j) => (j === index ? { ...x, own: { ...x.own, [place]: t === scaled ? '' : t } } : x)) }
 }
 
+// THE ECONOMY BUILDER (lib/economy/allocate.js): its rules - hard totals by gameplay section, fillers in order with a
+// max a tier, balance every Nth tier - in two small sheets (a new row is typed in the empty last one; Delete on its item
+// takes it out), and Build: the ticked tiers of the base segment are filled; Undo puts their prizes back.
+const PCT = ['easy', 'mid', 'hard']
+function Builder({ state, change, economy, rows, index, miniGame }) {
+  const b = state.builder
+  const [result, setResult] = useState(null)
+  const setB = (patch) => change((s) => ({ ...s, builder: { ...s.builder, ...patch } }))
+  const itemOptions = (list) => [{ value: '', label: '-' }, ...list.map((i) => ({ value: i.id, label: i.label }))]
+
+  const hardRows = [...b.hard.map((h, i) => ({ id: `h${i}`, i, ...h })), { id: 'h-new', i: b.hard.length, item: '', total: null, pct: null }]
+  const hardColumns = [
+    { key: 'item', label: 'Hard total', sub: 'a resource', width: 120, type: 'select', editable: true, clearTo: '', value: (r) => r.item, options: () => itemOptions(ALLOC_ITEMS) },
+    { key: 'total', label: 'Total', sub: 'over the event', width: 84, type: 'number', align: 'right', editable: (r) => !!r.item, value: (r) => r.total },
+    ...PCT.map((p, k) => ({ key: p, label: SECTIONS[k].label, sub: k === 2 ? '% - the Final Prize' : '%', width: 74, type: 'number', align: 'right', editable: (r) => !!r.item && k < 2, value: (r) => r.pct?.[p] ?? null, display: (r) => (r.pct ? (k === 2 ? `${fmt(r.pct.hard)} rest` : fmt(r.pct[p])) : '') })),
+  ]
+  const commitHard = (changes) =>
+    change((s) => {
+      let hard = [...s.builder.hard]
+      for (const { row, key, value } of changes) {
+        if (key === 'item') {
+          if (!value) hard = hard.filter((_, j) => j !== row.i)
+          else if (row.i >= hard.length) hard.push({ item: value, total: null, pct: { easy: 33.33, mid: 33.33, hard: 33.34 } })
+          else hard[row.i] = { ...hard[row.i], item: value }
+        } else if (row.i < hard.length) {
+          if (key === 'total') hard[row.i] = { ...hard[row.i], total: value }
+          else {
+            const [easy, mid, hrd] = withRest(PCT.map((p) => hard[row.i].pct?.[p] ?? 0), PCT.indexOf(key), value ?? 0)
+            hard[row.i] = { ...hard[row.i], pct: { easy, mid, hard: hrd } }
+          }
+        }
+      }
+      return { ...s, builder: { ...s.builder, hard } }
+    })
+
+  const fillerRows = [...b.fillers.map((x, i) => ({ id: `f${i}`, i, ...x })), { id: 'f-new', i: b.fillers.length, item: '', max: null }]
+  const fillerColumns = [
+    { key: 'item', label: 'Filler', sub: 'in this order', width: 120, type: 'select', editable: true, clearTo: '', value: (r) => r.item, options: () => itemOptions(FILLER_ITEMS) },
+    { key: 'max', label: 'Max', sub: 'a tier', width: 74, type: 'number', align: 'right', editable: (r) => !!r.item, value: (r) => r.max },
+  ]
+  const commitFillers = (changes) =>
+    change((s) => {
+      let fillers = [...s.builder.fillers]
+      for (const { row, key, value } of changes) {
+        if (key === 'item') {
+          if (!value) fillers = fillers.filter((_, j) => j !== row.i)
+          else if (row.i >= fillers.length) fillers.push({ item: value, max: null })
+          else fillers[row.i] = { ...fillers[row.i], item: value }
+        } else if (row.i < fillers.length) fillers[row.i] = { ...fillers[row.i], max: value }
+      }
+      return { ...s, builder: { ...s.builder, fillers } }
+    })
+
+  // How the builder reads and changes a prize here: the parts of the prize sheet, worth by the economy on the feature's
+  // days, puzzle and mini game as the presets that exist.
+  const ctx = { date: state.startDate || null, days: state.days, miniGame }
+  const io = {
+    worthOf: (parts) => {
+      const text = writePrize(parts)
+      if (!text) return 0
+      const r = prizeAgainstWorth(text, null, economy, ctx)
+      return r?.ok ? r.worth : null
+    },
+    unitWorth: (item) => {
+      const v = Number(economy?.resources?.[item])
+      return Number.isFinite(v) && v > 0 ? v : null
+    },
+    get: (parts, item) => (item === 'puzzle' ? (presetsByKind(parts.presets).puzzle?.amount ?? 0) : item === 'mini' ? (presetsByKind(parts.presets).mini?.amount ?? 0) : (parts[item] ?? 0)),
+    set: (parts, item, amount) => {
+      const p = { ...parts, presets: [...parts.presets] }
+      const kinds = presetsByKind(p.presets)
+      if (item === 'puzzle') p.presets = presetsFromKinds({ ...kinds, puzzle: amount > 0 ? (presetFor('puzzle', amount, kinds.puzzle?.fallback ?? '', economy) ?? null) : null })
+      else if (item === 'mini') p.presets = presetsFromKinds({ ...kinds, mini: amount > 0 ? (presetFor('mini_game', amount, kinds.mini?.kind ?? 'allowance', economy) ?? null) : null })
+      else p[item] = amount > 0 ? amount : null
+      return p
+    },
+    count: (parts) => {
+      const text = writePrize(parts)
+      return text ? prizeCount(parseReward(text).node) : 0
+    },
+    limit: (t) => (t.group === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier),
+  }
+
+  function build() {
+    const tiers = rows.map((r) => ({ id: r.place, group: r.laneId ?? 'final', section: r.section, target: r.target, auto: r.auto, parts: r.parts }))
+    const out = allocate({ tiers, hard: b.hard.filter((h) => h.total > 0), fillers: b.fillers, balanceEvery: b.balanceEvery, io })
+    const built = tiers.filter((t) => t.auto)
+    const before = Object.fromEntries(built.map((t) => [t.id, rows.find((r) => r.place === t.id).prize.text]))
+    change((s) => built.reduce((acc, t) => prizeChange(acc, index, t.id, writePrize(out.parts[t.id])), s))
+    setResult({ report: out.report, before, count: built.length })
+  }
+  function undo() {
+    if (!result?.before) return
+    change((s) => Object.entries(result.before).reduce((acc, [place, text]) => prizeChange(acc, index, place, text), s))
+    setResult(null)
+  }
+  const ticked = rows.filter((r) => r.auto).length
+  const lane = (g) => (g === 'final' ? 'Final Prize' : LANES.find((l) => l.id === g)?.label ?? g)
+
+  return (
+    <Card title="Economy builder">
+      <div className="flex flex-col gap-3" data-testid="wt-builder">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
+          <SheetGrid testid="wt-hard" columns={hardColumns} rows={hardRows} onCommit={commitHard} />
+          <SheetGrid testid="wt-fillers" columns={fillerColumns} rows={fillerRows} onCommit={commitFillers} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-700" title="The fillers bring the lane back close to balance at every Nth built tier (and at its last)">
+            Balance every
+            <Num value={b.balanceEvery} onCommit={(v) => v != null && v >= 1 && setB({ balanceEvery: Math.round(v) })} className="w-14" data-testid="wt-balance-every" />
+            tiers
+          </label>
+          <button type="button" className={PRIMARY} onClick={build} disabled={!ticked} title={ticked ? `Builds the ${ticked} ticked tier${ticked === 1 ? '' : 's'}` : 'Tick Auto on the tiers to build'} data-testid="wt-build">
+            Build {ticked ? `${ticked} tier${ticked === 1 ? '' : 's'}` : ''}
+          </button>
+          {result && (
+            <button type="button" className={BUTTON} onClick={undo} data-testid="wt-build-undo">
+              Undo the build
+            </button>
+          )}
+        </div>
+        {result && (
+          <div className="flex flex-col gap-0.5 text-sm" data-testid="wt-build-report">
+            <span className="text-slate-700">
+              {result.report.hard.map((h) => `${ALLOC_ITEMS.find((i) => i.id === h.item)?.label} ${fmt(h.placed)} of ${fmt(h.total)}`).concat(result.report.groups.map((g) => `${lane(g.group)} ${g.off == null ? '?' : `${g.off > 0 ? '+' : ''}${fmt(g.off)}`}`)).join(' · ')}
+            </span>
+            {result.report.notes.map((n) => (
+              <span key={n} className="text-xs text-amber-700">
+                {n}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 // THE ROW WE ARE ON, AS OPS GETS IT (economist, 26 Nov 2026: "we will see under the events table a live syntax of the
 // row we are on"): its Req and Res in Config OPS and Config RC OPS, written by the export's own builders - the tier's
 // trigger and, on a lane's last tier, its chest - with what the checker finds, and a copy button.
@@ -531,13 +670,14 @@ function TiersStep({ state, change, index, setShown, economy }) {
         const place = placeKey(lane.id, i)
         const prize = prizeOf(state, index, place)
         const parts = readPrize(prize.text).parts
-        return { id: place, place, laneId: lane.id, lane: lane.label, tier: i + 1, last: i === state.lanes[lane.id].shares.length - 1, share, t, target: t?.target ?? null, prize, parts, kinds: presetsByKind(parts.presets) }
+        const L = state.lanes[lane.id]
+        return { id: place, place, laneId: lane.id, lane: lane.label, tier: i + 1, last: i === L.shares.length - 1, share, t, target: t?.target ?? null, prize, parts, kinds: presetsByKind(parts.presets), section: L.sections?.[i] ?? 'easy', auto: !!L.auto?.[i] }
       }),
     ),
     (() => {
       const prize = prizeOf(state, index, 'final')
       const parts = readPrize(prize.text).parts
-      return { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', last: false, share: null, t: null, target: w.finalTarget, prize, parts, kinds: presetsByKind(parts.presets) }
+      return { id: 'final', place: 'final', laneId: null, lane: 'Final Prize', tier: '', last: false, share: null, t: null, target: w.finalTarget, prize, parts, kinds: presetsByKind(parts.presets), section: 'hard', auto: !!state.finalAuto }
     })(),
   ]
   const miniGame = miniGameUsed(state, economy)
@@ -565,6 +705,19 @@ function TiersStep({ state, change, index, setShown, economy }) {
   const columns = [
     { key: 'lane', group: 'The tier', label: 'Lane', width: 96, sticky: true, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
     { key: 'tier', group: 'The tier', label: 'Tier', width: 44, sticky: true },
+    { key: 'auto', group: 'The tier', label: 'Auto', width: 46, type: 'toggle', align: 'right', editable: () => index === state.baseIndex, value: (r) => r.auto, title: () => 'Built by the economy builder (under the sheet) when ticked - Space to tick' },
+    {
+      key: 'section',
+      group: 'The tier',
+      label: 'Section',
+      width: 66,
+      type: 'select',
+      editable: (r) => r.place !== 'final' && index === state.baseIndex,
+      value: (r) => r.section,
+      options: () => SECTIONS.filter((x) => x.id !== 'hard').map((x) => ({ value: x.id, label: x.label })),
+      display: (r) => SECTIONS.find((x) => x.id === r.section)?.label ?? '',
+      title: (r) => (r.place === 'final' ? 'The Final Prize is the hard section' : 'Its gameplay section, for the builder\'s hard totals'),
+    },
     {
       key: 'share',
       group: 'The tier',
@@ -812,6 +965,14 @@ function TiersStep({ state, change, index, setShown, economy }) {
     change((s) => {
       let out = s
       for (const { row, key, value } of changes) {
+        if (key === 'auto') {
+          out = row.laneId ? { ...out, lanes: { ...out.lanes, [row.laneId]: { ...out.lanes[row.laneId], auto: out.lanes[row.laneId].shares.map((_, j) => (j === row.tier - 1 ? !!value : !!out.lanes[row.laneId].auto?.[j])) } } } : { ...out, finalAuto: !!value }
+          continue
+        }
+        if (key === 'section' && row.laneId) {
+          out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...out.lanes[row.laneId], sections: out.lanes[row.laneId].shares.map((_, j) => (j === row.tier - 1 ? value : (out.lanes[row.laneId].sections?.[j] ?? 'easy'))) } } }
+          continue
+        }
         if (key === 'share' && row.laneId) {
           const lane = out.lanes[row.laneId]
           out = { ...out, lanes: { ...out.lanes, [row.laneId]: { ...lane, shares: withRest(lane.shares, row.tier - 1, value) } } }
@@ -854,6 +1015,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
         </p>
       )}
       <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} rowTone={(r) => LANE_TONE[r.laneId ?? 'final']} onActive={(row) => row && setActivePlace(row.place)} />
+      {index === state.baseIndex && <Builder state={state} change={change} economy={economy} rows={rows} index={index} miniGame={miniGame} />}
       <RowSyntax state={state} index={index} place={rows.some((r) => r.place === activePlace) ? activePlace : rows[0]?.place} economy={economy} tone={LANE_TONE[rows.find((r) => r.place === activePlace)?.laneId ?? (activePlace === 'final' ? 'final' : 'easy')]} />
     </>
   )

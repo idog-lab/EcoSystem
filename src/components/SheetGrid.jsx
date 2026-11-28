@@ -168,6 +168,20 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
       setAnchor({ r: 0, c: 0 })
       return setActive({ r: nRows - 1, c: nCols - 1 })
     }
+    // Fill, as in Excel: Ctrl+D copies the selection's top row down it, Ctrl+R its left column across it.
+    if (ctrl && (e.key === 'd' || e.key === 'D' || e.key === 'r' || e.key === 'R')) {
+      e.preventDefault()
+      const down = e.key === 'd' || e.key === 'D'
+      const cells = []
+      for (let r = rect.r0; r <= rect.r1; r += 1)
+        for (let c = rect.c0; c <= rect.c1; c += 1) {
+          if (down ? r === rect.r0 : c === rect.c0) continue
+          const from = down ? valueOf(rows[rect.r0], columns[c]) : valueOf(rows[r], columns[rect.c0])
+          if (columns[c].type === (down ? columns[c].type : columns[rect.c0].type)) cells.push({ r, c, value: from ?? (columns[c].type === 'number' ? null : '') })
+        }
+      if (!cells.length) return setNote(down ? 'Select the cells to fill, the first row holding the value.' : 'Select the cells to fill, the first column holding the value.')
+      return write(cells)
+    }
     // A dropdown cell, as Excel's data validation: Ctrl+Down / Ctrl+Up go through its choices in place; Alt+Down opens it.
     if (col?.type === 'select' && editable(row, col) && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && (ctrl || e.altKey)) {
       e.preventDefault()
@@ -254,6 +268,20 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
     return v ?? ''
   }
 
+  // The numbers in a selection of several cells, as Excel's status bar: sum, average, count.
+  const stats = (() => {
+    if (rect.r1 === rect.r0 && rect.c1 === rect.c0) return null
+    const values = []
+    for (let r = rect.r0; r <= rect.r1; r += 1)
+      for (let c = rect.c0; c <= rect.c1; c += 1) {
+        const v = columns[c].type === 'number' ? valueOf(rows[r], columns[c]) : null
+        if (v != null && v !== '' && Number.isFinite(Number(v))) values.push(Number(v))
+      }
+    if (!values.length) return null
+    const sum = Math.round(values.reduce((a, b) => a + b, 0) * 100) / 100
+    return { sum, avg: Math.round((sum / values.length) * 100) / 100, count: values.length }
+  })()
+
   // The leading sticky columns stay in sight: each one's distance from the left edge.
   const lefts = []
   columns.reduce((x, col, i) => {
@@ -284,7 +312,7 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
         className="overflow-x-auto rounded-xl border border-slate-300 bg-white outline-none focus-visible:ring-2 focus-visible:ring-purple-300"
         role="grid"
         aria-label={testid}
-        title="Arrows move · type to replace · F2 or double click edits · Enter down, Tab right · Shift+arrows select · Ctrl+C / Ctrl+V with Excel · Delete clears · Ctrl+Z undo · a dropdown: Ctrl+Down / Ctrl+Up go through it, Alt+Down opens it"
+        title="Arrows move · type to replace · F2 or double click edits · Enter down, Tab right · Shift+arrows select · Ctrl+C / Ctrl+V with Excel · Ctrl+D fill down, Ctrl+R fill right · Delete clears · Ctrl+Z undo · a dropdown: Ctrl+Down / Ctrl+Up go through it, Alt+Down opens it"
         data-sheet={testid}
       >
         <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: columns.reduce((s, c) => s + (c.width ?? 120), 0) }}>
@@ -432,11 +460,16 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
         )}
       </div>
       {/* Only what happened is said under the sheet; the keys are in the sheet's hover (economist: "less buttons and text"). */}
-      {help && note && (
-        <div className="text-[11px]" data-sheet-help={testid}>
-          <span className={/not taken|cannot/.test(note) ? 'text-amber-700' : 'text-emerald-700'} data-sheet-note={testid}>
+      {help && (note || stats) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]" data-sheet-help={testid}>
+          <span className={note && /not taken|cannot|Select the cells/.test(note) ? 'text-amber-700' : 'text-emerald-700'} data-sheet-note={testid}>
             {note}
           </span>
+          {stats && (
+            <span className="tabular-nums text-slate-600" data-sheet-stats={testid}>
+              Sum {fmtNumber(stats.sum)} · Average {fmtNumber(stats.avg)} · Count {stats.count}
+            </span>
+          )}
         </div>
       )}
     </div>

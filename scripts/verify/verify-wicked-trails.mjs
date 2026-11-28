@@ -56,7 +56,8 @@ check('a new feature asks for the ROE', ruleProblems(blank).some((p) => /ROE/.te
 const bad = { ...state, lanes: { ...state.lanes, hard: { shares: [25, 25, 40], prizes: ['', '', ''] } } }
 check('tiers that do not add up to 100% are named', ruleProblems(bad).some((p) => /Hard lane: the tiers add up to 90%/.test(p)))
 check('a segment without its multipliers says which', workOut(state, { effortBW: 10, silverPerBW: 1 }).problems.some((p) => /gold DR per Brut Win/.test(p)))
-check('a lane given 4 tiers splits them evenly and keeps the prizes by place', JSON.stringify(withTierCount(state.lanes.easy, 4)) === JSON.stringify({ shares: [25, 25, 25, 25], prizes: ['free_undo:10', '', '', ''] }))
+const four = withTierCount(state.lanes.easy, 4)
+check('a lane given 4 tiers splits them evenly and keeps the prizes by place; sections start easy then mid, nothing ticked', JSON.stringify({ shares: four.shares, prizes: four.prizes }) === JSON.stringify({ shares: [25, 25, 25, 25], prizes: ['free_undo:10', '', '', ''] }) && four.sections.join() === 'easy,easy,mid,mid' && four.auto.every((x) => !x))
 check('a stored state reads back the same', JSON.stringify(normalizeState(JSON.parse(JSON.stringify(state)))) === JSON.stringify(normalizeState(state)))
 
 // A segment's effort: typed, or another's x a factor (and a chain of them).

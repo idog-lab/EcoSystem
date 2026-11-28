@@ -8758,3 +8758,26 @@ its list at once (the sheet starts editing it and asks the browser to show
 the list); reached with the arrows, the list stays closed and Ctrl+Up/Down,
 Delete and Alt+Down work on the cell, and in the open list too. e2e
 wicked-trails 62.
+## The economy builder; Excel's fills and status bar
+
+28 Nov 2026: "i want you to try and create the perfect table for the economy
+making ... also. one of the most important things i want us o have, is to
+have some kind of a skill that build an economy it self. giving it rules of
+hard allocations (eventually has to be met), and soft ( can be used), that
+will build it itself. in some tiers". Asked in two rounds: hard - "its close
+to a total over the events, we should have the rules for easy mid and hard
+gameplay and a total allocation for a resource with distribution for each
+gameplay section"; soft - "those are fillers. we use them to get close to a
+balance. the balace shouldnt be hard on a tier, we can do that every 2nd one
+will be close to balance"; which tiers - "The ones I tick"; where - "In the
+feature"; sections - "A column I set"; within a section - "hard is only the
+GP"; fillers - "A list with a max a tier".
+Built: src/lib/economy/allocate.js (generic: a feature gives its tiers and how
+to read and change a prize) and, in Wicked Trails, Auto and Section columns in
+the sheet and an Economy builder card - a Hard totals sheet (resource, total,
+easy %, mid %, hard % the rest) and a Fillers sheet (in order, max a tier),
+Balance every N, Build, Undo the build, a one-line report. The table: Ctrl+D /
+Ctrl+R fill down and right, Sum · Average · Count of a selection; a balanced
+carry reads 0, not -0. verify-allocate 11 (by hand), e2e wicked-trails-builder
+15 (Undo 40: 4 / 3 / 6 / 7 / 20 undo, coins to each target, every lane at 0),
+wicked-trails 62.
