@@ -1,1 +1,0 @@
-import{l as e}from"./index-DSMUW-EC.js";import{EditorApp as t}from"./App-B8a-hGAW.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};

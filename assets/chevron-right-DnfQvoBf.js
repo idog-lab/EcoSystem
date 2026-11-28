@@ -1,0 +1,1 @@
+import{D as e}from"./index-BX_HTU_a.js";var t=e(`chevron-right`,[[`path`,{d:`m9 18 6-6-6-6`,key:`mthhwq`}]]);export{t};
