@@ -1,0 +1,1 @@
+import{l as e}from"./index-BPoiju2b.js";import{EditorApp as t}from"./App-DarEX5yt.js";var n=e();function r({onHome:e}){return(0,n.jsx)(t,{onHome:e})}export{r as default};
