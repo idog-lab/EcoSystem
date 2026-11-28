@@ -76,6 +76,33 @@ await T('easy-0', 'target').click()
 await keys('Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown')
 ok(`a selection's Sum, Average, Count (${await text(page.locator('[data-sheet-stats="wt-tiers"]'))})`, /Sum 65 · Average 16\.25 · Count 4/.test(await text(page.locator('[data-sheet-stats="wt-tiers"]'))))
 
+// Moving left from far right: the cell is never hidden under the pinned Lane and Tier columns.
+const header = await page.locator('[data-sheet="wt-tiers"] thead tr').last().locator('th').allInnerTexts()
+ok(`the column is named for what it does: Build (${header[2].replace(/\s+/g, ' ')})`, /^BUILD/i.test(header[2].trim()))
+await T('easy-0', 'pack').click()
+let hidden = 0
+for (let k = 0; k < 14; k += 1) {
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForTimeout(60)
+  const seen = await page.evaluate(() => {
+    const box = document.querySelector('[data-sheet="wt-tiers"]')
+    const active = [...box.querySelectorAll('td')].find((td) => td.querySelector('[aria-hidden="true"]'))
+    if (!active) return false
+    const pinned = box.querySelector('[data-sheet-row="easy-0"] [data-col="tier"]').getBoundingClientRect().right
+    const r = active.getBoundingClientRect()
+    return active.dataset.col === 'lane' || active.dataset.col === 'tier' || r.left >= pinned - 1
+  })
+  if (!seen) hidden += 1
+}
+ok(`moving left all the way, the cell picked is always in sight (${hidden} times hidden)`, hidden === 0)
+// Typing in a text cell, Left moves inside the text.
+await T('easy-0', 'presets').click()
+await page.keyboard.type('abc')
+await page.keyboard.press('ArrowLeft')
+await page.keyboard.type('X')
+ok(`typing in a text cell, Left moves inside the text (${await page.locator('[data-sheet="wt-tiers"] [data-sheet-input]').inputValue()})`, (await page.locator('[data-sheet="wt-tiers"] [data-sheet-input]').inputValue()) === 'abXc')
+await page.keyboard.press('Escape')
+
 // Undo the build: the prizes as they were.
 await page.getByTestId('wt-build-undo').click()
 await page.waitForTimeout(300)

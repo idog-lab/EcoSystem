@@ -297,7 +297,7 @@ the sheet; the rules saved with the event). Asked:
   every 2nd one will be close to balance" - fillers in order, each with a max a tier ("A list with a max a tier"); a
   built tier is filled to its own target, every Nth built tier (2, typed) and a lane's last to target + carry; a new
   filler only while the tier has room (4 prizes, 5 the Final Prize); the last filler rounds to the nearest.
-- **Builds the tiers ticked** ("The ones I tick": an Auto column), on the base segment; parts the rules do not name (a
+- **Builds the tiers ticked** ("The ones I tick": a column named **Build** - "by rules"; first called Auto, renamed when the economist said "i dont understand the auto column"), on the base segment; parts the rules do not name (a
   pack, other presets, a chest) are kept; "Undo the build" puts the prizes back. The report: each hard total placed of
   its total, each lane's off at its end, what could not be done.
 
@@ -306,6 +306,7 @@ the sheet; the rules saved with the event). Asked:
 "we need the tables to be as easy to read and to handle as it can be" (26 Nov 2026) - a feature built from now on
 holds its rows of numbers in the sheet (`src/components/SheetGrid.jsx`, logic in `src/lib/sheetGrid.js`), and keeps
 to these:
+- **The cell picked is always in sight**: scrolling sideways never leaves it under the pinned columns; typing in a text cell, Left and Right move inside the text (economist: moving left "acts as if its the end of the road").
 - **Keyboard first**: arrows, Tab, Enter, typing over a cell, Ctrl+C / Ctrl+V with Excel, Delete, undo - never a form
   of separate fields where a row of cells will do; a prize is typed in the row, a part a column, not in a builder.
 - **Shares of a whole: the last is the rest** ("where we are looking at shares of a 100%, i want the last tier to add

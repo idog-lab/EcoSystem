@@ -705,7 +705,9 @@ function TiersStep({ state, change, index, setShown, economy }) {
   const columns = [
     { key: 'lane', group: 'The tier', label: 'Lane', width: 96, sticky: true, display: (r) => <span className={r.place === 'final' ? 'font-semibold text-purple-700' : 'font-semibold text-slate-700'}>{r.lane}</span> },
     { key: 'tier', group: 'The tier', label: 'Tier', width: 44, sticky: true },
-    { key: 'auto', group: 'The tier', label: 'Auto', width: 46, type: 'toggle', align: 'right', editable: () => index === state.baseIndex, value: (r) => r.auto, title: () => 'Built by the economy builder (under the sheet) when ticked - Space to tick' },
+    // Which tiers the economy builder fills (economist: "i dont understand the auto column" - so it is named for what it
+    // does): ticked, Build (under the sheet) fills its prize from the rules; not ticked, the prize typed is left alone.
+    { key: 'auto', group: 'The tier', label: 'Build', sub: 'by rules', width: 56, type: 'toggle', align: 'right', editable: () => index === state.baseIndex, value: (r) => r.auto, title: (r) => (r.auto ? 'Ticked: Build (the economy builder, under the sheet) fills this prize from its rules. Space to untick' : 'Not ticked: the prize you type is left alone. Space to tick, and Build fills it from the rules') },
     {
       key: 'section',
       group: 'The tier',
