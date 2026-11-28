@@ -4,6 +4,7 @@ import { createEconomy, normalizeEconomy } from '../../lib/economy/economyModel'
 import { loadEconomy, saveEconomy } from '../../lib/economy/economyStore'
 import WorthTab from './WorthTab'
 import CalendarTab from './CalendarTab'
+import PoolsTab from './PoolsTab'
 import KeysTab from './KeysTab'
 import CheckTab from './CheckTab'
 import BuildTab from './BuildTab'
@@ -22,6 +23,7 @@ import { BUTTON } from './economyUi'
 const TABS = [
   { id: 'worth', label: 'Worth' },
   { id: 'calendar', label: 'Calendar' },
+  { id: 'pools', label: 'Pools' },
   { id: 'keys', label: 'Keys' },
   { id: 'check', label: 'Check a reward' },
   { id: 'build', label: 'Build a prize' },
@@ -145,6 +147,7 @@ export default function EconomyApp({ onHome }) {
         )}
         {tab === 'worth' && <WorthTab economy={economy} onChange={change} />}
         {tab === 'calendar' && <CalendarTab economy={economy} onChange={change} />}
+        {tab === 'pools' && <PoolsTab economy={economy} onChange={change} />}
         {tab === 'keys' && <KeysTab economy={economy} onChange={change} />}
         {tab === 'check' && <CheckTab economy={economy} />}
         {tab === 'build' && <BuildTab economy={economy} />}

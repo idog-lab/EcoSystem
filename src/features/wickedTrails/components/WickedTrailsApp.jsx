@@ -6,7 +6,7 @@ import { withRest } from '../../../lib/sheetGrid'
 import { useEconomy } from '../../../lib/economy/economyStore'
 import { checkReward, parseReward, prizeCount } from '../../../lib/economy/parse'
 import { ALLOC_ITEMS, FILLER_ITEMS, SECTIONS, allocate } from '../../../lib/economy/allocate'
-import { MINI_GAMES, currencyChoices, liveMiniGame, miniGameOf } from '../../../lib/economy/economyModel'
+import { CHEF_BASKET_TIER, MINI_GAMES, currencyChoices, liveMiniGame, miniGameOf, poolFor, presetValue } from '../../../lib/economy/economyModel'
 import { FALLBACK_KINDS, presetsByKind, presetsFromKinds, readPrize, writePrize } from '../../../lib/economy/prizeParts'
 import { presetFor } from '../../../lib/economy/syntax'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
@@ -423,10 +423,11 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
       let hard = [...s.builder.hard]
       for (const { row, key, value } of changes) {
         if (key === 'item') {
-          if (!value) hard = hard.filter((_, j) => j !== row.i)
-          else if (row.i >= hard.length) hard.push({ item: value, total: null, pct: { easy: 33.33, mid: 33.33, hard: 33.34 } })
+          if (!value) {
+            if (row.i < hard.length) hard[row.i] = null
+          } else if (row.i >= hard.length) hard.push({ item: value, total: null, pct: { easy: 33.33, mid: 33.33, hard: 33.34 } })
           else hard[row.i] = { ...hard[row.i], item: value }
-        } else if (row.i < hard.length) {
+        } else if (row.i < hard.length && hard[row.i]) {
           if (key === 'total') hard[row.i] = { ...hard[row.i], total: value }
           else {
             const [easy, mid, hrd] = withRest(PCT.map((p) => hard[row.i].pct?.[p] ?? 0), PCT.indexOf(key), value ?? 0)
@@ -434,7 +435,7 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
           }
         }
       }
-      return { ...s, builder: { ...s.builder, hard } }
+      return { ...s, builder: { ...s.builder, hard: hard.filter(Boolean) } }
     })
 
   const fillerRows = [...b.fillers.map((x, i) => ({ id: `f${i}`, i, ...x })), { id: 'f-new', i: b.fillers.length, item: '', max: null }]
@@ -447,12 +448,13 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
       let fillers = [...s.builder.fillers]
       for (const { row, key, value } of changes) {
         if (key === 'item') {
-          if (!value) fillers = fillers.filter((_, j) => j !== row.i)
-          else if (row.i >= fillers.length) fillers.push({ item: value, max: null })
+          if (!value) {
+            if (row.i < fillers.length) fillers[row.i] = null
+          } else if (row.i >= fillers.length) fillers.push({ item: value, max: null })
           else fillers[row.i] = { ...fillers[row.i], item: value }
-        } else if (row.i < fillers.length) fillers[row.i] = { ...fillers[row.i], max: value }
+        } else if (row.i < fillers.length && fillers[row.i]) fillers[row.i] = { ...fillers[row.i], max: value }
       }
-      return { ...s, builder: { ...s.builder, fillers } }
+      return { ...s, builder: { ...s.builder, fillers: fillers.filter(Boolean) } }
     })
 
   // How the builder reads and changes a prize here: the parts of the prize sheet, worth by the economy on the feature's
@@ -469,10 +471,22 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
       const v = Number(economy?.resources?.[item])
       return Number.isFinite(v) && v > 0 ? v : null
     },
-    get: (parts, item) => (item === 'puzzle' ? (presetsByKind(parts.presets).puzzle?.amount ?? 0) : item === 'mini' ? (presetsByKind(parts.presets).mini?.amount ?? 0) : (parts[item] ?? 0)),
+    get: (parts, item) =>
+      item === 'puzzle'
+        ? (presetsByKind(parts.presets).puzzle?.amount ?? 0)
+        : item === 'mini'
+          ? (presetsByKind(parts.presets).mini?.amount ?? 0)
+          : item === 'pack'
+            ? (parts.pack ? 1 : 0)
+            : item === 'basket'
+              ? parts.presets.filter((k) => CHEF_BASKET_TIER.test(k)).length
+              : (parts[item] ?? 0),
     set: (parts, item, amount) => {
       const p = { ...parts, presets: [...parts.presets] }
       const kinds = presetsByKind(p.presets)
+      // A pool item is only taken out here (a built tier starts without one); it is put in by add.
+      if (item === 'pack') return amount ? p : { ...p, pack: '', packAlt: null, packCoins: null }
+      if (item === 'basket') return amount ? p : { ...p, presets: p.presets.filter((k) => !CHEF_BASKET_TIER.test(k)) }
       if (item === 'puzzle') p.presets = presetsFromKinds({ ...kinds, puzzle: amount > 0 ? (presetFor('puzzle', amount, kinds.puzzle?.fallback ?? '', economy) ?? null) : null })
       else if (item === 'mini') p.presets = presetsFromKinds({ ...kinds, mini: amount > 0 ? (presetFor('mini_game', amount, kinds.mini?.kind ?? 'allowance', economy) ?? null) : null })
       else p[item] = amount > 0 ? amount : null
@@ -483,9 +497,30 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
       return text ? prizeCount(parseReward(text).node) : 0
     },
     limit: (t) => (t.group === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier),
+    // The pools (the Economy page's Pools tab), by the tier's gameplay section: the next pack of the album in turn; the
+    // biggest basket whose worth still fits.
+    pick: (item, tier, need) => {
+      if (item === 'pack') {
+        const keys = poolFor(economy, 'album', tier.section)
+        if (!keys.length) return null
+        const turn = turns[tier.section] ?? 0
+        turns[tier.section] = turn + 1
+        return keys[turn % keys.length]
+      }
+      const fits = poolFor(economy, 'baskets', tier.section)
+        .map((key) => ({ key, worth: presetValue(economy, key, ctx)?.value }))
+        .filter((b) => b.worth != null && b.worth <= need + 1e-9)
+        .sort((a, b) => b.worth - a.worth)
+      return fits[0]?.key ?? null
+    },
+    add: (parts, item, key) => (item === 'pack' ? { ...parts, pack: key, packCounter: true, packAlt: { kind: 'coins', amount: PACK_FALLBACK_COINS }, packCoins: null } : { ...parts, presets: [...parts.presets, key] }),
+    keyWorth: (item, key) => (item === 'basket' ? (presetValue(economy, key, ctx)?.value ?? 0) : 0),
   }
+  // The pack each section is at, for this build.
+  const turns = {}
 
   function build() {
+    for (const k of Object.keys(turns)) delete turns[k]
     const tiers = rows.map((r) => ({ id: r.place, group: r.laneId ?? 'final', section: r.section, target: r.target, auto: r.auto, parts: r.parts }))
     const out = allocate({ tiers, hard: b.hard.filter((h) => h.total > 0), fillers: b.fillers, balanceEvery: b.balanceEvery, io })
     const built = tiers.filter((t) => t.auto)
