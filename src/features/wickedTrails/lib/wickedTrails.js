@@ -16,6 +16,7 @@
 // Segments come from a segment set (Economy page), each with its effort in Brut Wins. Prizes are typed on the base
 // segment; another segment's are the base's times its effort against the base's (worth follows effort), unless typed.
 import { scaleReward } from '../../../lib/economy/prizeWorth'
+import { DEFAULT_FILLERS } from '../../../lib/economy/allocate'
 
 export const STORAGE_KEY = 'superplay-wicked-trails'
 export const FEATURE_NAME = 'Wicked_Trails'
@@ -65,7 +66,7 @@ export function createState() {
 export const defaultSection = (i, n) => (i < Math.ceil(n / 2) ? 'easy' : 'mid')
 const newLane = (n) => ({ shares: evenShares(n), prizes: Array(n).fill(''), sections: Array.from({ length: n }, (_, i) => defaultSection(i, n)), auto: Array(n).fill(false) })
 export function createBuilder() {
-  return { hard: [], fillers: [{ item: 'coins', max: null }], balanceEvery: 2 }
+  return { hard: [], fillers: DEFAULT_FILLERS.map((f) => ({ ...f })), balanceEvery: 2 }
 }
 function normalizeBuilder(raw) {
   const b = createBuilder()
@@ -73,7 +74,8 @@ function normalizeBuilder(raw) {
   const pct = (p) => ({ easy: num(p?.easy) ?? 0, mid: num(p?.mid) ?? 0, hard: num(p?.hard) ?? 0 })
   return {
     hard: (Array.isArray(raw.hard) ? raw.hard : []).filter((h) => h && h.item).map((h) => ({ item: String(h.item), total: num(h.total), pct: pct(h.pct) })),
-    fillers: (Array.isArray(raw.fillers) ? raw.fillers : b.fillers).filter((x) => x && x.item).map((x) => ({ item: String(x.item), max: num(x.max) })),
+    // (The first default was coins alone; a builder saved with exactly that takes the default fillers now.)
+    fillers: (Array.isArray(raw.fillers) && !(raw.fillers.length === 1 && raw.fillers[0]?.item === 'coins' && raw.fillers[0]?.max == null) ? raw.fillers : b.fillers).filter((x) => x && x.item).map((x) => ({ item: String(x.item), max: num(x.max) })),
     balanceEvery: Number.isInteger(raw.balanceEvery) && raw.balanceEvery >= 1 ? raw.balanceEvery : 2,
   }
 }

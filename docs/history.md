@@ -8788,3 +8788,17 @@ columns (now scrolled out from under them); typing in a text cell, Left and
 Right left the cell (now they move inside the text; Up, Down, Enter and Tab
 still leave it). The Auto column is named Build ("by rules"), its hover saying
 what a tick does. e2e wicked-trails-builder 18, wicked-trails 62.
+28 Nov 2026: "we should have a default fillers, all core resources, baskets
+and stickers. the only rule that should be given are the pool of the packs
+that can be given." Asked: packs - "there is no hard rule. the economy should
+have packs in it"; baskets - "like the message i gave about the album, we
+should give pools or chests, for which we put and in what gameplay and this
+is how it will pick it"; the order - "Packs, baskets, then resources"; and
+"those pools should be hard coded in a different section for the album".
+Built: the Economy page's Pools tab (Album: sticker packs; Chef baskets - each
+ticked Easy / Mid / Hard), the builder's default fillers (pack, basket, wild,
+extra stock, free round, undo, coins), a pack from the section's album pool in
+turn and the biggest basket of its pool that fits. Found on the way: clearing
+several rule rows at once took the wrong ones (indexes shifting) - removals
+now apply together. verify-allocate 14, e2e wicked-trails-builder 20,
+wicked-trails 62, economy-page 111.

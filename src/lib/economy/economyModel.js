@@ -351,9 +351,28 @@ export function createEconomy(overrides = {}) {
     keys,
     chefBaskets: { ...DEFAULT_CHEF_BASKET_VALUES, ...(overrides.chefBaskets ?? {}) },
     calendar: normalizeCalendar(overrides.calendar),
+    pools: normalizePools(overrides.pools),
     updatedAt: overrides.updatedAt ?? null,
   })
 }
+
+// THE POOLS (economist, 28 Nov 2026: "we should give pools or chests, for which we put and in what gameplay and this is
+// how it will pick it"; "those pools should be hard coded in a different section for the album"): the sticker packs of
+// the album, and the Chef baskets, a feature's economy builder may give - each with the gameplay sections it is for
+// (easy, mid, hard - the Final Prize). The Economy page's Pools tab. { album: [{ key, easy, mid, hard }], baskets: [...] }.
+export const POOL_LISTS = [
+  { id: 'album', label: 'Album', list: 'packs' },
+  { id: 'baskets', label: 'Chef baskets', list: 'presets' },
+]
+export function normalizePools(raw) {
+  const rows = (list) =>
+    (Array.isArray(list) ? list : [])
+      .filter((r) => r && typeof r.key === 'string' && r.key.trim())
+      .map((r) => ({ key: r.key.trim(), easy: r.easy !== false, mid: r.mid !== false, hard: r.hard !== false }))
+  return { album: rows(raw?.album), baskets: rows(raw?.baskets) }
+}
+// The keys of a pool for a gameplay section, in the pool's order.
+export const poolFor = (economy, pool, section) => (economy?.pools?.[pool] ?? []).filter((r) => r[section]).map((r) => r.key)
 
 // THE CALENDAR (economist, 26 Nov 2026: "we need that the system will hold some kind of a calendar, that he will know
 // the prices of specific DRs with the calendar when we create features"; "the mini game should show the specific merge
@@ -417,6 +436,7 @@ export function normalizeEconomy(raw) {
     keys: upgradeKeys(raw.keys, Number(raw.version) || 1),
     chefBaskets: raw.chefBaskets,
     calendar: raw.calendar,
+    pools: raw.pools,
     updatedAt: raw.updatedAt ?? null,
   })
 }

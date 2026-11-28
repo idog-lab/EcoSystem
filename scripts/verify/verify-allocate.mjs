@@ -65,5 +65,37 @@ check('nothing ticked: nothing built, and it says so', /No tier is ticked/.test(
 const noGp = allocate({ tiers: tiers({ gp: { auto: false } }), hard: [puzzle], io })
 check(`the hard share with no ticked Final Prize is named (${noGp.report.notes[0]})`, /50 of the hard share has no ticked tier/.test(noGp.report.notes[0]))
 
+// Pool fillers: a pack from the section's album pool in turn (worth 0), the biggest basket that fits, coins last.
+const BASKET = { B: 3, E: 8 }
+let packTurn = 0
+const poolIo = {
+  ...io,
+  worthOf: (p) => io.worthOf(Object.fromEntries(Object.entries(p).filter(([k]) => k !== 'pack' && k !== 'basket'))) + (BASKET[p.basket] ?? 0),
+  get: (p, item) => (item === 'pack' ? (p.pack ? 1 : 0) : item === 'basket' ? (p.basket ? 1 : 0) : (p[item] ?? 0)),
+  set: (p, item, amount) => {
+    const out = { ...p }
+    if (item === 'pack' || item === 'basket') {
+      if (!amount) delete out[item]
+      return out
+    }
+    return io.set(p, item, amount)
+  },
+  pick: (item, tier, need) => (item === 'pack' ? ['P1', 'P2'][packTurn++ % 2] : ['E', 'B'].find((k) => BASKET[k] <= need + 1e-9) ?? null),
+  add: (p, item, key) => ({ ...p, [item]: key }),
+  keyWorth: (item, key) => (item === 'basket' ? BASKET[key] : 0),
+}
+const pools = allocate({
+  tiers: [
+    { id: 't1', group: 'A', section: 'easy', target: 10, auto: true, parts: {} },
+    { id: 't2', group: 'A', section: 'easy', target: 10, auto: true, parts: {} },
+    { id: 't3', group: 'A', section: 'easy', target: 3, auto: true, parts: {} },
+  ],
+  fillers: [{ item: 'pack', max: 1 }, { item: 'basket', max: 1 }, { item: 'coins' }],
+  io: poolIo,
+})
+check(`pack P1 (0), the biggest basket that fits (E, 8), coins 2 (${JSON.stringify(pools.parts.t1)})`, pools.parts.t1.pack === 'P1' && pools.parts.t1.basket === 'E' && near(pools.parts.t1.coins, 2))
+check(`the next tier: the next pack of the pool (${pools.parts.t2.pack})`, pools.parts.t2.pack === 'P2' && pools.parts.t2.basket === 'E')
+check(`a tier needing 3: the basket that fits is B, no coins needed (${JSON.stringify(pools.parts.t3)})`, pools.parts.t3.basket === 'B' && pools.parts.t3.coins === undefined && pools.report.groups[0].off === 0)
+
 console.log(`\nALLOCATE: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

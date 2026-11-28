@@ -12,7 +12,9 @@
 //
 // tiers: [{ id, group (a lane - the carry runs within it), section ('easy' | 'mid' | 'hard'), target, auto, parts }]
 // in order. hard: [{ item, total, pct: { easy, mid, hard } }]; fillers: [{ item, max }]; balanceEvery: 2.
-// io: { worthOf(parts) -> number | null, unitWorth(item) -> number | null, get(parts, item) -> amount,
+// io: { worthOf(parts) -> number | null, unitWorth(item) -> number | null, get(parts, item) -> amount (for a pool item,
+//       how many of it), pick(item, tier, need) -> a key of the pool, or null; add(parts, item, key) -> parts;
+//       keyWorth(item, key) -> number,
 //       set(parts, item, amount) -> parts (a preset item snapped to one that exists), count(parts) -> prizes,
 //       limit(tier) -> the most prizes it may hold }.
 // Returns { parts: { [id]: parts }, report: { hard: [{ item, total, placed, bySection }], groups: [{ group, off }],
@@ -26,8 +28,16 @@ export const ALLOC_ITEMS = [
   { id: 'entry', label: 'Free round', step: 1 },
   { id: 'puzzle', label: 'Puzzle', step: 1 },
   { id: 'mini', label: 'Mini game', step: 1 },
+  // From a pool (the Economy page's Pools tab), by the tier's gameplay section: a sticker pack of the album (worth 0 -
+  // "the economy should have packs in it"), a Chef basket (the biggest of the pool that still fits).
+  { id: 'pack', label: 'Sticker pack', step: 1, pool: 'album' },
+  { id: 'basket', label: 'Chef basket', step: 1, pool: 'baskets' },
 ]
-export const FILLER_ITEMS = ALLOC_ITEMS.filter((i) => ['coins', 'wild', 'stock', 'undo', 'entry'].includes(i.id))
+// The fillers, in their default order (economist: "we should have a default fillers, all core resources, baskets and
+// stickers"; asked the order: "Packs, baskets, then resources"): coins last, to land on the balance.
+export const FILLER_ITEMS = ['pack', 'basket', 'wild', 'stock', 'entry', 'undo', 'coins'].map((id) => ALLOC_ITEMS.find((i) => i.id === id))
+export const DEFAULT_FILLERS = FILLER_ITEMS.map((i) => ({ item: i.id, max: i.pool ? 1 : null }))
+const isPool = (item) => !!ALLOC_ITEMS.find((i) => i.id === item)?.pool
 export const SECTIONS = [
   { id: 'easy', label: 'Easy' },
   { id: 'mid', label: 'Mid' },
@@ -123,14 +133,26 @@ const labelOf = (item) => ALLOC_ITEMS.find((i) => i.id === item)?.label ?? item
 function fill(parts, need, fillers, io, tier) {
   let left = need
   let out = parts
-  const usable = fillers.filter((f) => f.item && (io.unitWorth(f.item) ?? 0) > 0)
-  usable.forEach((f, k) => {
+  const usable = fillers.filter((f) => f.item && (isPool(f.item) || (io.unitWorth(f.item) ?? 0) > 0))
+  const lastAmount = [...usable].reverse().find((f) => !isPool(f.item))
+  usable.forEach((f) => {
+    // A pool item: one from the tier's section pool, while it has room and the max allows (a pack is worth 0: it goes in
+    // whatever the balance; a basket only when it fits what is still needed).
+    if (isPool(f.item)) {
+      const have = Number(io.get(out, f.item)) || 0
+      if ((f.max != null && f.max !== '' && have >= Number(f.max)) || io.count(out) >= io.limit(tier)) return
+      const key = io.pick(f.item, tier, left)
+      if (!key) return
+      out = io.add(out, f.item, key)
+      left = round2(left - (io.keyWorth(f.item, key) ?? 0))
+      return
+    }
     if (left <= 0) return
     const u = io.unitWorth(f.item)
     const have = Number(io.get(out, f.item)) || 0
     if (!have && io.count(out) >= io.limit(tier)) return
     const step = stepOf(f.item)
-    const isLast = k === usable.length - 1
+    const isLast = f === lastAmount
     let amount = step < 1 ? roundTo(left / u, step) : isLast ? Math.round(left / u) : Math.floor(left / u)
     if (f.max != null && f.max !== '') amount = Math.min(amount, Math.max(0, Number(f.max) - have))
     if (!(amount > 0)) return
