@@ -282,6 +282,25 @@ the old sheet's Allocation. Held by
 `verify-wicked-trails.mjs` and `scripts/e2e/wicked-trails.mjs`. A rule of the economy said while teaching a feature
 is asked about and then put in the Economy (economist: "if i do, u can ask and then insert it into the economy").
 
+## The economy builder (economist: "one of the most important things")
+
+"have some kind of a skill that build an economy it self. giving it rules of hard allocations (eventually has to be
+met), and soft (can be used), that will build it itself. in some tiers" (28 Nov 2026). Generic in
+`src/lib/economy/allocate.js` (`allocate`), first used in Wicked Trails' Tiers and prizes step ("Economy builder", under
+the sheet; the rules saved with the event). Asked:
+- **Hard** = "a total allocation for a resource with distribution for each gameplay section" - easy, mid, hard, in %
+  (hard the rest); **"hard is only the GP"** (the Final Prize). A tier's section is a column of the sheet ("A column I
+  set"; it starts with a lane's first half easy, the rest mid). A section's share, less what unticked tiers there already
+  hold, goes to its ticked tiers by their targets (largest remainders; puzzle and mini game as the presets that exist -
+  the total said when the steps miss it).
+- **Soft** = "fillers. we use them to get close to a balance. the balance shouldn't be hard on a tier, we can do that
+  every 2nd one will be close to balance" - fillers in order, each with a max a tier ("A list with a max a tier"); a
+  built tier is filled to its own target, every Nth built tier (2, typed) and a lane's last to target + carry; a new
+  filler only while the tier has room (4 prizes, 5 the Final Prize); the last filler rounds to the nearest.
+- **Builds the tiers ticked** ("The ones I tick": an Auto column), on the base segment; parts the rules do not name (a
+  pack, other presets, a chest) are kept; "Undo the build" puts the prizes back. The report: each hard total placed of
+  its total, each lane's off at its end, what could not be done.
+
 ## Tables, in every feature (economist's standing rules)
 
 "we need the tables to be as easy to read and to handle as it can be" (26 Nov 2026) - a feature built from now on
@@ -305,6 +324,9 @@ to these:
 - **The row we are on, live under the sheet** ("we will see under the events table a live syntax of the row we are
   on"): written by the export's own builders, with copy buttons and the checker's findings - Config OPS only (RC taken
   out of the panel, asked; it stays in the export).
+- **Excel's fills and status bar** ("i want it to be perfect"): Ctrl+D fills a selection down from its first row,
+  Ctrl+R across from its first column; a selection of several number cells shows Sum · Average · Count. A small rules
+  sheet takes a new row in its empty last one, and Delete on the row's item takes it out (no add / remove buttons).
 - **Dropdown cells as Excel's data validation**: Ctrl+Down / Ctrl+Up go through the choices in place, Alt+Down opens; **one click opens the list** ("the cell of the fallback will be changable from the first interaction"); reached with the arrows, the list stays closed and the keys work on the cell.
 - **As little text and as few buttons as possible** ("this comments are not important, the page should be as clean
   and easy to use as possible. less buttons and text"): a step is one line - what it is for in its hover, "Still
