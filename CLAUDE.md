@@ -218,8 +218,9 @@ that file.
 `src/features/wickedTrails/` (`lib/wickedTrails.js`, `WickedTrailsApp.jsx`), at `/models/wicked-trails`; economist,
 26 Nov 2026: "for each feature we build, we will need to have the place where we build the economy and a place we can
 see with our eyes some kind of a mock of the feature". Two lanes - Easy (silver DR) and Hard (gold DR) - and a Final
-Prize for finishing both. **A guided build of five steps** (economist: "the flow of the wicked trails is not good. it
-should be intuitive how i go on with the event build"): Segments, Rules, Tiers and prizes, Mock, Export - a numbered
+Prize for finishing both. **A guided build of six steps** (economist: "the flow of the wicked trails is not good. it
+should be intuitive how i go on with the event build"): Feature rules (filled once for the feature - see the economy
+builder), Segments, Rules, Tiers and prizes, Mock, Export - a numbered
 bar with a tick on a step that needs nothing more (`stepStatus`), each step saying what it is for and what is still
 needed, Back / Next under it. **The segments and the tiers and prizes are sheets** (`src/components/SheetGrid.jsx`,
 `src/lib/sheetGrid.js`; economist: "the easiest way to create the tiers, shares, prizes and everything is an excel like
@@ -296,7 +297,20 @@ the sheet; the rules saved with the event). Asked:
 - **Soft** = "fillers. we use them to get close to a balance. the balance shouldn't be hard on a tier, we can do that
   every 2nd one will be close to balance" - fillers in order, each with a max a tier ("A list with a max a tier"); a
   built tier is filled to its own target, every Nth built tier (2, typed) and a lane's last to target + carry; a new
-  filler only while the tier has room (4 prizes, 5 the Final Prize); the last filler rounds to the nearest.
+  filler only while the tier has room (the feature's max items, below); the last filler rounds to the nearest.
+- **Prizes that differ** ("we mostly want the prizes to differ one from the other a bit more"; asked: "the tiers to not
+  look alike too much, coins are mostly always welcome"): when coins are among the fillers, the other resources take
+  turns leading - tier by tier and lane by lane (`turn`) - one of them in a tier, then two, in turn (60%, then 25%, of
+  what is left; a max a tier still holds), and **coins close every tier** to its balance. Without coins, the old order.
+- **The feature's rules, a step of their own** ("for each feature we should have rules for what we see in the tiers.
+  min and max resources. if they are showed in baskets or not ... filled 1 time, and mostly later untouched unless
+  needed. the builder should follow the rules"; asked: "Items in a tier", "i meant chests", "A step of their own"):
+  Wicked Trails' first step, **Feature rules** (`normalizeFeatureRules`, kept for the feature - not with an event -
+  under `superplay-wicked-trails-rules`, shared as `wicked-trails/feature-rules.json`). Items in a tier: a min and max
+  for the tiers and for the Final Prize (start 2-4 and 3-5, this app's own; the builder gives at least the min -
+  `io.minItems` - and at most the max; the sheet flags a prize over the max). Chests: one for each gameplay section
+  (Easy, Mid, Hard = the Final Prize; "No chest" to start) - a built tier is wrapped in its section's chest, or none;
+  a lane's last tier is not touched (the export's silver / golden). A first visit opens on this step until it is kept.
 - **Default fillers and the pools** ("we should have a default fillers, all core resources, baskets and stickers. the only rule that should be given are the pool of the packs that can be given"; asked the order: "Packs, baskets, then resources"): sticker pack, Chef basket, Wild, Extra stock, Free round, Undo, Coins (a pack and a basket 1 a tier). Packs and baskets come from **the Economy page's Pools tab** ("those pools should be hard coded in a different section for the album"; `economy.pools`, `poolFor`): the album's packs and the Chef baskets, each ticked for the gameplay sections it may go to. A tier takes the next pack of its section's album pool in turn (worth 0 - "the economy should have packs in it" - with its counter and the coins 0.25 fallback) and the biggest basket of its section's pool that still fits; a builder saved with the first default (coins alone) takes the new list.
 - **Builds the tiers ticked** ("The ones I tick": a column named **Build** - "by rules"; first called Auto, renamed when the economist said "i dont understand the auto column"), on the base segment; parts the rules do not name (a
   pack, other presets, a chest) are kept; "Undo the build" puts the prizes back. The report: each hard total placed of

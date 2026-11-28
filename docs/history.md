@@ -8802,3 +8802,29 @@ turn and the biggest basket of its pool that fits. Found on the way: clearing
 several rule rows at once took the wrong ones (indexes shifting) - removals
 now apply together. verify-allocate 14, e2e wicked-trails-builder 20,
 wicked-trails 62, economy-page 111.
+## Feature rules for the tiers; prizes that differ
+
+28 Nov 2026: "for each feature we should have rules for what we see in the
+tiers. min and max resources. if they are showed in baskets or not. and more
+and more. we should have that in each feature in a way that it is filled 1
+time, and mostly later untouched unless needed. the builder should follow the
+rules. also, we mostly want the prizes to differ one from the other a bit more
+than the builder does now." Asked: min and max of what - "Items in a tier";
+baskets - "i meant chests"; differ how - "the tiers to not look alike too
+much, coins are mostly always welcome"; where - "A step of their own".
+Built: Wicked Trails' first step, Feature rules - Items in a tier (min and
+max, the tiers and the Final Prize: 2-4 and 3-5 to start, this app's own) and
+Chests (Easy, Mid, Hard = the Final Prize; No chest to start), kept for the
+feature under its own key and shared with the team, apart from any event; a
+first visit opens there until the rules are kept once. The builder gives at
+least the min and at most the max (the sheet's prize-count warning reads the
+max), wraps a built tier in its section's chest (or takes one out) and leaves
+a lane's last tier to the export's silver / golden. Variety, with coins among
+the fillers: the other resources take turns leading, tier by tier and lane by
+lane, one of them then two, and coins close every tier to its balance (a
+sample lane: coins+wild, coins+stock+free round, coins+free round, coins+undo+
+free round - every lane at 0). Without coins the old order stays. Found on the
+way, in the sheet: a key typed right after Tab or Enter could be lost while
+the sheet took the keys back - it takes them back at once now.
+verify-allocate 19, verify-wicked-trails 45, e2e wicked-trails 68,
+wicked-trails-builder 20, economy-page 111, sheet-grid 22.

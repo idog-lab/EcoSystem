@@ -153,6 +153,9 @@ export default function SheetGrid({ columns, rows, onCommit, onActive = null, on
     setEdit(null)
     if (how === 'commit') write([{ r: e.r, c: e.c, text: e.text }])
     if (moveKey) go(move({ r: e.r, c: e.c }, moveKey, { rows: nRows, cols: nCols, shift }))
+    // The sheet takes the keys back at once: a key typed right after Tab or Enter is never lost on the way (the edit box
+    // is going; its blur finds nothing more to commit).
+    if (moveKey) box.current?.focus({ preventScroll: true })
     focusBox()
   }
 

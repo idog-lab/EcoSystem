@@ -62,6 +62,30 @@ export function createState() {
     miniGame: '',
   }
 }
+// THE FEATURE'S RULES FOR ITS TIERS (economist, 28 Nov 2026: "for each feature we should have rules for what we see in
+// the tiers. min and max resources. if they are showed in baskets [chests] or not. and more and more. we should have
+// that in each feature in a way that it is filled 1 time, and mostly later untouched unless needed. the builder should
+// follow the rules"). Asked: min and max = "Items in a tier"; baskets = "i meant chests"; where = "A step of their own".
+// Kept for the feature, not with an event (its own key; shared with the team). Starting values this app's own: a tier 2
+// to 4 items, the Final Prize 3 to 5 (the old sheet's check was 4 and 5); no chest by section (a lane's last tier is in
+// its silver / golden chest by the export rule).
+export const FEATURE_RULES_KEY = 'superplay-wicked-trails-rules'
+export function createFeatureRules() {
+  return { items: { tier: { min: 2, max: 4 }, final: { min: 3, max: 5 } }, chests: { easy: '', mid: '', hard: '' } }
+}
+export function normalizeFeatureRules(raw) {
+  const fresh = createFeatureRules()
+  const whole = (v, d) => (Number.isInteger(Number(v)) && Number(v) >= 1 ? Number(v) : d)
+  const range = (r, d) => {
+    const min = whole(r?.min, d.min)
+    return { min, max: Math.max(min, whole(r?.max, d.max)) }
+  }
+  return {
+    items: { tier: range(raw?.items?.tier, fresh.items.tier), final: range(raw?.items?.final, fresh.items.final) },
+    chests: Object.fromEntries(['easy', 'mid', 'hard'].map((s) => [s, typeof raw?.chests?.[s] === 'string' ? raw.chests[s] : ''])),
+  }
+}
+
 // A tier's gameplay section, to start: the first half of a lane easy, the rest mid ("hard is only the GP").
 export const defaultSection = (i, n) => (i < Math.ceil(n / 2) ? 'easy' : 'mid')
 const newLane = (n) => ({ shares: evenShares(n), prizes: Array(n).fill(''), sections: Array.from({ length: n }, (_, i) => defaultSection(i, n)), auto: Array(n).fill(false) })

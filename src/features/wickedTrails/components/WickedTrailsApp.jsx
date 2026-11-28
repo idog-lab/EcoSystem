@@ -12,7 +12,7 @@ import { presetFor } from '../../../lib/economy/syntax'
 import { prizeAgainstWorth } from '../../../lib/economy/prizeWorth'
 import { setForFeature, useSegmentSets } from '../../../lib/economy/segmentSets'
 import { teamData } from '../../../lib/teamData'
-import { carryThrough, FEATURE_NAME, LANES, MAX_TIERS, PRIZE_LIMIT, STORAGE_KEY, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
+import { carryThrough, FEATURE_NAME, FEATURE_RULES_KEY, LANES, MAX_TIERS, STORAGE_KEY, normalizeFeatureRules, normalizeState, placeKey, prizeOf, progressAt, resolveEfforts, stepStatus, withTierCount, workOut } from '../lib/wickedTrails'
 import { OPS_HEADERS, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWorkbook, rowSyntax } from '../lib/wickedTrailsExport'
 
 // WICKED TRAILS (lib/wickedTrails.js): the event built step by step (economist: "the flow of the wicked trails is not
@@ -21,6 +21,7 @@ import { OPS_HEADERS, SHEET_NAMES, UNUSED, buildExport, exportFileName, exportWo
 // what it still needs; Next leads on.
 const STEP_KEY = 'superplay-wicked-trails-view'
 const STEPS = [
+  { id: 'feature', label: 'Feature rules', purpose: 'Filled once for the feature, kept for every event: how many items a tier holds, and the chest each gameplay section\'s prizes come in. The economy builder follows them.' },
   { id: 'segments', label: 'Segments', purpose: 'Take the segments from a segment set. Give each its effort in Brut Wins - typed, or a factor of another segment - and how much silver and gold DR one Brut Win gives it. Pick the base: its prizes are the ones you type.' },
   { id: 'rules', label: 'Rules', purpose: 'Type the feature\'s ROE - the allowance worth of prizes a player gets from one Brut Win - and check how it is shared between the lanes and the Final Prize.' },
   { id: 'tiers', label: 'Tiers and prizes', purpose: 'One sheet: how many tiers each lane has, where they sit (shares of the lane), and the prize of every tier and of the Final Prize, beside the worth it should give. Move with the arrows, type over a cell, paste from Excel.' },
@@ -62,10 +63,25 @@ export default function WickedTrailsApp({ onHome }) {
   // (A step remembered from before the sheet: Prizes is now part of Tiers and prizes.)
   const [step, setStepState] = useState(() => {
     const kept = load(STEP_KEY, null) === 'prizes' ? 'tiers' : load(STEP_KEY, null)
-    return STEPS.some((s) => s.id === kept) ? kept : 'segments'
+    // A first visit starts at the feature's rules until they were kept once.
+    return STEPS.some((s) => s.id === kept) ? kept : load(FEATURE_RULES_KEY, null) ? 'segments' : 'feature'
   })
   const [shown, setShown] = useState(null)
   const economy = useEconomy()
+  // The feature's rules: kept for the feature, not with an event (their own key, shared with the team).
+  const [featureRules, setFeatureRules] = useState(() => normalizeFeatureRules(load(FEATURE_RULES_KEY, null)))
+  const changeRules = (fn) => {
+    setFeatureRules((r) => {
+      const next = normalizeFeatureRules(fn(r))
+      try {
+        window.localStorage.setItem(FEATURE_RULES_KEY, JSON.stringify(next))
+        teamData.changed(FEATURE_RULES_KEY)
+      } catch {
+        // Not kept between visits; the page works without it.
+      }
+      return next
+    })
+  }
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -88,7 +104,7 @@ export default function WickedTrailsApp({ onHome }) {
   const index = shown != null && shown < state.segments.length ? shown : Math.min(state.baseIndex, Math.max(0, state.segments.length - 1))
   const parts = stepStatus(state, (text) => checkReward(text, { economy }).ok)
   // Tiers and prizes are one step: done when both are.
-  const status = { ...parts, tiers: { done: parts.tiers.done && parts.prizes.done, missing: [...parts.tiers.missing, ...parts.prizes.missing] } }
+  const status = { ...parts, feature: { done: true, missing: [] }, tiers: { done: parts.tiers.done && parts.prizes.done, missing: [...parts.tiers.missing, ...parts.prizes.missing] } }
   const at = STEPS.findIndex((s) => s.id === step)
   const current = STEPS[at]
   const missing = status[step]?.missing ?? []
@@ -147,9 +163,10 @@ export default function WickedTrailsApp({ onHome }) {
           </p>
         ) : (
           <>
+            {step === 'feature' && <FeatureRulesStep rules={featureRules} changeRules={changeRules} economy={economy} />}
             {step === 'segments' && <SegmentsStep state={state} change={change} />}
             {step === 'rules' && <RulesStep state={state} change={change} economy={economy} />}
-            {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} economy={economy} />}
+            {step === 'tiers' && <TiersStep state={state} change={change} index={index} setShown={setShown} economy={economy} featureRules={featureRules} />}
             {step === 'mock' && <MockStep state={state} index={index} setShown={setShown} />}
             {step === 'export' && <ExportStep state={state} index={index} setShown={setShown} />}
           </>
@@ -309,6 +326,61 @@ function SegmentsSheet({ state, change }) {
   return <SheetGrid testid="wt-segments" columns={columns} rows={rows} onCommit={commit} />
 }
 
+// ---------------------------------------------------------------- 0. The feature's rules (lib normalizeFeatureRules)
+const prizeLimits = (fr) => ({ tier: fr.items.tier.max, final: fr.items.final.max })
+const CHEST_SECTIONS = [
+  { id: 'easy', label: 'Easy' },
+  { id: 'mid', label: 'Mid' },
+  { id: 'hard', label: 'Hard', sub: 'the Final Prize' },
+]
+function FeatureRulesStep({ rules, changeRules, economy }) {
+  const chestKeys = (economy?.keys?.chests ?? []).map((k) => k.key).filter(Boolean)
+  const whole = (_, v) => (v == null || (Number.isInteger(v) && v >= 1) ? null : 'A whole number, 1 or more')
+  const itemRows = [
+    { id: 'tier', what: 'A tier', ...rules.items.tier },
+    { id: 'final', what: 'The Final Prize', ...rules.items.final },
+  ]
+  const itemColumns = [
+    { key: 'what', label: 'Items in', width: 130, type: 'text', sticky: true, value: (r) => r.what },
+    { key: 'min', label: 'Min', width: 70, type: 'number', align: 'right', editable: true, value: (r) => r.min, check: whole, title: () => 'The builder gives at least this many items' },
+    { key: 'max', label: 'Max', width: 70, type: 'number', align: 'right', editable: true, value: (r) => r.max, check: whole, title: () => 'The builder gives at most this many; a prize with more is flagged' },
+  ]
+  const commitItems = (changes) =>
+    changeRules((r) => {
+      const items = { tier: { ...r.items.tier }, final: { ...r.items.final } }
+      for (const { row, key, value } of changes) if (value != null) items[row.id][key] = value
+      // Min above max: the other end follows.
+      for (const k of ['tier', 'final']) {
+        const changed = changes.filter((c) => c.row.id === k).map((c) => c.key)
+        if (items[k].min > items[k].max) {
+          if (changed.includes('max')) items[k].min = items[k].max
+          else items[k].max = items[k].min
+        }
+      }
+      return { ...r, items }
+    })
+  const chestRows = CHEST_SECTIONS.map((s) => ({ ...s, chest: rules.chests[s.id] ?? '' }))
+  const chestColumns = [
+    { key: 'what', label: 'Gameplay', width: 150, type: 'text', sticky: true, value: (r) => r.label, display: (r) => (r.sub ? `${r.label} - ${r.sub}` : r.label) },
+    { key: 'chest', label: 'Chest', width: 140, type: 'select', editable: true, clearTo: '', value: (r) => r.chest, options: () => [{ value: '', label: 'No chest' }, ...chestKeys.map((k) => ({ value: k, label: k }))], display: (r) => r.chest || <span className="text-slate-400">No chest</span> },
+  ]
+  const commitChests = (changes) => changeRules((r) => ({ ...r, chests: changes.reduce((acc, { row, value }) => ({ ...acc, [row.id]: value || '' }), r.chests) }))
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start">
+      <Card title="Items in a tier">
+        <div title="How many items the builder puts in a prize. A prize with more than the max is flagged in the sheet." data-testid="wt-feature-items">
+          <SheetGrid testid="wt-feature-items-sheet" columns={itemColumns} rows={itemRows} onCommit={commitItems} />
+        </div>
+      </Card>
+      <Card title="Chests">
+        <div title="The chest the builder wraps a tier's prize in, by its gameplay section. A lane's last tier is always in its silver or golden chest." data-testid="wt-feature-chests">
+          <SheetGrid testid="wt-feature-chests-sheet" columns={chestColumns} rows={chestRows} onCommit={commitChests} />
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- 2. Rules
 // The mini game the feature uses: the calendar's on its first day, else the one picked here.
 const miniGameUsed = (state, economy) => liveMiniGame(economy, state.startDate) ?? (state.miniGame || null)
@@ -406,7 +478,8 @@ function prizeChange(s, index, place, text) {
 // max a tier, balance every Nth tier - in two small sheets (a new row is typed in the empty last one; Delete on its item
 // takes it out), and Build: the ticked tiers of the base segment are filled; Undo puts their prizes back.
 const PCT = ['easy', 'mid', 'hard']
-function Builder({ state, change, economy, rows, index, miniGame }) {
+function Builder({ state, change, economy, rows, index, miniGame, featureRules }) {
+  const items = featureRules.items
   const b = state.builder
   const [result, setResult] = useState(null)
   const setB = (patch) => change((s) => ({ ...s, builder: { ...s.builder, ...patch } }))
@@ -496,7 +569,9 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
       const text = writePrize(parts)
       return text ? prizeCount(parseReward(text).node) : 0
     },
-    limit: (t) => (t.group === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier),
+    // The feature's rules: the least and most items a tier (and the Final Prize) holds.
+    limit: (t) => (t.group === 'final' ? items.final.max : items.tier.max),
+    minItems: (t) => (t.group === 'final' ? items.final.min : items.tier.min),
     // The pools (the Economy page's Pools tab), by the tier's gameplay section: the next pack of the album in turn; the
     // biggest basket whose worth still fits.
     pick: (item, tier, need) => {
@@ -525,7 +600,10 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
     const out = allocate({ tiers, hard: b.hard.filter((h) => h.total > 0), fillers: b.fillers, balanceEvery: b.balanceEvery, io })
     const built = tiers.filter((t) => t.auto)
     const before = Object.fromEntries(built.map((t) => [t.id, rows.find((r) => r.place === t.id).prize.text]))
-    change((s) => built.reduce((acc, t) => prizeChange(acc, index, t.id, writePrize(out.parts[t.id])), s))
+    // The feature's chest for the tier's gameplay section ('' none); a lane's last tier keeps the export's silver /
+    // golden chest, so the rule does not touch it.
+    const chestOf = (t) => (rows.find((r) => r.place === t.id)?.last ? out.parts[t.id].chest : (featureRules.chests[t.section] ?? ''))
+    change((s) => built.reduce((acc, t) => prizeChange(acc, index, t.id, writePrize({ ...out.parts[t.id], chest: chestOf(t) })), s))
     setResult({ report: out.report, before, count: built.length })
   }
   function undo() {
@@ -578,7 +656,7 @@ function Builder({ state, change, economy, rows, index, miniGame }) {
 // THE ROW WE ARE ON, AS OPS GETS IT (economist, 26 Nov 2026: "we will see under the events table a live syntax of the
 // row we are on"): its Req and Res in Config OPS and Config RC OPS, written by the export's own builders - the tier's
 // trigger and, on a lane's last tier, its chest - with what the checker finds, and a copy button.
-function RowSyntax({ state, index, place, economy, tone }) {
+function RowSyntax({ state, index, place, economy, tone, limits }) {
   const row = place ? rowSyntax(state, index, place) : null
   const [copied, setCopied] = useState(null)
   if (!row) return null
@@ -591,7 +669,7 @@ function RowSyntax({ state, index, place, economy, tone }) {
     }
   }
   const res = row.cells.find((c) => c.column.endsWith('_Res'))
-  const findings = res?.ops ? checkReward(String(res.ops), { economy, prizeMode: 'custom', prizeLimit: place === 'final' ? PRIZE_LIMIT.final + 1 : PRIZE_LIMIT.tier + 1 }).issues : []
+  const findings = res?.ops ? checkReward(String(res.ops), { economy, prizeMode: 'custom', prizeLimit: place === 'final' ? limits.final + 1 : limits.tier + 1 }).issues : []
   return (
     <div className={`rounded-xl border border-slate-200 border-l-4 ${tone?.edge ?? ''} bg-white px-3 py-2`} data-testid="wt-row-syntax" data-row-place={place}>
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -689,7 +767,8 @@ const RESOURCE_COLUMNS = [
 // games, and to have an option to add DRs and triggers if needed, and then wrap it with chests if needed also. we are
 // supposed to also see as we said the calculation of the tier vs the amount that should actually be there"): one
 // column a part, the text written from them (lib/economy/prizeParts.js), the target, the worth and how far it is.
-function TiersStep({ state, change, index, setShown, economy }) {
+function TiersStep({ state, change, index, setShown, economy, featureRules }) {
+  const limits = prizeLimits(featureRules)
   const seg = state.segments[index]
   const w = workOut(state, seg)
   const keys = (list) => (economy?.keys?.[list] ?? []).map((k) => k.key).filter(Boolean)
@@ -716,7 +795,7 @@ function TiersStep({ state, change, index, setShown, economy }) {
     })(),
   ]
   const miniGame = miniGameUsed(state, economy)
-  const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { date: state.startDate || null, days: state.days, miniGame, prizeMode: 'custom', prizeLimit: row.place === 'final' ? PRIZE_LIMIT.final : PRIZE_LIMIT.tier }) : null)
+  const checkOf = (row) => (row.prize.text ? prizeAgainstWorth(row.prize.text, row.target, economy, { date: state.startDate || null, days: state.days, miniGame, prizeMode: 'custom', prizeLimit: row.place === 'final' ? limits.final : limits.tier }) : null)
   // The carry along each lane: what a tier leaves (over or under its aim) moves to the next one; the Final Prize has
   // its own pool and carries nothing. A tier with no prize gives 0; a worth not known stops the carry.
   const carried = new Map()
@@ -1052,8 +1131,8 @@ function TiersStep({ state, change, index, setShown, economy }) {
         </p>
       )}
       <SheetGrid testid="wt-tiers" columns={columns} rows={rows} onCommit={commit} rowTone={(r) => LANE_TONE[r.laneId ?? 'final']} onActive={(row) => row && setActivePlace(row.place)} />
-      {index === state.baseIndex && <Builder state={state} change={change} economy={economy} rows={rows} index={index} miniGame={miniGame} />}
-      <RowSyntax state={state} index={index} place={rows.some((r) => r.place === activePlace) ? activePlace : rows[0]?.place} economy={economy} tone={LANE_TONE[rows.find((r) => r.place === activePlace)?.laneId ?? (activePlace === 'final' ? 'final' : 'easy')]} />
+      {index === state.baseIndex && <Builder state={state} change={change} economy={economy} rows={rows} index={index} miniGame={miniGame} featureRules={featureRules} />}
+      <RowSyntax limits={limits} state={state} index={index} place={rows.some((r) => r.place === activePlace) ? activePlace : rows[0]?.place} economy={economy} tone={LANE_TONE[rows.find((r) => r.place === activePlace)?.laneId ?? (activePlace === 'final' ? 'final' : 'easy')]} />
     </>
   )
 }

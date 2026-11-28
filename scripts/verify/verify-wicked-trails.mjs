@@ -1,7 +1,7 @@
 // WICKED TRAILS (src/features/wickedTrails/lib/wickedTrails.js): two lanes filled together from Brut Wins, the ROE of
 // each BW split between them until the easy lane is done, tiers as shares of a lane, the Final Prize from the takes.
 //   npx vite-node scripts/verify/verify-wicked-trails.mjs
-import { carryThrough, createState, normalizeState, prizeOf, progressAt, resolveEfforts, ruleProblems, stepStatus, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
+import { FEATURE_RULES_KEY, carryThrough, createState, normalizeFeatureRules, normalizeState, prizeOf, progressAt, resolveEfforts, ruleProblems, stepStatus, withTierCount, workOut } from '../../src/features/wickedTrails/lib/wickedTrails.js'
 import { OPS_HEADERS, buildExport, exportFileName, rowSyntax } from '../../src/features/wickedTrails/lib/wickedTrailsExport.js'
 
 let fails = 0
@@ -113,6 +113,12 @@ const rs = rowSyntax(ex, 0, 'easy-1')
 check(`a lane's last tier, as Ops gets it: its Req (and RC's) and its Res in the chest (${rs.cells[1].ops})`, rs.title === 'Easy lane, tier 2' && rs.cells[0].column === '$_Script->RightMilestone_1_Req' && rs.cells[0].ops === 100 && rs.cells[0].rc === 150 && rs.cells[1].ops === 'chest:silver(trigger:wicked_trails_silver_tier2+free_wild:2)')
 const rf = rowSyntax(ex, 0, 'final')
 check(`the Final Prize, as Ops gets it: RC's coins 40% more (${rf.cells[0].rc})`, rf.cells[0].ops === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:4)+free_entry:1' && rf.cells[0].rc === 'trigger:wicked_trails_grand_prize+allowance:milestone(coins:5.6)+free_entry:1')
+
+// The feature's rules: kept apart from the event; starting values; a min above the max is not kept.
+const fr = normalizeFeatureRules(null)
+check(`the feature's rules start at a tier 2-4 items, the Final Prize 3-5, no chest (${JSON.stringify(fr)})`, fr.items.tier.min === 2 && fr.items.tier.max === 4 && fr.items.final.min === 3 && fr.items.final.max === 5 && Object.values(fr.chests).every((c) => c === '') && FEATURE_RULES_KEY !== 'superplay-wicked-trails')
+const fr2 = normalizeFeatureRules({ items: { tier: { min: 5, max: 3 }, final: { min: 0, max: 'x' } }, chests: { mid: 'silver', hard: 7 } })
+check(`kept as typed where it can be: max never under min, a bad number the start value (${JSON.stringify(fr2)})`, fr2.items.tier.min === 5 && fr2.items.tier.max === 5 && fr2.items.final.min === 3 && fr2.items.final.max === 5 && fr2.chests.mid === 'silver' && fr2.chests.hard === '')
 
 console.log(`\nWICKED TRAILS: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)

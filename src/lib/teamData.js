@@ -27,6 +27,7 @@ export const SHARED_ITEMS = [
   { key: 'merge-mania-chef', path: 'chef/chefs.json', label: 'Chef' },
   { key: 'merge-mania-diamond-mine', path: 'diamond-mine/state.json', label: 'Diamond Mine' },
   { key: 'superplay-wicked-trails', path: 'wicked-trails/state.json', label: 'Wicked Trails' },
+  { key: 'superplay-wicked-trails-rules', path: 'wicked-trails/feature-rules.json', label: 'Wicked Trails feature rules' },
   // Puzzle's events where no toolkit server runs (the live site): src/features/puzzle/ui/localBackend.ts.
   { key: 'superplay-puzzle', path: 'puzzle/events.json', label: 'Puzzle' },
 ]

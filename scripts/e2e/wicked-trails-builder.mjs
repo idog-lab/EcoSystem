@@ -39,6 +39,8 @@ const state = {
 await page.evaluate((s) => {
   localStorage.setItem('superplay-wicked-trails', JSON.stringify(s))
   localStorage.setItem('superplay-wicked-trails-view', JSON.stringify('tiers'))
+  // The feature's rules: easy prizes in the wooden chest, the Final Prize in the purple one, mid in none.
+  localStorage.setItem('superplay-wicked-trails-rules', JSON.stringify({ items: { tier: { min: 2, max: 4 }, final: { min: 3, max: 5 } }, chests: { easy: 'wooden', mid: '', hard: 'purple' } }))
 }, state)
 await page.goto(`${BASE}models/wicked-trails`, { waitUntil: 'networkidle' })
 await page.waitForTimeout(400)
@@ -84,10 +86,11 @@ const textCol = async (row) => {
 }
 const prizes = { e0: await textCol('easy-0'), e1: await textCol('easy-1'), h0: await textCol('hard-0'), h1: await textCol('hard-1'), gp: await textCol('final') }
 console.log(`      ${JSON.stringify(prizes)}`)
-ok('easy tier 1: the album pack (0) + 4 undo (1) + 9 coins = 10', prizes.e0 === 'allowance(coins:9)+free_undo:4+[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]')
-ok('easy tier 2: 3 undo (0.75) + 9.25 coins = 10', prizes.e1 === 'allowance(coins:9.25)+free_undo:3+[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]')
-ok('hard tiers: 6 and 7 undo, coins to 15 and 30', prizes.h0 === 'allowance(coins:13.5)+free_undo:6+[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]' && prizes.h1 === 'allowance(coins:28.25)+free_undo:7+[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]')
-ok('the Final Prize: 20 undo (5) + 65 coins = 70', prizes.gp === 'allowance(coins:65)+free_undo:20+[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]')
+const PACK = '[sticker_pack:Common_T3_1_2C_Low_Rarity_Game|allowance(coins:0.25)]+[dynamic(dr-pack-counter:1)|[dynamic(dr-hidden:1)]]'
+ok('easy tier 1 (easy): in the wooden chest - the album pack (0) + 4 undo (1) + 9 coins = 10', prizes.e0 === `chest:wooden(allowance(coins:9)+free_undo:4+${PACK})`)
+ok("easy tier 2, the lane's last: no chest by the rule (the export's silver) - 3 undo (0.75) + 9.25 coins = 10", prizes.e1 === `allowance(coins:9.25)+free_undo:3+${PACK}`)
+ok('hard tiers: 6 and 7 undo, coins to 15 and 30; tier 1 (easy) in the wooden chest', prizes.h0 === `chest:wooden(allowance(coins:13.5)+free_undo:6+${PACK})` && prizes.h1 === `allowance(coins:28.25)+free_undo:7+${PACK}`)
+ok('the Final Prize (hard): in the purple chest - 20 undo (5) + 65 coins = 70', prizes.gp === `chest:purple(allowance(coins:65)+free_undo:20+${PACK})`)
 ok(`the report: undo 40 of 40, every lane at 0 (${await text(page.getByTestId('wt-build-report'))})`, /Undo 40 of 40/.test(await text(page.getByTestId('wt-build-report'))) && /Easy lane 0 · Hard lane 0 · Final Prize 0/.test(await text(page.getByTestId('wt-build-report'))))
 ok(`off by 0 down the lanes (${await text(T('easy-1', 'off'))}, ${await text(T('hard-1', 'off'))}, ${await text(T('final', 'off'))})`, (await text(T('easy-1', 'off'))) === '0 (0%)' && (await text(T('hard-1', 'off'))) === '0 (0%)' && (await text(T('final', 'off'))) === '0 (0%)')
 
