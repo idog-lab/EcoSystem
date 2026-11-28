@@ -97,7 +97,7 @@ export function allocate({ tiers, hard = [], fillers = [], balanceEvery = 2, io 
   // 2. The fillers, lane by lane: a built tier is filled to its own target, and every `balanceEvery`-th built tier (and
   // the lane's last) to its target plus the carry - so the lane comes back close to balance there.
   const groups = []
-  for (const group of [...new Set(tiers.map((t) => t.group))]) {
+  for (const [groupIndex, group] of [...new Set(tiers.map((t) => t.group))].entries()) {
     const lane = tiers.filter((t) => t.group === group)
     const lastAuto = [...lane].reverse().find((t) => t.auto)
     let carry = 0
@@ -112,9 +112,9 @@ export function allocate({ tiers, hard = [], fillers = [], balanceEvery = 2, io 
           notes.push(`${t.id}: a part has no worth yet - the fillers cannot balance it.`)
         } else if (carry == null) {
           notes.push(`${t.id}: a tier before has no worth - filled to its own target.`)
-          parts[t.id] = fill(parts[t.id], target - base, fillers, io, t)
+          parts[t.id] = fill(parts[t.id], target - base, fillers, io, t, groupIndex + built - 1)
         } else {
-          parts[t.id] = fill(parts[t.id], (checkpoint ? target + carry : target) - base, fillers, io, t)
+          parts[t.id] = fill(parts[t.id], (checkpoint ? target + carry : target) - base, fillers, io, t, groupIndex + built - 1)
         }
       }
       const worth = io.worthOf(parts[t.id])
@@ -128,25 +128,62 @@ export function allocate({ tiers, hard = [], fillers = [], balanceEvery = 2, io 
 
 const labelOf = (item) => ALLOC_ITEMS.find((i) => i.id === item)?.label ?? item
 
-// Fills `need` (allowance) with the fillers in their order: each up to its max a tier, in its steps, a new item only
-// while the tier has room for one more prize; the last one that can be used rounds to the nearest step.
-function fill(parts, need, fillers, io, tier) {
+// Fills `need` (allowance): pool items first (a pack, a basket), then -
+//  - with coins among the fillers, A MIX (economist, 28 Nov 2026: "we mostly want the prizes to differ one from the other
+//    a bit more"; asked: "the tiers to not look alike too much, coins are mostly always welcome"): the other resources
+//    taken in turn (`turn`), so no two tiers in a row lead with the same one; one of them, or two every other tier (more
+//    when the feature's least items a tier asks for it), the first about 60% of what is left, the next about 25%; and
+//    coins close the tier exactly - a place is always kept for them;
+//  - without coins, the fillers in their order, the last rounding to the nearest step.
+// Never more items than the feature allows (`io.limit`); toward its least (`io.minItems`).
+const MIX_SHARES = [0.6, 0.25, 0.15, 0.1]
+function fill(parts, need, fillers, io, tier, turn = 0) {
   let left = need
   let out = parts
   const usable = fillers.filter((f) => f.item && (isPool(f.item) || (io.unitWorth(f.item) ?? 0) > 0))
+  const coins = usable.find((f) => f.item === 'coins')
+  const capOf = (f, have) => (f.max != null && f.max !== '' ? Math.max(0, Number(f.max) - have) : Infinity)
+  // Pool items.
+  for (const f of usable.filter((x) => isPool(x.item))) {
+    const have = Number(io.get(out, f.item)) || 0
+    if (capOf(f, have) < 1 || io.count(out) >= io.limit(tier)) continue
+    const key = io.pick(f.item, tier, left)
+    if (!key) continue
+    out = io.add(out, f.item, key)
+    left = round2(left - (io.keyWorth(f.item, key) ?? 0))
+  }
+  if (coins) {
+    const others = usable.filter((x) => !isPool(x.item) && x.item !== 'coins')
+    const at = others.length ? turn % others.length : 0
+    const order = [...others.slice(at), ...others.slice(0, at)]
+    const room = Math.max(0, io.limit(tier) - io.count(out) - 1)
+    const least = Math.max(0, (io.minItems?.(tier) ?? 1) - io.count(out) - 1)
+    const howMany = Math.min(room, Math.max(least, 1 + (turn % 2)))
+    let used = 0
+    for (const f of order) {
+      if (used >= howMany || left <= 0) break
+      const u = io.unitWorth(f.item)
+      const have = Number(io.get(out, f.item)) || 0
+      let amount = Math.floor((left * (MIX_SHARES[used] ?? 0.1)) / u)
+      // The least items a tier asks for: one of it, when it still fits.
+      if (amount < 1 && used < least && u <= left) amount = 1
+      amount = Math.min(amount, capOf(f, have))
+      if (!(amount > 0)) continue
+      out = io.set(out, f.item, round2(have + amount))
+      left = round2(left - amount * u)
+      used += 1
+    }
+    const uc = io.unitWorth('coins')
+    const haveC = Number(io.get(out, 'coins')) || 0
+    if (left >= 0.005 && (haveC > 0 || io.count(out) < io.limit(tier))) {
+      const amount = Math.min(roundTo(left / uc, stepOf('coins')), capOf(coins, haveC))
+      if (amount > 0) out = io.set(out, 'coins', round2(haveC + amount))
+    }
+    return out
+  }
   const lastAmount = [...usable].reverse().find((f) => !isPool(f.item))
   usable.forEach((f) => {
-    // A pool item: one from the tier's section pool, while it has room and the max allows (a pack is worth 0: it goes in
-    // whatever the balance; a basket only when it fits what is still needed).
-    if (isPool(f.item)) {
-      const have = Number(io.get(out, f.item)) || 0
-      if ((f.max != null && f.max !== '' && have >= Number(f.max)) || io.count(out) >= io.limit(tier)) return
-      const key = io.pick(f.item, tier, left)
-      if (!key) return
-      out = io.add(out, f.item, key)
-      left = round2(left - (io.keyWorth(f.item, key) ?? 0))
-      return
-    }
+    if (isPool(f.item)) return
     if (left <= 0) return
     const u = io.unitWorth(f.item)
     const have = Number(io.get(out, f.item)) || 0

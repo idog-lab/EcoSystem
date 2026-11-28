@@ -97,5 +97,20 @@ check(`pack P1 (0), the biggest basket that fits (E, 8), coins 2 (${JSON.stringi
 check(`the next tier: the next pack of the pool (${pools.parts.t2.pack})`, pools.parts.t2.pack === 'P2' && pools.parts.t2.basket === 'E')
 check(`a tier needing 3: the basket that fits is B, no coins needed (${JSON.stringify(pools.parts.t3)})`, pools.parts.t3.basket === 'B' && pools.parts.t3.coins === undefined && pools.report.groups[0].off === 0)
 
+// Variety: with coins among the fillers, the other resources take turns leading; coins close every tier.
+const ALL = [{ item: 'wild' }, { item: 'stock' }, { item: 'entry' }, { item: 'undo' }, { item: 'coins' }]
+const four = (group = 'A') => [1, 2, 3, 4].map((n) => ({ id: `${group}${n}`, group, section: 'easy', target: 10, auto: true, parts: {} }))
+const v = allocate({ tiers: [...four('A'), ...four('B')], fillers: ALL, balanceEvery: 1, io })
+const lead = (p) => Object.entries(p).filter(([k]) => k !== 'coins').sort((a, b) => WORTH[b[0]] * b[1] - WORTH[a[0]] * a[1])[0]?.[0]
+const leads = ['A1', 'A2', 'A3', 'A4'].map((id) => lead(v.parts[id]))
+check(`no two tiers in a row lead with the same resource (${leads.join(', ')})`, leads.every((x, i) => i === 0 || x !== leads[i - 1]))
+check(`the lanes side by side differ too (A1 ${lead(v.parts.A1)}, B1 ${lead(v.parts.B1)})`, lead(v.parts.A1) !== lead(v.parts.B1))
+check('coins close every tier, and every tier is on its target', Object.values(v.parts).every((p) => p.coins > 0 && near(io.worthOf(p), 10)))
+check(`one resource besides coins, then two, in turn (${['A1', 'A2'].map((id) => Object.keys(v.parts[id]).length).join(', ')} items)`, Object.keys(v.parts.A1).length === 2 && Object.keys(v.parts.A2).length === 3)
+// The feature's least and most items a tier.
+const ioMin = { ...io, limit: () => 3, minItems: () => 3 }
+const lm = allocate({ tiers: four('A'), fillers: ALL, balanceEvery: 1, io: ioMin })
+check(`at least 3 and at most 3 items in every tier (${Object.values(lm.parts).map((p) => Object.keys(p).length).join(', ')})`, Object.values(lm.parts).every((p) => Object.keys(p).length === 3 && near(io.worthOf(p), 10)))
+
 console.log(`\nALLOCATE: ${total - fails} of ${total} checks passed`)
 process.exit(fails ? 1 : 0)
